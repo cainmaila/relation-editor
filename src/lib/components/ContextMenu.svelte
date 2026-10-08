@@ -70,6 +70,7 @@
 			const s = nodeType(n.type).system;
 			const count = editor.graph.edges.filter((e) => e.from === n.id || e.to === n.id).length;
 			const block = editor.deleteBlock(n.id);
+			const k = editor.stacking ? editor.stackOf(n.id) : undefined;
 			return [
 				{ label: '找客戶', icon: 'target', keys: 'F', run: done(() => editor.findCustomers(n.id)) },
 				{
@@ -93,6 +94,15 @@
 					})
 				},
 				...(s ? [{ label: `只看${s}`, icon: 'solo', run: done(() => editor.solo(s)) }] : []),
+				...(k
+					? [
+							{
+								label: `收疊同類（${editor.stacks.get(k)!.length}）`,
+								icon: 'stack',
+								run: done(() => editor.fold(k))
+							}
+						]
+					: []),
 				{
 					label: armed ? `確認刪除（連同 ${count} 條邊）` : '刪除節點',
 					icon: 'trash',

@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
 	checkDeleteNode,
+	collapse,
 	findCustomers,
 	layout,
 	NODE_W,
 	NODE_H,
+	stacks,
 	unprocessed,
 	unreachable,
 	validateEdge
@@ -223,4 +225,23 @@ it('layout：平行的兄弟節點同一欄，卡片不重疊', () => {
 			expect(Math.abs(a.x - b.x) >= NODE_W || Math.abs(a.y - b.y) >= NODE_H).toBe(true);
 		})
 	);
+});
+
+it('收疊：同類且上游相同的機櫃 PDU ×8 收成一張，邊合併', () => {
+	const g = full();
+	const st = stacks(g);
+	expect([...st.values()]).toEqual([
+		['A-01-A', 'A-01-B', 'A-02-A', 'A-02-B', 'A-03-A', 'A-03-B', 'A-04-A', 'A-04-B'].map(
+			(p) => `機櫃 PDU ${p}`
+		)
+	]);
+	const v = collapse(g, st);
+	const [key] = st.keys();
+	expect(v.nodes).toHaveLength(44 - 8 + 1);
+	expect(v.nodes.find((n) => n.id === key)!.name).toBe('機櫃 PDU ×8');
+	const into = v.edges.filter((e) => e.to === key);
+	expect(into.map((e) => [e.from, e.members.length])).toEqual([['樓層 PDU 2F-A', 8]]);
+	expect(v.edges.filter((e) => e.from === key).map((e) => e.members.length)).toEqual([2, 2, 2, 2]);
+	expect(v.edges.flatMap((e) => e.members).sort()).toEqual(g.edges.map((e) => e.id).sort());
+	expect(layout(v).pos.size).toBe(37);
 });

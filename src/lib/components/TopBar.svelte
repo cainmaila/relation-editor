@@ -144,6 +144,19 @@
 
 	<div class="flex items-center gap-0.5 border-l border-white/8 pl-3">
 		{@render toggle(
+			editor.stacking,
+			'收疊同類',
+			'同類型、上游相同的兄弟節點收成一疊，點開才展開',
+			() => {
+				editor.stacking = !editor.stacking;
+				editor.expanded = [];
+			},
+			'stack'
+		)}
+	</div>
+
+	<div class="flex items-center gap-0.5 border-l border-white/8 pl-3">
+		{@render toggle(
 			editor.panels.left,
 			'左欄 大綱',
 			'⌘B',

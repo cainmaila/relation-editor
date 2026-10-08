@@ -81,8 +81,13 @@ async function findCustomers(page: Page, name: string) {
 	return page.getByRole('region', { name: '找客戶結果' }).getByRole('listitem').allTextContents();
 }
 
+const stackToggle = (page: Page) => page.getByRole('button', { name: '收疊同類', exact: true });
+
+// PRD 情境逐一數節點：先關掉收疊，全部 44 個攤開
 test.beforeEach(async ({ page }) => {
 	await page.goto('/');
+	await expect(graphNodes(page)).toHaveCount(37);
+	await stackToggle(page).click();
 	await expect(graphNodes(page)).toHaveCount(44);
 });
 
@@ -338,6 +343,8 @@ test.describe('編輯', () => {
 		await addNode(page, '攝影機', '攝影機 CAM-04');
 		await expect(graphNodes(page)).toHaveCount(45);
 		await page.reload();
+		await expect(graphNodes(page)).toHaveCount(37);
+		await stackToggle(page).click();
 		await expect(graphNodes(page)).toHaveCount(44);
 		await expect(node(page, '攝影機 CAM-04')).toHaveCount(0);
 	});
@@ -476,6 +483,24 @@ test.describe('編輯器操作', () => {
 		await expect(menu(page).getByRole('menuitem', { name: /刪除節點/ })).toBeDisabled();
 		await page.keyboard.press('Escape');
 		await expect(page.getByRole('menu')).toHaveCount(0);
+	});
+
+	test('同類兄弟節點收成一疊，點開展開、右鍵收回', async ({ page }) => {
+		await stackToggle(page).click();
+		await expect(graphNodes(page)).toHaveCount(37);
+		const stack = node(page, '機櫃 PDU ×8');
+		await expect(stack).toContainText('8 個同類');
+		// 大綱點成員：自動展開並選取
+		await outline(page).getByRole('button', { name: '機櫃 PDU A-02-A' }).click();
+		await expect(graphNodes(page)).toHaveCount(44);
+		await expect(detail(page).getByLabel('名稱', { exact: true })).toHaveValue('機櫃 PDU A-02-A');
+		await fitAll(page);
+		await node(page, '機櫃 PDU A-02-A').click({ button: 'right' });
+		await menu(page).getByRole('menuitem', { name: '收疊同類（8）' }).click();
+		await expect(graphNodes(page)).toHaveCount(37);
+		await fitAll(page);
+		await stack.click();
+		await expect(graphNodes(page)).toHaveCount(44);
 	});
 
 	test('右鍵節點刪除需二次確認', async ({ page }) => {

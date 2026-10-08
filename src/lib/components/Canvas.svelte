@@ -46,7 +46,10 @@
 
 	const nodeTypes = { graph: GraphNode };
 
-	const lay = $derived(layout(editor.visible));
+	const view = $derived(editor.canvas);
+	const lay = $derived(layout(view));
+	/** 堆疊卡代表的節點；一般節點就是自己 */
+	const members = (id: string) => editor.stacks.get(id) ?? [id];
 
 	/** 亮起的節點與邊：找客戶結果優先，其次選取（或滑過）物件的直接相連，最後是大綱篩選 */
 	const focus = $derived.by(() => {
@@ -64,48 +67,55 @@
 					)
 				}
 			);
+		const ids = members(s.id);
 		const edges =
 			s.kind === 'node'
-				? editor.visible.edges.filter((e) => e.from === s.id || e.to === s.id)
+				? editor.visible.edges.filter((e) => ids.includes(e.from) || ids.includes(e.to))
 				: editor.visible.edges.filter((e) => e.id === s.id);
 		return {
-			nodes: new Set([
-				...(s.kind === 'node' ? [s.id] : []),
-				...edges.flatMap((e) => [e.from, e.to])
-			]),
+			nodes: new Set([...(s.kind === 'node' ? ids : []), ...edges.flatMap((e) => [e.from, e.to])]),
 			edges: new Set(edges.map((e) => e.id))
 		};
 	});
 
 	const nodes = $derived<Node[]>([
-		...editor.visible.nodes.map((n) => ({
-			id: n.id,
-			type: 'graph',
-			position: lay.pos.get(n.id)!,
-			width: NODE_W,
-			height: NODE_H,
-			data: {
-				name: n.name,
-				type: n.type,
-				system: nodeType(n.type).system ?? '通用',
-				color: SYSTEM_COLORS[nodeType(n.type).system ?? '通用'],
-				readonly: !!n.readonly,
-				unprocessed: editor.unprocessed.has(n.id),
-				unreachable: editor.unreachable.has(n.id),
-				dim: !!focus && !focus.nodes.has(n.id),
-				soft: !editor.selected && !editor.result && !editor.matched,
-				active: editor.selected?.id === n.id,
-				origin: editor.result !== null && editor.selected?.id === n.id,
-				fresh: editor.fresh === n.id
-			}
-		}))
+		...view.nodes.map((n) => {
+			const ids = members(n.id);
+			const any = (set: Set<string>) => ids.some((id) => set.has(id));
+			const stack = ids.length > 1;
+			return {
+				id: n.id,
+				connectable: !stack,
+				type: 'graph',
+				position: lay.pos.get(n.id)!,
+				width: NODE_W,
+				height: NODE_H,
+				data: {
+					name: n.name,
+					type: n.type,
+					system: nodeType(n.type).system ?? '通用',
+					color: SYSTEM_COLORS[nodeType(n.type).system ?? '通用'],
+					readonly: !!n.readonly,
+					stack: stack ? ids.length : 0,
+					unprocessed: any(editor.unprocessed),
+					unreachable: any(editor.unreachable),
+					dim: !!focus && !any(focus.nodes),
+					soft: !editor.selected && !editor.result && !editor.matched,
+					active: editor.selected?.id === n.id,
+					origin: editor.result !== null && editor.selected?.id === n.id,
+					fresh: editor.fresh === n.id
+				}
+			};
+		})
 	]);
 
 	const edges = $derived<Edge[]>(
-		editor.visible.edges.map((e) => {
+		view.edges.map((e) => {
 			const color = EDGE_COLORS[e.type] ?? '#94a3b8';
 			const marker = { type: MarkerType.ArrowClosed, color, width: 14, height: 14 };
-			const lit = focus?.edges.has(e.id) || editor.hoverEdge === e.id;
+			const lit =
+				e.members.some((id) => focus?.edges.has(id) || editor.hoverEdge === id) ||
+				editor.hoverEdge === e.id;
 			// 反向邊（例：承載 主機→機框）改由左畫到右、箭頭放起點，走卡片下方的 back 把手，不和同對節點的邊疊在一起
 			const back = lay.pos.get(e.from)!.x > lay.pos.get(e.to)!.x;
 			return {
@@ -126,7 +136,7 @@
 							markerStart: e.bidirectional ? marker : undefined
 						}),
 				interactionWidth: 24,
-				animated: !!editor.result?.edges.has(e.id),
+				animated: e.members.some((id) => editor.result?.edges.has(id)),
 				style: [
 					`stroke: ${color}`,
 					`stroke-width: ${lit ? 2.75 : 1.25}`,
@@ -141,8 +151,17 @@
 	);
 
 	function nodeClick(id: string) {
-		if (editor.connecting) editor.startEdge(editor.connecting, id);
+		if (editor.stacks.has(id)) editor.expand(id);
+		else if (editor.connecting) editor.startEdge(editor.connecting, id);
 		else editor.select({ kind: 'node', id });
+	}
+
+	/** 點合併邊（接在收起的堆疊上）：展開那一疊 */
+	function edgeClick(id: string) {
+		const e = view.edges.find((x) => x.id === id)!;
+		const k = [e.from, e.to].find((x) => editor.stacks.has(x));
+		if (k) editor.expand(k);
+		else editor.select({ kind: 'edge', id });
 	}
 
 	/** 拖曳連線中（目標卡片的 target 把手要浮到最上層才接得到） */
@@ -157,7 +176,7 @@
 			.elementFromPoint(p.clientX, p.clientY)
 			?.closest('.svelte-flow__node-graph')
 			?.getAttribute('data-id');
-		if (!from || to === from) return;
+		if (!from || to === from || (to && !editor.node(to))) return;
 		editor.select({ kind: 'node', id: from });
 		const at = { x: p.clientX, y: p.clientY };
 		editor.menu = to ? { kind: 'connect', from, to, ...at } : { kind: 'drop', from, ...at };
@@ -227,25 +246,29 @@
 		clickConnect={false}
 		connectionDragThreshold={6}
 		onnodeclick={({ node }) => nodeClick(node.id)}
-		onedgeclick={({ edge }) => editor.select({ kind: 'edge', id: edge.id })}
+		onedgeclick={({ edge }) => edgeClick(edge.id)}
 		onpaneclick={() => editor.select(null)}
 		onnodepointerenter={({ node }) => hover(node.id)}
 		onnodepointerleave={() => hover(null)}
 		onedgepointerenter={({ edge }) => (editor.hoverEdge = edge.id)}
 		onedgepointerleave={() => (editor.hoverEdge = null)}
 		onnodecontextmenu={({ event, node }) => {
+			if (editor.stacks.has(node.id)) return void menuAt(event);
 			editor.select({ kind: 'node', id: node.id });
 			editor.menu = { kind: 'node', id: node.id, ...menuAt(event) };
 		}}
 		onedgecontextmenu={({ event, edge }) => {
 			const at = menuAt(event);
+			if (!editor.edge(edge.id)) return edgeClick(edge.id);
 			editor.select({ kind: 'edge', id: edge.id });
 			editor.menu = { kind: 'edge', id: edge.id, ...at };
 		}}
 		onpanecontextmenu={({ event }) => (editor.menu = { kind: 'pane', ...menuAt(event) })}
 		onconnectstart={() => (linking = true)}
 		onconnectend={(e, s) => connectEnd(e, s.fromNode?.id)}
-		isValidConnection={(c) => [...editor.edgeErrors(c.source, c.target).values()].some((v) => !v)}
+		isValidConnection={(c) =>
+			!!editor.node(c.target) &&
+			[...editor.edgeErrors(c.source, c.target).values()].some((v) => !v)}
 		onbeforeconnect={() => false}
 	>
 		<Background

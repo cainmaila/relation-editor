@@ -112,6 +112,49 @@ export function checkDeleteNode(g: Graph, id: string): string | null {
 	return null;
 }
 
+/** 可收疊的兄弟節點：同類型、上游完全相同（略過承載）、至少 3 個。key＝堆疊 id */
+export function stacks(g: Graph): Map<string, string[]> {
+	const groups = new Map<string, string[]>();
+	for (const n of g.nodes) {
+		const up = g.edges
+			.filter((e) => e.to === n.id && e.type !== '承載')
+			.map((e) => e.from)
+			.sort();
+		if (!up.length) continue;
+		const key = `stack:${n.type}:${up.join('|')}`;
+		groups.set(key, [...(groups.get(key) ?? []), n.id]);
+	}
+	return new Map([...groups].filter(([, ids]) => ids.length >= 3));
+}
+
+export type ViewEdge = GEdge & { members: string[] };
+
+/**
+ * 把收起的堆疊換成一張代表卡：成員的邊改接到堆疊，同端點同類型的邊合併成一條。
+ * ponytail: 合併邊的雙向、確認狀態取第一條；成員邊屬性不同時要細分再改
+ */
+export function collapse(g: Graph, closed: Map<string, string[]>) {
+	const owner = new Map<string, string>();
+	closed.forEach((ids, key) => ids.forEach((id) => owner.set(id, key)));
+	const at = (id: string) => owner.get(id) ?? id;
+	const nodes: GNode[] = [
+		...g.nodes.filter((n) => !owner.has(n.id)),
+		...[...closed].map(([id, ids]) => {
+			const type = g.nodes.find((n) => n.id === ids[0])!.type;
+			return { id, type, name: `${type} ×${ids.length}`, props: {} };
+		})
+	];
+	const edges = new Map<string, ViewEdge>();
+	for (const e of g.edges) {
+		const [from, to] = [at(e.from), at(e.to)];
+		const id = from === e.from && to === e.to ? e.id : `${e.type}:${from}>${to}`;
+		const x = edges.get(id);
+		if (x) x.members.push(e.id);
+		else edges.set(id, { ...e, id, from, to, members: [e.id] });
+	}
+	return { nodes, edges: [...edges.values()], owner };
+}
+
 export const NODE_W = 160;
 export const NODE_H = 44;
 const GAP = 12;

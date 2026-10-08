@@ -9,7 +9,9 @@ import {
 } from './model/config';
 import {
 	checkDeleteNode,
+	collapse,
 	findCustomers,
+	stacks,
 	unprocessed,
 	unreachable,
 	validateEdge,
@@ -61,6 +63,10 @@ export class Editor {
 	legend = $state(false);
 	/** 大綱篩選文字 */
 	query = $state('');
+	/** 同類兄弟節點收成一疊（關掉＝全部展開） */
+	stacking = $state(true);
+	/** 手動展開的堆疊 key */
+	expanded = $state<string[]>([]);
 
 	unprocessed = $derived(unprocessed(this.graph));
 	unreachable = $derived(unreachable(this.graph));
@@ -89,6 +95,29 @@ export class Editor {
 		return { nodes, edges: this.graph.edges.filter((e) => ids.has(e.from) && ids.has(e.to)) };
 	});
 
+	stacks = $derived(stacks(this.visible));
+	/** 畫布實際畫的圖：收起的堆疊換成代表卡 */
+	canvas = $derived(
+		collapse(
+			this.visible,
+			// eslint-disable-next-line svelte/prefer-svelte-reactivity -- derived 每次重建，不需響應
+			new Map(this.stacking ? [...this.stacks].filter(([k]) => !this.expanded.includes(k)) : [])
+		)
+	);
+
+	/** 節點所在的堆疊 key */
+	stackOf = (id: string) => [...this.stacks].find(([, ids]) => ids.includes(id))?.[0];
+
+	expand(key: string) {
+		this.expanded.push(key);
+		this.fit(this.stacks.get(key));
+	}
+
+	fold(key: string) {
+		this.expanded = this.expanded.filter((k) => k !== key);
+		this.select(null);
+	}
+
 	static initial(): Graph {
 		const a = graphMock();
 		const b = idcMock();
@@ -116,6 +145,8 @@ export class Editor {
 	reveal(id: string) {
 		const s = nodeType(this.node(id)!.type).system;
 		if (s && !this.systems.includes(s)) this.systems.push(s);
+		const k = this.stackOf(id);
+		if (k && !this.expanded.includes(k)) this.expanded.push(k);
 		this.select({ kind: 'node', id });
 		this.fit([id]);
 	}

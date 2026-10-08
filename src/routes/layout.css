@@ -111,6 +111,14 @@
 	opacity: 0;
 	pointer-events: none;
 }
+/* 收起的堆疊：卡片後疊兩層，看得出是一疊 */
+.stacked {
+	box-shadow:
+		3px 3px 0 -1px var(--color-ink-850),
+		3px 3px 0 0 rgb(255 255 255 / 0.1),
+		6px 6px 0 -1px var(--color-ink-850),
+		6px 6px 0 0 rgb(255 255 255 / 0.06);
+}
 .svelte-flow.linking .svelte-flow__handle.easy {
 	cursor: grabbing;
 }

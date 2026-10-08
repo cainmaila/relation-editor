@@ -27,7 +27,11 @@
 		});
 
 	$effect(() => {
-		if (editor.view.seq) go(editor.view.ids);
+		// 收起的成員改對準它的堆疊卡
+		if (editor.view.seq) {
+			const owner = untrack(() => editor.canvas.owner);
+			go([...new Set(editor.view.ids.map((id) => owner.get(id) ?? id))]);
+		}
 	});
 
 	let first = true;

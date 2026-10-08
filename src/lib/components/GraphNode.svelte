@@ -14,6 +14,8 @@
 		/** 找客戶的起點 */
 		origin: boolean;
 		fresh: boolean;
+		/** 收起的堆疊：成員數；0＝一般節點 */
+		stack: number;
 	};
 </script>
 
@@ -40,6 +42,7 @@
 		data.active && 'border-sky-400! ring-2 ring-sky-400/40',
 		data.origin && 'ring-4 ring-sky-400/60',
 		data.fresh && 'animate-pulse-ring',
+		data.stack && 'stacked cursor-zoom-in',
 		data.dim && (data.soft ? 'opacity-55' : 'opacity-20')
 	]}
 >
@@ -53,7 +56,7 @@
 		{/if}
 	</span>
 	<span class="mt-0.5 flex items-center gap-1 pl-5 font-mono text-[10px] text-slate-400">
-		<span class="truncate">{data.type}</span>
+		<span class="truncate">{data.stack ? `${data.stack} 個同類・點開` : data.type}</span>
 		{#if data.unprocessed}
 			<span class="relative z-2 ml-auto text-yellow-300" title="未處理：還沒連到 TPKC 大樓">
 				<Icon name="warn" class="size-3" label="未處理" />
