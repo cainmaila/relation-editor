@@ -118,7 +118,7 @@ export class Editor {
 	stackOf = (id: string) => [...this.stacks].find(([, ids]) => ids.includes(id))?.[0];
 
 	expand(key: string) {
-		this.expanded.push(key);
+		if (!this.expanded.includes(key)) this.expanded.push(key);
 		this.fit(this.stacks.get(key));
 	}
 
