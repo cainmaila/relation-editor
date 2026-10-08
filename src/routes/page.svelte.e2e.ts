@@ -423,10 +423,10 @@ test.describe('編輯器操作', () => {
 	});
 
 	test('右鍵泳道新增該系統節點', async ({ page }) => {
-		await page
-			.locator('.svelte-flow__node-lane')
-			.filter({ hasText: 'CCTV' })
-			.click({ button: 'right', position: { x: 20, y: 12 } });
+		const lane = page.locator('.svelte-flow__node-lane').filter({ hasText: 'CCTV' });
+		// 標頭可能被跨泳道的邊蓋住，點泳道底部空白
+		const { height } = (await lane.boundingBox())!;
+		await lane.click({ button: 'right', position: { x: 10, y: height - 10 } });
 		await menu(page).getByRole('menuitem', { name: '新增攝影機' }).click();
 		await expect(graphNodes(page)).toHaveCount(45);
 		await expect(badge(page, '攝影機 1', '未處理')).toHaveCount(1);

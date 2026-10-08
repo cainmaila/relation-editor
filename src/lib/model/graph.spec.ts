@@ -4,6 +4,8 @@ import {
 	findCustomers,
 	layout,
 	LANES,
+	NODE_W,
+	NODE_H,
 	unprocessed,
 	unreachable,
 	validateEdge
@@ -188,4 +190,20 @@ it('layout：每個節點都有位置，電力由上而下', () => {
 	expect(pos.get('台電市電')!.y).toBeLessThan(pos.get('UPS-1')!.y);
 	expect(pos.get('UPS-1')!.y).toBeLessThan(pos.get('樓層 PDU 2F-A')!.y);
 	expect(pos.get('樓層 PDU 2F-A')!.y).toBeLessThan(pos.get('機櫃 PDU A-04-B')!.y);
+});
+
+it('layout：平行的兄弟節點橫向展開，父節點置中，卡片不重疊', () => {
+	const { pos } = layout(full(), LANES);
+	const cabs = ['機櫃 A-01', '機櫃 A-02', '機櫃 A-03', '機櫃 A-04'].map((id) => pos.get(id)!);
+	expect(new Set(cabs.map((p) => p.y)).size).toBe(1);
+	expect(new Set(cabs.map((p) => p.x)).size).toBe(4);
+	const row = pos.get('A 排')!;
+	expect(row.x).toBeGreaterThan(cabs[0].x);
+	expect(row.x).toBeLessThan(cabs[3].x);
+	const all = [...pos.values()];
+	all.forEach((a, i) =>
+		all.slice(i + 1).forEach((b) => {
+			expect(Math.abs(a.x - b.x) >= NODE_W || Math.abs(a.y - b.y) >= NODE_H).toBe(true);
+		})
+	);
 });

@@ -127,6 +127,8 @@ export const laneOf = (n: GNode): Lane => nodeType(n.type).system ?? '通用';
 export const NODE_W = 160;
 export const NODE_H = 44;
 const GAP = 16;
+/** 上下層間距，讓層間的邊看得清楚 */
+const ROW_GAP = 40;
 export const LANE_PAD = 24;
 export const LANE_HEADER = 48;
 
@@ -137,7 +139,7 @@ export interface LaneBox {
 	height: number;
 }
 
-/** 泳道排版：每個系統一欄單列，欄內依同系統邊的深度由上而下（單列較窄，整張圖在一般螢幕縮放後仍讀得到字） */
+/** 泳道排版：欄內是一棵樹，深度往下、兄弟往右（父節點置中於子節點上方），同層平行的節點才不會疊成假鏈 */
 export function layout(g: Graph, lanes: Lane[]) {
 	const pos = new Map<string, { x: number; y: number }>();
 	const boxes: LaneBox[] = [];
@@ -159,20 +161,24 @@ export function layout(g: Graph, lanes: Lane[]) {
 			return v;
 		};
 		members.forEach((n) => d(n.id));
-		const width = NODE_W + 2 * LANE_PAD;
-		let y = LANE_HEADER;
-		const maxDepth = Math.max(-1, ...depth.values());
-		for (let level = 0; level <= maxDepth; level++) {
-			const row = members.filter((n) => depth.get(n.id) === level);
-			row.forEach((n, i) =>
-				pos.set(n.id, {
-					x: x + LANE_PAD,
-					y: y + i * (NODE_H + GAP)
-				})
-			);
-			y += row.length * (NODE_H + GAP) + (row.length ? GAP : 0);
-		}
-		boxes.push({ lane, x, width, height: y + LANE_PAD });
+		// 多父節點只掛在第一個「剛好淺一層」的父節點下，確保每個節點只擺一次
+		const parent = new Map<string, string>();
+		for (const e of inner)
+			if (!parent.has(e.to) && depth.get(e.from)! + 1 === depth.get(e.to)) parent.set(e.to, e.from);
+		let slot = 0;
+		const place = (id: string): number => {
+			const kids = members.filter((n) => parent.get(n.id) === id).map((n) => place(n.id));
+			const s = kids.length ? (kids[0] + kids[kids.length - 1]) / 2 : slot++;
+			pos.set(id, {
+				x: x + LANE_PAD + s * (NODE_W + GAP),
+				y: LANE_HEADER + depth.get(id)! * (NODE_H + ROW_GAP)
+			});
+			return s;
+		};
+		members.filter((n) => !parent.has(n.id)).forEach((n) => place(n.id));
+		const width = Math.max(1, slot) * (NODE_W + GAP) - GAP + 2 * LANE_PAD;
+		const rows = Math.max(-1, ...depth.values()) + 1;
+		boxes.push({ lane, x, width, height: LANE_HEADER + rows * (NODE_H + ROW_GAP) + LANE_PAD });
 		x += width + GAP;
 	}
 	const height = Math.max(0, ...boxes.map((b) => b.height));
