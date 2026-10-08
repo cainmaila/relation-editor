@@ -114,8 +114,13 @@ export class Editor {
 		)
 	);
 
+	#stackKey = $derived(
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- derived 每次重建，不需響應
+		new Map([...this.stacks].flatMap(([k, ids]) => ids.map((id) => [id, k] as const)))
+	);
+
 	/** 節點所在的堆疊 key */
-	stackOf = (id: string) => [...this.stacks].find(([, ids]) => ids.includes(id))?.[0];
+	stackOf = (id: string) => this.#stackKey.get(id);
 
 	expand(key: string) {
 		if (!this.expanded.includes(key)) this.expanded.push(key);

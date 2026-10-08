@@ -1,5 +1,5 @@
 <script lang="ts">
-	// 畫布左下角的圖例卡；? 鍵或按鈕開關（快捷鍵在檢視器空狀態）
+	// 畫布左下角的圖例卡；? 鍵或按鈕開關（鍵盤處理在 +page.svelte）
 	import type { Editor } from '#lib/editor.svelte.js';
 	import { EDGE_COLORS, SYSTEM_COLORS } from './Canvas.svelte';
 	import Icon from './Icon.svelte';
@@ -7,11 +7,13 @@
 	let { editor }: { editor: Editor } = $props();
 </script>
 
-<div class="absolute bottom-[15px] left-[54px] z-10 flex flex-col items-start gap-2">
+<div
+	class="absolute bottom-[15px] left-[54px] z-10 flex max-w-[calc(100%-219px)] flex-col items-start gap-2"
+>
 	{#if editor.legend}
 		<section
 			aria-label="圖例"
-			class="w-72 animate-rise rounded-lg border border-white/10 bg-ink-850/95 p-3 text-[11px] text-slate-400 shadow-2xl shadow-black/50 backdrop-blur-xl"
+			class="w-72 max-w-full animate-rise rounded-lg border border-white/10 bg-ink-850/95 p-3 text-[11px] text-slate-400 shadow-2xl shadow-black/50 backdrop-blur-xl"
 		>
 			<ul class="grid grid-cols-4 gap-x-2 gap-y-1.5" aria-label="系統">
 				{#each Object.entries(SYSTEM_COLORS) as [name, color] (name)}

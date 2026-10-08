@@ -83,9 +83,15 @@ export function findCustomers(g: Graph, start: string): CustomerResult {
 }
 
 /** 通用節點不受連接限制（PRD §3） */
+const GENERIC = '通用節點';
 const matches = (list: string[] | undefined, n: GNode) => {
 	const t = nodeType(n.type);
-	return !list || t.system === null || list.includes(t.name) || list.includes(t.system);
+	return (
+		!list ||
+		t.name === GENERIC ||
+		list.includes(t.name) ||
+		(t.system !== null && list.includes(t.system))
+	);
 };
 
 /** 新增邊前檢查；回傳錯誤訊息或 null */
@@ -114,11 +120,12 @@ export function checkDeleteNode(g: Graph, id: string): string | null {
 
 /** 可收疊的兄弟節點：同類型、上游完全相同（略過承載）、至少 3 個。key＝堆疊 id */
 export function stacks(g: Graph): Map<string, string[]> {
+	const into = new Map<string, Set<string>>();
+	for (const e of g.edges)
+		if (e.type !== '承載') into.set(e.to, (into.get(e.to) ?? new Set()).add(e.from));
 	const groups = new Map<string, string[]>();
 	for (const n of g.nodes) {
-		const up = [
-			...new Set(g.edges.filter((e) => e.to === n.id && e.type !== '承載').map((e) => e.from))
-		].sort();
+		const up = [...(into.get(n.id) ?? [])].sort();
 		if (!up.length) continue;
 		const key = `stack:${n.type}:${up.join('|')}`;
 		groups.set(key, [...(groups.get(key) ?? []), n.id]);
