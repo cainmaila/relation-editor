@@ -70,3 +70,6 @@
 	</span>
 </div>
 <Handle type="source" position={Position.Right} class="easy" />
+<!-- 反向邊專用：卡片下緣附近、不可拖曳，讓線和同對節點的正向邊錯開 -->
+<Handle id="back" type="target" position={Position.Left} class="back" isConnectable={false} />
+<Handle id="back" type="source" position={Position.Right} class="back" isConnectable={false} />

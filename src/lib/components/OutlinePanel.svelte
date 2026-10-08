@@ -28,28 +28,23 @@
 		}
 	] as const;
 
-	let q = $state('');
 	/** 收合的分組 */
 	let closed = $state<string[]>([]);
 	let list = $state<HTMLElement>();
 
 	const issue = $derived(ISSUES.find((i) => i.key === editor.issue));
-	const filtering = $derived(!!q.trim() || !!issue);
-	const groups = $derived.by(() => {
-		const k = q.trim().toLowerCase();
-		return [...SYSTEMS, null]
+	const filtering = $derived(!!editor.matched);
+	const groups = $derived(
+		[...SYSTEMS, null]
 			.map((s) => ({
 				s,
 				name: s ?? '通用',
 				nodes: editor.graph.nodes.filter(
-					(n) =>
-						nodeType(n.type).system === s &&
-						(!k || n.name.toLowerCase().includes(k)) &&
-						(!issue || editor[issue.key].has(n.id))
+					(n) => nodeType(n.type).system === s && (!editor.matched || editor.matched.has(n.id))
 				)
 			}))
-			.filter((g) => g.nodes.length);
-	});
+			.filter((g) => g.nodes.length)
+	);
 
 	// 畫布上選取時，大綱捲到該列
 	$effect(() => {
@@ -70,10 +65,10 @@
 				type="search"
 				aria-label="篩選節點"
 				placeholder="篩選節點"
-				bind:value={q}
+				bind:value={editor.query}
 				onkeydown={(e) => {
-					if (e.key === 'Escape' && q) {
-						q = '';
+					if (e.key === 'Escape' && editor.query) {
+						editor.query = '';
 						e.stopPropagation();
 					}
 				}}
@@ -192,7 +187,7 @@
 			</section>
 		{:else}
 			<p class="flex items-center gap-2 px-4 py-6 text-xs text-slate-500">
-				{#if issue && !q.trim()}
+				{#if issue && !editor.query.trim()}
 					<Icon name="check" class="size-3.5 text-emerald-400" />
 					<span class="text-emerald-300/90">{issue.ok}</span>
 				{:else}

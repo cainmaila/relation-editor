@@ -48,13 +48,22 @@
 
 	const lay = $derived(layout(editor.visible));
 
-	/** 亮起的節點與邊：找客戶結果優先，否則為選取（或滑過）物件的直接相連 */
+	/** 亮起的節點與邊：找客戶結果優先，其次選取（或滑過）物件的直接相連，最後是大綱篩選 */
 	const focus = $derived.by(() => {
 		if (editor.result) return editor.result;
 		const s =
 			editor.selected ??
 			(editor.hoverNode ? { kind: 'node' as const, id: editor.hoverNode } : null);
-		if (!s) return null;
+		const m = editor.matched;
+		if (!s)
+			return (
+				m && {
+					nodes: m,
+					edges: new Set(
+						editor.visible.edges.filter((e) => m.has(e.from) && m.has(e.to)).map((e) => e.id)
+					)
+				}
+			);
 		const edges =
 			s.kind === 'node'
 				? editor.visible.edges.filter((e) => e.from === s.id || e.to === s.id)
@@ -84,7 +93,7 @@
 				unprocessed: editor.unprocessed.has(n.id),
 				unreachable: editor.unreachable.has(n.id),
 				dim: !!focus && !focus.nodes.has(n.id),
-				soft: !editor.selected && !editor.result,
+				soft: !editor.selected && !editor.result && !editor.matched,
 				active: editor.selected?.id === n.id,
 				origin: editor.result !== null && editor.selected?.id === n.id,
 				fresh: editor.fresh === n.id
@@ -97,12 +106,25 @@
 			const color = EDGE_COLORS[e.type] ?? '#94a3b8';
 			const marker = { type: MarkerType.ArrowClosed, color, width: 14, height: 14 };
 			const lit = focus?.edges.has(e.id) || editor.hoverEdge === e.id;
+			// 反向邊（例：承載 主機→機框）改由左畫到右、箭頭放起點，走卡片下方的 back 把手，不和同對節點的邊疊在一起
+			const back = lay.pos.get(e.from)!.x > lay.pos.get(e.to)!.x;
 			return {
 				id: e.id,
-				source: e.from,
-				target: e.to,
-				markerEnd: marker,
-				markerStart: e.bidirectional ? marker : undefined,
+				...(back
+					? {
+							source: e.to,
+							target: e.from,
+							sourceHandle: 'back',
+							targetHandle: 'back',
+							markerStart: marker,
+							markerEnd: e.bidirectional ? marker : undefined
+						}
+					: {
+							source: e.from,
+							target: e.to,
+							markerEnd: marker,
+							markerStart: e.bidirectional ? marker : undefined
+						}),
 				interactionWidth: 24,
 				animated: !!editor.result?.edges.has(e.id),
 				style: [

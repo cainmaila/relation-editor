@@ -410,6 +410,26 @@ test.describe('編輯器操作', () => {
 		await expect(detail(page)).toBeVisible();
 	});
 
+	test('大綱篩選時畫布淡化不符合的節點', async ({ page }) => {
+		await outline(page).getByRole('searchbox', { name: '篩選節點' }).fill('A-02');
+		await expect(outline(page).getByRole('listitem')).toHaveCount(5);
+		await expect(dimmed(page)).toHaveCount(44 - 5);
+		await page.keyboard.press('ControlOrMeta+b');
+		await expect(dimmed(page)).toHaveCount(0);
+		await page.keyboard.press('ControlOrMeta+b');
+		await outline(page).getByRole('searchbox', { name: '篩選節點' }).fill('');
+		await expect(dimmed(page)).toHaveCount(0);
+	});
+
+	test('承載邊由左往右畫，不折回', async ({ page }) => {
+		const paths = page.locator('.svelte-flow__edge[data-id^="承載:"] path.svelte-flow__edge-path');
+		await expect(paths).not.toHaveCount(0);
+		for (const d of await paths.evaluateAll((ps) => ps.map((p) => p.getAttribute('d')!))) {
+			const xs = [...d.matchAll(/(-?[\d.]+)[ ,](-?[\d.]+)/g)].map((m) => +m[1]);
+			expect(xs[0]).toBeLessThan(xs.at(-1)!);
+		}
+	});
+
 	test('⌘K 搜尋節點並選取', async ({ page }) => {
 		await only(page, ['電力']);
 		await page.keyboard.press('ControlOrMeta+k');

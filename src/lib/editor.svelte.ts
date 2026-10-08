@@ -59,9 +59,24 @@ export class Editor {
 	issue = $state<'unprocessed' | 'unreachable' | null>(null);
 	/** 畫布角落的圖例卡 */
 	legend = $state(false);
+	/** 大綱篩選文字 */
+	query = $state('');
 
 	unprocessed = $derived(unprocessed(this.graph));
 	unreachable = $derived(unreachable(this.graph));
+
+	/** 大綱篩選命中的節點；沒在篩選或左欄收合時為 null（收合時看不到篩選，不淡化畫布） */
+	matched = $derived.by(() => {
+		const k = this.query.trim().toLowerCase();
+		const i = this.issue;
+		if ((!k && !i) || !this.panels.left) return null;
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- derived 每次重建，不需響應
+		return new Set(
+			this.graph.nodes
+				.filter((n) => (!k || n.name.toLowerCase().includes(k)) && (!i || this[i].has(n.id)))
+				.map((n) => n.id)
+		);
+	});
 
 	/** 勾選系統的節點＋通用節點；邊兩端都在畫面上才顯示 */
 	visible = $derived.by(() => {
