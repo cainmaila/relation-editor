@@ -2,7 +2,16 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
 const SYSTEMS = ['空間', '電力', '空調', '網路', '消防', 'CCTV', 'IDC'];
-const G = '2F A 區監視與偵測範圍';
+const G = '2F A 排監視與偵測範圍';
+/** 2F 全棟機櫃（PRD §5）：全部攤開的節點數、預設收疊後的卡片數、畫出的邊數（承載預設不畫） */
+const TOTAL = 2066;
+const COLLAPSED = 1398;
+const ALL_CUSTOMERS = [
+	...Array.from({ length: 40 }, (_, i) => `客戶 ${String(i + 1).padStart(2, '0')}`),
+	'客戶丙',
+	'客戶乙',
+	'客戶甲'
+];
 
 const node = (page: Page, name: string) =>
 	page.locator('.svelte-flow__node-graph').filter({ has: page.getByText(name, { exact: true }) });
@@ -15,7 +24,7 @@ const dimmed = (page: Page) => page.locator('.svelte-flow__node-graph .opacity-2
 const detail = (page: Page) => page.getByRole('complementary', { name: '詳情' });
 /** 詳情的「欄位 值」 */
 const field = (k: string, v: string) => new RegExp(`${k}\\s*${v}`);
-const TOTAL_EDGES = 65; // 圖 50 條＋IDC 20 條，承載 5 條沒選到主機／機框時不畫
+const TOTAL_EDGES = 3692; // 圖 2,708 條＋IDC 1,312 條，承載 328 條沒選到主機／機框時不畫
 const status = (page: Page) => page.getByRole('status');
 const outline = (page: Page) => page.getByRole('navigation', { name: '大綱' });
 const unprocessedChip = (page: Page) => outline(page).getByRole('button', { name: '只列未處理' });
@@ -30,11 +39,14 @@ async function only(page: Page, systems: string[]) {
 	for (const s of SYSTEMS)
 		await page.getByRole('checkbox', { name: s }).setChecked(systems.includes(s));
 }
-/** 先全部顯示（新增、找客戶後視野會移動）再點 */
+/** 整圖入鏡；只在節點少的檢視用（2,066 個節點縮到最小也塞不進畫面） */
 const fitAll = (page: Page) => page.locator('.svelte-flow__controls-fitview').click();
+/** 從大綱點節點：選取並把畫面置中到它（全圖太大，不能靠整圖入鏡再點卡片） */
 async function pick(page: Page, name: string) {
-	await fitAll(page);
-	await node(page, name).click();
+	await outline(page)
+		.locator('button[data-id]')
+		.filter({ has: page.getByText(name, { exact: true }) })
+		.click();
 }
 const clickPane = (page: Page) =>
 	page.locator('.svelte-flow__pane').click({ position: { x: 5, y: 5 } });
@@ -83,12 +95,12 @@ async function findCustomers(page: Page, name: string) {
 
 const stackToggle = (page: Page) => page.getByRole('button', { name: '收疊同類', exact: true });
 
-// PRD 情境逐一數節點：先關掉收疊，全部 44 個攤開
+// PRD 情境逐一數節點：先關掉收疊，全部 2,066 個攤開
 test.beforeEach(async ({ page }) => {
 	await page.goto('/');
-	await expect(graphNodes(page)).toHaveCount(37);
+	await expect(graphNodes(page)).toHaveCount(COLLAPSED);
 	await stackToggle(page).click();
-	await expect(graphNodes(page)).toHaveCount(44);
+	await expect(graphNodes(page)).toHaveCount(TOTAL);
 });
 
 test.describe('看圖', () => {
@@ -104,25 +116,25 @@ test.describe('看圖', () => {
 
 	test('情境 2：系統內是二維', async ({ page }) => {
 		await only(page, ['電力']);
-		// 電力 11 個＋永遠顯示的通用節點
-		await expect(graphNodes(page)).toHaveCount(12);
-		await expect(graphEdges(page)).toHaveCount(10);
+		// 電力 672 個＋永遠顯示的通用節點
+		await expect(graphNodes(page)).toHaveCount(673);
+		await expect(graphEdges(page)).toHaveCount(671);
 		// 沿邊方向由左往右
 		const x = async (n: string) => (await node(page, n).boundingBox())!.x;
 		expect(await x('台電市電')).toBeLessThan(await x('UPS-1'));
 		expect(await x('UPS-1')).toBeLessThan(await x('樓層 PDU 2F-A'));
 		expect(await x('樓層 PDU 2F-A')).toBeLessThan(await x('機櫃 PDU A-01-A'));
 		await only(page, ['空間']);
-		// 空間 8 個＋通用節點；7 條包含＋通用節點→機櫃 A-01、A-02
-		await expect(graphNodes(page)).toHaveCount(9);
-		await expect(graphEdges(page)).toHaveCount(9);
+		// 空間 345 個＋通用節點；344 條包含＋通用節點→機櫃 A-01、A-02
+		await expect(graphNodes(page)).toHaveCount(346);
+		await expect(graphEdges(page)).toHaveCount(346);
 	});
 
 	test('情境 3：系統相連就成為多維', async ({ page }) => {
 		await only(page, ['空間', '電力']);
-		await expect(graphEdges(page)).toHaveCount(9 + 10 + 8);
+		await expect(graphEdges(page)).toHaveCount(346 + 671 + 654);
 		await only(page, ['空間', '電力', '空調']);
-		await expect(graphEdges(page)).toHaveCount(9 + 10 + 8 + 2);
+		await expect(graphEdges(page)).toHaveCount(346 + 671 + 654 + 2);
 	});
 
 	test('情境 4：通用節點整理跨系統連線', async ({ page }) => {
@@ -136,7 +148,7 @@ test.describe('看圖', () => {
 
 	test('情境 5：聚焦一個節點', async ({ page }) => {
 		await pick(page, '機櫃 A-01');
-		await expect(dimmed(page)).toHaveCount(44 - 8);
+		await expect(dimmed(page)).toHaveCount(TOTAL - 8);
 		for (const n of [
 			'A 排',
 			'機櫃 PDU A-01-A',
@@ -187,9 +199,9 @@ test.describe('編輯', () => {
 		const f = await open(page, '新增節點', '新增節點');
 		await f.getByRole('button', { name: '新增節點' }).click();
 		await expect(status(page)).toHaveText('請選擇類型');
-		await expect(graphNodes(page)).toHaveCount(44);
+		await expect(graphNodes(page)).toHaveCount(TOTAL);
 		await addNode(page, '攝影機', '攝影機 CAM-04');
-		await expect(graphNodes(page)).toHaveCount(45);
+		await expect(graphNodes(page)).toHaveCount(TOTAL + 1);
 		await expect(badge(page, '攝影機 CAM-04', '未處理')).toHaveCount(1);
 		await expect(await unprocessedList(page)).toHaveText(['攝影機 CAM-04']);
 		await expect(node(page, '攝影機 CAM-04').locator('[title="CCTV"]')).toBeVisible();
@@ -207,20 +219,22 @@ test.describe('編輯', () => {
 	});
 
 	test('情境 9：拖曳卡片到另一張建立邊', async ({ page }) => {
+		await only(page, ['消防', 'CCTV']);
 		await addNode(page, '攝影機', '攝影機 CAM-04');
 		await fitAll(page);
 		await drag(page, node(page, '攝影機 CAM-04'), node(page, G));
 		const m = page.getByRole('menu', { name: '建立邊' });
 		await expect(m).toContainText(`攝影機 CAM-04 → ${G}`);
 		await expect(m.getByRole('menuitem', { name: '供電' })).toBeDisabled();
-		await expect(graphEdges(page)).toHaveCount(TOTAL_EDGES);
+		await expect(graphEdges(page)).toHaveCount(3);
 		await m.getByRole('menuitem', { name: '監測' }).click();
-		await expect(graphEdges(page)).toHaveCount(TOTAL_EDGES + 1);
+		await expect(graphEdges(page)).toHaveCount(4);
 		await expect(badge(page, '攝影機 CAM-04', '未處理')).toHaveCount(0);
 	});
 
 	test('情境 8＋9：拖到空白處新增節點並連線', async ({ page }) => {
-		await only(page, ['空間', 'CCTV']);
+		await only(page, ['消防', 'CCTV']);
+		await fitAll(page);
 		const b = (await page.locator('.svelte-flow__pane').boundingBox())!;
 		await drag(page, node(page, G), { x: b.x + b.width / 2, y: b.y + b.height - 30 });
 		const m = page.getByRole('menu', { name: '新增節點並連線' });
@@ -230,7 +244,7 @@ test.describe('編輯', () => {
 			.getByRole('menu', { name: '建立邊' })
 			.getByRole('menuitem', { name: '包含' })
 			.click();
-		await expect(graphNodes(page)).toHaveCount(11);
+		await expect(node(page, '區域 1')).toBeVisible();
 		await expect(detail(page)).toContainText(field('終點', '區域 1'));
 	});
 
@@ -246,9 +260,8 @@ test.describe('編輯', () => {
 		await expect(graphEdges(page)).toHaveCount(TOTAL_EDGES);
 
 		// 例外：通用節點不受連接限制
-		const G = '2F A 區監視與偵測範圍';
 		await addEdge(page, '空調箱 AHU-2F-1', G, '冷卻');
-		await addEdge(page, '2F A 區', G, '包含');
+		await addEdge(page, 'A 排', G, '包含');
 		await expect(graphEdges(page)).toHaveCount(TOTAL_EDGES + 2);
 	});
 
@@ -286,25 +299,23 @@ test.describe('編輯', () => {
 		await expect(detail(page)).toContainText('連入（2）');
 
 		await pick(page, '空調箱 AHU-2F-1');
-		await pickEdge(page, '冷卻：2F A 區');
+		await pickEdge(page, '冷卻：2F');
 		await detail(page).getByRole('button', { name: '刪除邊' }).click();
 		await expect(badge(page, '空調箱 AHU-2F-1', '未處理')).toHaveCount(0);
-		await expect(node(page, '2F A 區')).toBeVisible();
+		await expect(node(page, '2F')).toBeVisible();
 
-		await pick(page, 'Core Switch-2');
-		await pickEdge(page, '包含：2F A 區');
+		await pick(page, '攝影機 CAM-03');
+		await pickEdge(page, `監測：${G}`);
 		await detail(page).getByRole('button', { name: '刪除邊' }).click();
-		await pick(page, 'Core Switch-2');
-		await pickEdge(page, '連線：匯聚 Switch AGG-A');
-		await detail(page).getByRole('button', { name: '刪除邊' }).click();
-		await expect(await unprocessedList(page)).toHaveText(['Core Switch-2']);
-		await expect(badge(page, '匯聚 Switch AGG-A', '未處理')).toHaveCount(0);
+		await expect(await unprocessedList(page)).toHaveText(['攝影機 CAM-03']);
+		await unprocessedChip(page).click(); // 大綱改回全部，後面才點得到機櫃
+		await expect(badge(page, G, '未處理')).toHaveCount(0);
 
 		await pick(page, '機櫃 A-01');
 		await expect(detail(page).getByRole('button', { name: '刪除節點' })).toBeDisabled();
 		await expect(detail(page)).toContainText('機櫃底下有 IDC 資料，請先在 IDC機櫃配置管理移除機框');
 		await expect(node(page, '機櫃 A-01')).toBeVisible();
-		await expect(graphEdges(page)).toHaveCount(TOTAL_EDGES - 4);
+		await expect(graphEdges(page)).toHaveCount(TOTAL_EDGES - 3);
 	});
 
 	test('情境 13：IDC 維護的資料不能改', async ({ page }) => {
@@ -341,18 +352,18 @@ test.describe('編輯', () => {
 
 	test('情境 14：不存檔', async ({ page }) => {
 		await addNode(page, '攝影機', '攝影機 CAM-04');
-		await expect(graphNodes(page)).toHaveCount(45);
+		await expect(graphNodes(page)).toHaveCount(TOTAL + 1);
 		await page.reload();
-		await expect(graphNodes(page)).toHaveCount(37);
+		await expect(graphNodes(page)).toHaveCount(COLLAPSED);
 		await stackToggle(page).click();
-		await expect(graphNodes(page)).toHaveCount(44);
+		await expect(graphNodes(page)).toHaveCount(TOTAL);
 		await expect(node(page, '攝影機 CAM-04')).toHaveCount(0);
 	});
 });
 
 test.describe('找客戶', () => {
 	test('情境 15：從源頭找客戶', async ({ page }) => {
-		expect((await findCustomers(page, '台電市電')).sort()).toEqual(['客戶丙', '客戶乙', '客戶甲']);
+		expect((await findCustomers(page, '台電市電')).sort()).toEqual(ALL_CUSTOMERS);
 		for (const n of [
 			'UPS-1',
 			'樓層 PDU 2F-A',
@@ -360,7 +371,7 @@ test.describe('找客戶', () => {
 			'機櫃 A-04',
 			'機框 A-04-F1',
 			'空調箱 AHU-2F-1',
-			'2F A 區',
+			'2F',
 			'A 排'
 		])
 			await expect(node(page, n).locator('.opacity-20')).toHaveCount(0);
@@ -371,11 +382,7 @@ test.describe('找客戶', () => {
 		expect(await findCustomers(page, '機櫃 PDU A-02-A')).toEqual(['客戶乙']);
 		expect((await findCustomers(page, '偵測器 SD-01')).sort()).toEqual(['客戶乙', '客戶甲']);
 		expect(await findCustomers(page, '主機 H-02')).toEqual(['客戶乙']);
-		expect((await findCustomers(page, 'Core Switch-1')).sort()).toEqual([
-			'客戶丙',
-			'客戶乙',
-			'客戶甲'
-		]);
+		expect((await findCustomers(page, 'Core Switch-1')).sort()).toEqual(ALL_CUSTOMERS);
 		expect(await findCustomers(page, 'ToR Switch A-02')).toEqual(['客戶乙']);
 	});
 
@@ -420,7 +427,7 @@ test.describe('編輯器操作', () => {
 	test('大綱篩選時畫布淡化不符合的節點', async ({ page }) => {
 		await outline(page).getByRole('searchbox', { name: '篩選節點' }).fill('A-02');
 		await expect(outline(page).getByRole('listitem')).toHaveCount(5);
-		await expect(dimmed(page)).toHaveCount(44 - 5);
+		await expect(dimmed(page)).toHaveCount(TOTAL - 5);
 		await page.keyboard.press('ControlOrMeta+b');
 		await expect(dimmed(page)).toHaveCount(0);
 		await page.keyboard.press('ControlOrMeta+b');
@@ -437,7 +444,7 @@ test.describe('編輯器操作', () => {
 			(ps) =>
 				ps.filter((p) => p.getAttribute('marker-start') && p.getAttribute('marker-end')).length
 		);
-		expect(both).toBe(5);
+		expect(both).toBe(328);
 	});
 
 	test('⌘K 搜尋節點並選取', async ({ page }) => {
@@ -461,7 +468,7 @@ test.describe('編輯器操作', () => {
 		await menu(page).getByRole('menuitem', { name: '新增節點' }).hover();
 		await menu(page).getByRole('menuitem', { name: 'CCTV' }).hover();
 		await menu(page).getByRole('menuitem', { name: '攝影機' }).click();
-		await expect(graphNodes(page)).toHaveCount(45);
+		await expect(graphNodes(page)).toHaveCount(TOTAL + 1);
 		await expect(badge(page, '攝影機 1', '未處理')).toHaveCount(1);
 		await expect(detail(page).getByLabel('名稱', { exact: true })).toHaveValue('攝影機 1');
 	});
@@ -472,16 +479,16 @@ test.describe('編輯器操作', () => {
 		await menu(page).getByRole('menuitem', { name: '新增節點' }).hover();
 		await menu(page).getByRole('menuitem', { name: '消防' }).hover();
 		await menu(page).getByRole('menuitem', { name: '偵測器' }).click();
-		await expect(graphNodes(page)).toHaveCount(45);
+		await expect(graphNodes(page)).toHaveCount(TOTAL + 1);
 		await expect(page.getByRole('menu')).toHaveCount(0);
 	});
 
 	test('右鍵節點：找客戶、不能刪的顯示原因', async ({ page }) => {
-		await fitAll(page);
+		await pick(page, '台電市電');
 		await node(page, '台電市電').click({ button: 'right' });
 		await menu(page).getByRole('menuitem', { name: '找客戶' }).click();
-		await expect(page.getByRole('region', { name: '找客戶結果' })).toContainText('3');
-		await fitAll(page);
+		await expect(page.getByRole('region', { name: '找客戶結果' })).toContainText('43');
+		await pick(page, '機櫃 A-01');
 		await node(page, '機櫃 A-01').click({ button: 'right' });
 		await expect(menu(page).getByRole('menuitem', { name: /刪除節點/ })).toBeDisabled();
 		await page.keyboard.press('Escape');
@@ -490,27 +497,28 @@ test.describe('編輯器操作', () => {
 
 	test('同類兄弟節點收成一疊，點開展開、右鍵收回', async ({ page }) => {
 		await stackToggle(page).click();
-		await expect(graphNodes(page)).toHaveCount(37);
-		const stack = node(page, '機櫃 PDU ×8');
-		await expect(stack).toContainText('8 個同類');
+		await expect(graphNodes(page)).toHaveCount(COLLAPSED);
+		// M 排 21 櫃，是唯一 ×42 的機櫃 PDU 疊卡
+		const stack = node(page, '機櫃 PDU ×42');
+		await expect(stack).toContainText('42 個同類');
 		// 大綱點成員：選取但不展開（不重排），詳情顯示成員
-		await outline(page).getByRole('button', { name: '機櫃 PDU A-02-A' }).click();
-		await expect(graphNodes(page)).toHaveCount(37);
-		await expect(detail(page).getByLabel('名稱', { exact: true })).toHaveValue('機櫃 PDU A-02-A');
-		await fitAll(page);
+		await outline(page).getByRole('button', { name: '機櫃 PDU M-02-A' }).click();
+		await expect(graphNodes(page)).toHaveCount(COLLAPSED);
+		await expect(detail(page).getByLabel('名稱', { exact: true })).toHaveValue('機櫃 PDU M-02-A');
 		await stack.click();
-		await expect(graphNodes(page)).toHaveCount(44);
-		await fitAll(page);
-		await node(page, '機櫃 PDU A-02-A').click({ button: 'right' });
-		await menu(page).getByRole('menuitem', { name: '收疊同類（8）' }).click();
-		await expect(graphNodes(page)).toHaveCount(37);
+		await expect(graphNodes(page)).toHaveCount(COLLAPSED + 41);
+		await pick(page, '機櫃 PDU M-02-A');
+		await node(page, '機櫃 PDU M-02-A').click({ button: 'right' });
+		await menu(page).getByRole('menuitem', { name: '收疊同類（42）' }).click();
+		await expect(graphNodes(page)).toHaveCount(COLLAPSED);
 	});
 
 	test('雙擊疊卡只展開，不選到重排後的卡片', async ({ page }) => {
 		await stackToggle(page).click();
-		await fitAll(page);
-		await node(page, '機櫃 PDU ×8').dblclick();
-		await expect(graphNodes(page)).toHaveCount(44);
+		await pick(page, '機櫃 PDU M-02-A');
+		await clickPane(page); // 取消置中時選到的成員
+		await node(page, '機櫃 PDU ×42').dblclick();
+		await expect(graphNodes(page)).toHaveCount(COLLAPSED + 41);
 		await expect(detail(page).getByLabel('名稱', { exact: true })).toHaveCount(0);
 	});
 
@@ -518,19 +526,21 @@ test.describe('編輯器操作', () => {
 		const power = outline(page).getByRole('region', { name: '電力' });
 		await power.getByRole('button').first().click();
 		await expect(power.getByRole('button').first()).toHaveAttribute('aria-expanded', 'false');
-		await pick(page, '機櫃 PDU A-01-A');
+		await page.keyboard.press('ControlOrMeta+k');
+		await page.getByRole('textbox', { name: '搜尋節點' }).fill('PDU A-01-A');
+		await page.keyboard.press('Enter');
 		await expect(power.getByRole('button').first()).toHaveAttribute('aria-expanded', 'true');
 	});
 
 	test('右鍵節點刪除需二次確認', async ({ page }) => {
-		await fitAll(page);
+		await pick(page, '偵測器 SD-02');
 		await node(page, '偵測器 SD-02').click({ button: 'right' });
 		await menu(page).getByRole('menuitem', { name: '刪除節點' }).click();
-		await expect(graphNodes(page)).toHaveCount(44);
+		await expect(graphNodes(page)).toHaveCount(TOTAL);
 		await menu(page)
 			.getByRole('menuitem', { name: /確認刪除/ })
 			.click();
-		await expect(graphNodes(page)).toHaveCount(43);
+		await expect(graphNodes(page)).toHaveCount(TOTAL - 1);
 	});
 });
 
@@ -554,7 +564,7 @@ test.describe('手測回報', () => {
 				Object.fromEntries(ns.map((n) => [n.dataset.id, (n as HTMLElement).style.transform]))
 			);
 		const before = await at();
-		await outline(page).getByRole('button', { name: '機櫃 PDU A-02-A' }).click();
+		await outline(page).getByRole('button', { name: '機櫃 PDU M-02-A' }).click();
 		expect(await at()).toEqual(before);
 		await addEdge(page, '偵測器 SD-01', '機櫃 A-03', '監測');
 		expect(await at()).toEqual(before);

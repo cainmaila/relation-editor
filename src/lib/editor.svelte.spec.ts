@@ -24,7 +24,7 @@ describe('編輯後的收疊', () => {
 	it('編輯湊成新的一疊時，畫面上的卡片不收起；重新排版後才收', () => {
 		const e = new Editor();
 		const ids = [e.addNode('列')!, e.addNode('列')!, e.addNode('列')!];
-		for (const id of ids) e.addEdge('2F A 區', id, '包含');
+		for (const id of ids) e.addEdge('A 排', id, '包含');
 		expect(cards(e)).toEqual(expect.arrayContaining(ids));
 		e.rearrange();
 		expect(cards(e)).not.toEqual(expect.arrayContaining(ids));
@@ -32,11 +32,11 @@ describe('編輯後的收疊', () => {
 
 	it('新節點加入已收起的疊卡時留在外面', () => {
 		const e = new Editor();
-		const key = [...e.closed.keys()][0];
+		const key = 'stack:機櫃 PDU:樓層 PDU 2F-A';
 		const id = e.addNode('機櫃 PDU')!;
 		e.addEdge('樓層 PDU 2F-A', id, '供電');
 		expect(e.stackOf(id)).toBe(key);
 		expect(cards(e)).toContain(id);
-		expect(e.closed.get(key)).toHaveLength(8);
+		expect(e.closed.get(key)).toHaveLength(44);
 	});
 });

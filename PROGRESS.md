@@ -1,5 +1,20 @@
 # PROGRESS
 
+## mock 改 2F 全棟機櫃（PRD v0.3）
+
+- **Goal:** 取代 A 排 4 台的 mock，改成 2F 16 排 327 台、共 2,066 節點（PRD §5）；計畫 `~/.claude/plans/users-cain-01-fet-tpkc-tpkc-fe-situatio-curious-nygaard.md`
+- **Done（已驗證：unit 26 項、e2e 39 項、check／lint／build 全綠；e2e 全跑一次有 1 項在平行負載下失敗，單跑與重跑 4 次都過）:**
+  - `mock.ts`：`ROWS` 表產生排、機櫃、PDU A／B、ToR、樓層 PDU、匯聚 Switch；`idcRows()` 給 `graphMock`（ToR→主機）與 `idcMock` 共用，A-01～A-04 維持原內容
+  - 拿掉區域層：排掛 2F，Core 包含、空調箱冷卻改連 2F，通用節點改名「2F A 排監視與偵測範圍」
+  - 測試：unit／e2e 數字照 PRD v0.3；e2e 因 2,066 張卡縮到最小也塞不進畫面，`pick` 改從大綱點選（置中），`playwright.config.ts` 拉長逾時並平行跑
+  - 實測：載入到 1,398 張卡約 0.8 秒；關收疊展開到 2,066 張約 11 秒（慢）；只看空間 0.4 秒
+- **Todo:** 回報 PD（見 Notes）；決定是否改 `stacks()`；效能若要處理，先看關收疊的 11 秒
+- **Notes:**
+  - **收疊與 PRD 不符：** `stacks()` 只看上游。機櫃上游＝排＋自己的 PDU A／B，ToR 上游＝機櫃＋AGG，彼此都不同，所以機櫃、ToR 一台都不收；實際只收 18 疊（16 排的機櫃 PDU、列 ×16、樓層 PDU ×16）。PRD §4／情境 1 寫「每排機櫃、ToR 各收成卡片」做不到。可選：改成只比「同系統的上游」（機櫃按排收、ToR 按排收）。預設卡片數 1,398
+  - PRD §7 還留著「匯聚 1 台、ToR 4 台」（10-08），已被 v0.3 取代
+  - 「區域」節點類型仍在 `config.ts`，新增節點選單還能選
+  - 情境 12 操作 3 改驗 CAM-03（Core Switch-2 現在有 16 條下行邊，刪一條不會變未處理）
+
 ## 手測 6 項修正（分支 fix/manual-test-6）
 
 - **Goal:** 修使用者手測 6 項；計畫 `~/.claude/plans/pasted-content-id-cc19-1-parallel-liskov.md`

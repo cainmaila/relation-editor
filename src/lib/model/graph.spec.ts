@@ -5,7 +5,6 @@ import {
 	findCustomers,
 	layout,
 	pin,
-	NODE_W,
 	NODE_H,
 	stacks,
 	unprocessed,
@@ -32,42 +31,51 @@ const visible = (g: Graph, systems: System[]) => {
 	return { nodes, edges: g.edges.filter((e) => ids.has(e.from) && ids.has(e.to)) };
 };
 
+const cust = (g: Graph, id: string) => findCustomers(g, id).customers.sort();
+/** 客戶甲乙丙與客戶 01～40，共 43 位 */
+const ALL_CUSTOMERS = [
+	...Array.from({ length: 40 }, (_, i) => `客戶 ${String(i + 1).padStart(2, '0')}`),
+	'客戶丙',
+	'客戶乙',
+	'客戶甲'
+];
+
 const removeEdge = (g: Graph, from: string, to: string) => {
 	g.edges = g.edges.filter((e) => !(e.from === from && e.to === to));
 };
 
 describe('看圖', () => {
-	it('情境 1：44 個節點，無未處理', () => {
+	it('情境 1：2,066 個節點，無未處理', () => {
 		const g = full();
-		expect(g.nodes).toHaveLength(44);
-		expect(new Set(g.nodes.map((n) => n.id)).size).toBe(44);
+		expect(g.nodes).toHaveLength(2066);
+		expect(new Set(g.nodes.map((n) => n.id)).size).toBe(2066);
 		expect(unprocessed(g).size).toBe(0);
 	});
 
-	it('情境 2：只勾電力 11 節點 10 邊；只勾空間 8 節點 7 邊（不含通用）', () => {
+	it('情境 2：只勾電力 672 節點 671 邊；只勾空間 345 節點 344 邊（不含通用）', () => {
 		const p = visible(full(), ['電力']);
-		expect(p.nodes.filter((n) => n.type !== '通用節點')).toHaveLength(11);
-		expect(p.edges).toHaveLength(10);
+		expect(p.nodes.filter((n) => n.type !== '通用節點')).toHaveLength(672);
+		expect(p.edges).toHaveLength(671);
 		const s = visible(full(), ['空間']);
-		expect(s.nodes.filter((n) => n.type !== '通用節點')).toHaveLength(8);
+		expect(s.nodes.filter((n) => n.type !== '通用節點')).toHaveLength(345);
 		expect(
-			s.edges.filter((e) => e.type === '包含' && !e.from.startsWith('2F A 區監視'))
-		).toHaveLength(7);
+			s.edges.filter((e) => e.type === '包含' && !e.from.startsWith('2F A 排監視'))
+		).toHaveLength(344);
 	});
 
-	it('情境 3：空間＋電力多 8 條跨系統邊；加空調再多 2 條', () => {
+	it('情境 3：空間＋電力多 654 條跨系統邊；加空調再多 2 條', () => {
 		const cross = (v: Graph) =>
 			v.edges.filter((e) => {
 				const sys = (id: string) => nodeType(v.nodes.find((n) => n.id === id)!.type).system;
 				return sys(e.from) !== sys(e.to) && sys(e.from) !== null && sys(e.to) !== null;
 			});
-		expect(cross(visible(full(), ['空間', '電力']))).toHaveLength(8);
-		expect(cross(visible(full(), ['空間', '電力', '空調']))).toHaveLength(10);
+		expect(cross(visible(full(), ['空間', '電力']))).toHaveLength(654);
+		expect(cross(visible(full(), ['空間', '電力', '空調']))).toHaveLength(656);
 	});
 
 	it('情境 4：通用節點連入 3 監測、連出 2 包含', () => {
 		const v = visible(full(), ['空間', '消防', 'CCTV']);
-		const G = '2F A 區監視與偵測範圍';
+		const G = '2F A 排監視與偵測範圍';
 		expect(v.edges.filter((e) => e.to === G && e.type === '監測')).toHaveLength(3);
 		expect(v.edges.filter((e) => e.from === G && e.type === '包含')).toHaveLength(2);
 	});
@@ -83,17 +91,17 @@ describe('編輯', () => {
 		const g = full();
 		g.nodes.push({ id: 'x', type: '攝影機', name: '攝影機 CAM-04', props: {} });
 		expect([...unprocessed(g)]).toEqual(['x']);
-		expect(validateEdge(g, 'x', '2F A 區監視與偵測範圍', '監測')).toBeNull();
+		expect(validateEdge(g, 'x', '2F A 排監視與偵測範圍', '監測')).toBeNull();
 		g.edges.push({
 			id: 'ex',
 			type: '監測',
 			from: 'x',
-			to: '2F A 區監視與偵測範圍',
+			to: '2F A 排監視與偵測範圍',
 			bidirectional: false,
 			props: {}
 		});
 		expect(unprocessed(g).size).toBe(0);
-		expect(findCustomers(g, 'x').customers.sort()).toEqual(['客戶乙', '客戶甲']);
+		expect(cust(g, 'x')).toEqual(['客戶乙', '客戶甲']);
 	});
 
 	it('情境 10：連接限制', () => {
@@ -106,29 +114,25 @@ describe('編輯', () => {
 
 	it('情境 10 例外：通用節點不受連接限制，找客戶結果不變', () => {
 		const g = full();
-		const G = '2F A 區監視與偵測範圍';
+		const G = '2F A 排監視與偵測範圍';
 		expect(validateEdge(g, '空調箱 AHU-2F-1', G, '冷卻')).toBeNull();
-		expect(validateEdge(g, '2F A 區', G, '包含')).toBeNull();
+		expect(validateEdge(g, 'A 排', G, '包含')).toBeNull();
 		expect(validateEdge(g, G, '機櫃 A-01', '供電')).toBeNull();
 		expect(validateEdge(g, G, '客戶甲', '服務')).toBe('由 IDC機櫃配置管理維護');
 		for (const [id, from, type] of [
 			['c1', '空調箱 AHU-2F-1', '冷卻'],
-			['c2', '2F A 區', '包含']
+			['c2', 'A 排', '包含']
 		])
 			g.edges.push({ id, type, from, to: G, bidirectional: false, props: {} });
-		expect(findCustomers(g, '空調箱 AHU-2F-1').customers.sort()).toEqual([
-			'客戶丙',
-			'客戶乙',
-			'客戶甲'
-		]);
+		expect(cust(g, '空調箱 AHU-2F-1')).toEqual(ALL_CUSTOMERS);
 	});
 
 	it('情境 12：刪除與未處理', () => {
 		const g = full();
-		removeEdge(g, '空調箱 AHU-2F-1', '2F A 區');
+		removeEdge(g, '空調箱 AHU-2F-1', '2F');
 		expect(unprocessed(g).size).toBe(0);
-		removeEdge(g, '2F A 區', 'Core Switch-2');
-		removeEdge(g, 'Core Switch-2', '匯聚 Switch AGG-A');
+		removeEdge(g, '2F', 'Core Switch-2');
+		g.edges = g.edges.filter((e) => e.from !== 'Core Switch-2');
 		expect([...unprocessed(g)]).toEqual(['Core Switch-2']);
 		expect(checkDeleteNode(g, '機櫃 A-01')).toBe(
 			'機櫃底下有 IDC 資料，請先在 IDC機櫃配置管理移除機框'
@@ -145,12 +149,10 @@ describe('編輯', () => {
 });
 
 describe('找客戶', () => {
-	const cust = (g: Graph, id: string) => findCustomers(g, id).customers.sort();
-
-	it('情境 15：台電市電 → 甲乙丙，含空調支線', () => {
+	it('情境 15：台電市電 → 全部 43 位客戶，含空調支線', () => {
 		const r = findCustomers(full(), '台電市電');
-		expect(r.customers.sort()).toEqual(['客戶丙', '客戶乙', '客戶甲']);
-		for (const id of ['UPS-1', '空調箱 AHU-2F-1', '2F A 區', 'A 排', '機櫃 A-04', '機框 A-04-F1'])
+		expect(r.customers.sort()).toEqual(ALL_CUSTOMERS);
+		for (const id of ['UPS-1', '空調箱 AHU-2F-1', '2F', 'A 排', '機櫃 A-04', '機框 A-04-F1'])
 			expect(r.nodes.has(id)).toBe(true);
 		expect(r.nodes.has('偵測器 SD-01')).toBe(false);
 	});
@@ -160,7 +162,7 @@ describe('找客戶', () => {
 		expect(cust(g, '機櫃 PDU A-02-A')).toEqual(['客戶乙']);
 		expect(cust(g, '偵測器 SD-01')).toEqual(['客戶乙', '客戶甲']);
 		expect(cust(g, '主機 H-02')).toEqual(['客戶乙']);
-		expect(cust(g, 'Core Switch-1')).toEqual(['客戶丙', '客戶乙', '客戶甲']);
+		expect(cust(g, 'Core Switch-1')).toEqual(ALL_CUSTOMERS);
 		expect(cust(g, 'ToR Switch A-02')).toEqual(['客戶乙']);
 	});
 
@@ -206,7 +208,7 @@ describe('找客戶', () => {
 
 it('layout：每個節點都有位置，沿供電方向由左往右，客戶在最右欄', () => {
 	const { pos } = layout(full());
-	expect(pos.size).toBe(44);
+	expect(pos.size).toBe(2066);
 	const x = (id: string) => pos.get(id)!.x;
 	expect(x('台電市電')).toBeLessThan(x('UPS-1'));
 	expect(x('UPS-1')).toBeLessThan(x('樓層 PDU 2F-A'));
@@ -220,31 +222,34 @@ it('layout：平行的兄弟節點同一欄，卡片不重疊', () => {
 	const cabs = ['機櫃 A-01', '機櫃 A-02', '機櫃 A-03', '機櫃 A-04'].map((id) => pos.get(id)!);
 	expect(new Set(cabs.map((p) => p.x)).size).toBe(1);
 	expect(new Set(cabs.map((p) => p.y)).size).toBe(4);
-	const all = [...pos.values()];
-	all.forEach((a, i) =>
-		all.slice(i + 1).forEach((b) => {
-			expect(Math.abs(a.x - b.x) >= NODE_W || Math.abs(a.y - b.y) >= NODE_H).toBe(true);
-		})
-	);
+	// 同欄依 y 排序後，相鄰卡片不重疊
+	const cols = Map.groupBy(pos.values(), (p) => p.x);
+	for (const col of cols.values()) {
+		const ys = col.map((p) => p.y).sort((a, b) => a - b);
+		ys.slice(1).forEach((y, i) => expect(y - ys[i] >= NODE_H).toBe(true));
+	}
 });
 
-it('收疊：同類且上游相同的機櫃 PDU ×8 收成一張，邊合併', () => {
+it('收疊：每排機櫃 PDU、16 條排、16 台樓層 PDU 各收成一張，機櫃與 ToR 上游各不同不收', () => {
 	const g = full();
 	const st = stacks(g);
-	expect([...st.values()]).toEqual([
-		['A-01-A', 'A-01-B', 'A-02-A', 'A-02-B', 'A-03-A', 'A-03-B', 'A-04-A', 'A-04-B'].map(
-			(p) => `機櫃 PDU ${p}`
-		)
-	]);
+	expect(st.size).toBe(18);
+	const key = 'stack:機櫃 PDU:樓層 PDU 2F-A';
+	expect(st.get(key)).toHaveLength(44);
+	expect(st.get('stack:列:2F')).toHaveLength(16);
+	expect(st.get('stack:樓層 PDU:UPS-1')).toHaveLength(16);
+	expect([...st.keys()].some((k) => k.startsWith('stack:機櫃:'))).toBe(false);
+	const members = [...st.values()].flat().length;
 	const v = collapse(g, st);
-	const [key] = st.keys();
-	expect(v.nodes).toHaveLength(44 - 8 + 1);
-	expect(v.nodes.find((n) => n.id === key)!.name).toBe('機櫃 PDU ×8');
+	expect(v.nodes).toHaveLength(2066 - members + 18);
+	expect(v.nodes.find((n) => n.id === key)!.name).toBe('機櫃 PDU ×44');
 	const into = v.edges.filter((e) => e.to === key);
-	expect(into.map((e) => [e.from, e.members.length])).toEqual([['樓層 PDU 2F-A', 8]]);
-	expect(v.edges.filter((e) => e.from === key).map((e) => e.members.length)).toEqual([2, 2, 2, 2]);
+	expect(into.map((e) => [e.from, e.members.length])).toEqual([['stack:樓層 PDU:UPS-1', 44]]);
+	expect(v.edges.filter((e) => e.from === key).map((e) => e.members.length)).toEqual(
+		Array(22).fill(2)
+	);
 	expect(v.edges.flatMap((e) => e.members).sort()).toEqual(g.edges.map((e) => e.id).sort());
-	expect(layout(v).pos.size).toBe(37);
+	expect(layout(v).pos.size).toBe(v.nodes.length);
 });
 
 it('收疊：重複上游不影響分組，成員互連不收疊（避免自環）', () => {
