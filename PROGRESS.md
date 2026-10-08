@@ -1,5 +1,13 @@
 # PROGRESS
 
+## 上萬節點渲染實驗（spike，不合併 main）
+
+- **Goal:** 實測 10k 節點下 Svelte Flow 優化／`force-graph`／Sigma.js，決定渲染方向；計畫 `~/.claude/plans/dom-fluttering-kazoo.md`
+- **Done:** `bigMock.ts`（`bigMock()` 5 層 × 2,066 = 10,330 節點，spec 通過）
+- **Todo（3 個 subagent 平行，各在 worktree）:** A `spike/svelteflow-opt`（量瓶頸＋優化）、B `spike/force-graph`、C `spike/sigma`；各回報同一組數字（載入、平移縮放 fps、點選回應、記憶體）
+- **Next:** 逐一驗證 subagent 結果，整理比較表給使用者
+- **Notes:** 懷疑 `graph.ts` `layout()` 的 `into`／`out` 每次掃全部邊（O(N·E)）才是 11 秒主因
+
 ## mock 改 2F 全棟機櫃（PRD v0.3）
 
 - **Goal:** 取代 A 排 4 台的 mock，改成 2F 16 排 327 台、共 2,066 節點（PRD §5）；計畫 `~/.claude/plans/users-cain-01-fet-tpkc-tpkc-fe-situatio-curious-nygaard.md`
