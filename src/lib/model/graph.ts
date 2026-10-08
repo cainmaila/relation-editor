@@ -82,9 +82,10 @@ export function findCustomers(g: Graph, start: string): CustomerResult {
 	return { customers, nodes, edges };
 }
 
+/** 通用節點不受連接限制（PRD §3） */
 const matches = (list: string[] | undefined, n: GNode) => {
 	const t = nodeType(n.type);
-	return !list || list.includes(t.name) || (t.system !== null && list.includes(t.system));
+	return !list || t.system === null || list.includes(t.name) || list.includes(t.system);
 };
 
 /** 新增邊前檢查；回傳錯誤訊息或 null */

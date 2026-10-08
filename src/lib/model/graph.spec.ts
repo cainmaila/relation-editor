@@ -101,6 +101,25 @@ describe('編輯', () => {
 		);
 	});
 
+	it('情境 10 例外：通用節點不受連接限制，找客戶結果不變', () => {
+		const g = full();
+		const G = '2F A 區監視與偵測範圍';
+		expect(validateEdge(g, '空調箱 AHU-2F-1', G, '冷卻')).toBeNull();
+		expect(validateEdge(g, '2F A 區', G, '包含')).toBeNull();
+		expect(validateEdge(g, G, '機櫃 A-01', '供電')).toBeNull();
+		expect(validateEdge(g, G, '客戶甲', '服務')).toBe('由 IDC機櫃配置管理維護');
+		for (const [id, from, type] of [
+			['c1', '空調箱 AHU-2F-1', '冷卻'],
+			['c2', '2F A 區', '包含']
+		])
+			g.edges.push({ id, type, from, to: G, bidirectional: false, props: {} });
+		expect(findCustomers(g, '空調箱 AHU-2F-1').customers.sort()).toEqual([
+			'客戶丙',
+			'客戶乙',
+			'客戶甲'
+		]);
+	});
+
 	it('情境 12：刪除與未處理', () => {
 		const g = full();
 		removeEdge(g, '空調箱 AHU-2F-1', '2F A 區');

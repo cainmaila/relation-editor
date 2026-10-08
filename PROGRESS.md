@@ -7,6 +7,7 @@
   - model：`src/lib/model/`（config、mock、graph.ts）＋ unit test 16 項
   - UI：Svelte Flow 泳道圖、系統開關、聚焦、詳情編輯、新增節點/邊（表單＋拉線）、未處理清單、找客戶、到不了客戶標示、IDC 唯讀
   - e2e：`src/routes/page.svelte.e2e.ts` 情境 1–18 共 19 項全過
+  - 通用節點不受連接限制（PRD 10-08 改版 §3、情境 10 操作 3）：`graph.ts` `matches`；unit＋e2e 已補
   - `pnpm check` / `lint` / `test:unit --run` / `build` 全綠
   - UI/UX 翻新（深色編輯器版面）：頂列系統膠囊（⌥＋點只看一個）、⌘K 搜尋、新增節點／邊改對話框（不合法邊類型事先停用並寫原因）、左右欄可收合可調寬（⌘B／⌘I／⌘. 專注）、檢查欄（未處理＋到不了客戶）、檢視器空狀態＋快捷鍵、刪節點確認、找客戶橫幅＋路徑動畫
   - 泳道改單欄（整張圖縮放後讀得到字）

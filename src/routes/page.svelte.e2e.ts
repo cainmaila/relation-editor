@@ -232,6 +232,12 @@ test.describe('編輯', () => {
 		await expect(f).toContainText('「監測」只能連到空間或通用節點');
 		await page.keyboard.press('Escape');
 		await expect(graphEdges(page)).toHaveCount(TOTAL_EDGES);
+
+		// 例外：通用節點不受連接限制
+		const G = '2F A 區監視與偵測範圍';
+		await addEdge(page, '空調箱 AHU-2F-1', G, '冷卻');
+		await addEdge(page, '2F A 區', G, '包含');
+		await expect(graphEdges(page)).toHaveCount(TOTAL_EDGES + 2);
 	});
 
 	test('情境 11：修改節點與邊', async ({ page }) => {
