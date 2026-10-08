@@ -2,11 +2,14 @@
 	export type GraphNodeData = {
 		name: string;
 		type: string;
+		system: string;
 		color: string;
 		readonly: boolean;
 		unprocessed: boolean;
 		unreachable: boolean;
 		dim: boolean;
+		/** 只是滑過（沒選取）：淡化較輕 */
+		soft: boolean;
 		active: boolean;
 		/** 找客戶的起點 */
 		origin: boolean;
@@ -16,11 +19,14 @@
 
 <script lang="ts">
 	import { Handle, Position, type NodeProps, type Node } from '@xyflow/svelte';
+	import { IDC_MESSAGE } from '#lib/model/config.js';
+	import Icon from './Icon.svelte';
 
 	let { data }: NodeProps<Node<GraphNodeData>> = $props();
 </script>
 
-<Handle type="target" position={Position.Top} />
+<!-- 整張卡片就是連線把手：拖到別的卡片上即建立關聯（target 在拖曳中才浮上來接） -->
+<Handle type="target" position={Position.Top} class="easy" />
 <div
 	style:--c={data.color}
 	class={[
@@ -34,31 +40,33 @@
 		data.active && 'border-sky-400! ring-2 ring-sky-400/40',
 		data.origin && 'ring-4 ring-sky-400/60',
 		data.fresh && 'animate-pulse-ring',
-		data.dim && 'opacity-20'
+		data.dim && (data.soft ? 'opacity-55' : 'opacity-20')
 	]}
 >
-	<span class="flex items-center gap-1 truncate text-xs font-semibold text-slate-50">
-		{#if data.readonly}
-			<svg viewBox="0 0 16 16" class="size-3 shrink-0 fill-slate-500" role="img" aria-label="唯讀">
-				<path
-					d="M5 7V5a3 3 0 1 1 6 0v2h.5A1.5 1.5 0 0 1 13 8.5v5a1.5 1.5 0 0 1-1.5 1.5h-7A1.5 1.5 0 0 1 3 13.5v-5A1.5 1.5 0 0 1 4.5 7H5Zm1.5 0h3V5a1.5 1.5 0 0 0-3 0v2Z"
-				/>
-			</svg>
-		{/if}
+	<span class="flex items-center gap-1.5 text-xs font-semibold text-slate-50">
+		<span class="text-(--c)" title={data.system}><Icon name={data.system} class="size-3.5" /></span>
 		<span class="truncate">{data.name}</span>
+		{#if data.readonly}
+			<span class="relative z-2 ml-auto text-slate-500" title="唯讀・{IDC_MESSAGE}">
+				<Icon name="lock" class="size-3" label="唯讀" />
+			</span>
+		{/if}
 	</span>
-	<span class="mt-0.5 flex items-center gap-1 truncate font-mono text-[10px] text-slate-400">
-		{data.type}
+	<span class="mt-0.5 flex items-center gap-1 pl-5 font-mono text-[10px] text-slate-400">
+		<span class="truncate">{data.type}</span>
 		{#if data.unprocessed}
-			<span class="rounded-sm bg-yellow-400/15 px-1 font-sans font-semibold text-yellow-300"
-				>未處理</span
-			>
+			<span class="relative z-2 ml-auto text-yellow-300" title="未處理：還沒連到 TPKC 大樓">
+				<Icon name="warn" class="size-3" label="未處理" />
+			</span>
 		{/if}
 		{#if data.unreachable}
-			<span class="rounded-sm bg-rose-500/15 px-1 font-sans font-semibold text-rose-300"
-				>到不了客戶</span
+			<span
+				class={['relative z-2 text-rose-300', !data.unprocessed && 'ml-auto']}
+				title="到不了客戶"
 			>
+				<Icon name="broken" class="size-3" label="到不了客戶" />
+			</span>
 		{/if}
 	</span>
 </div>
-<Handle type="source" position={Position.Bottom} />
+<Handle type="source" position={Position.Bottom} class="easy" />

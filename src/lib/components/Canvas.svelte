@@ -29,6 +29,8 @@
 		Background,
 		BackgroundVariant,
 		MarkerType,
+		NodeToolbar,
+		Position,
 		type Node,
 		type Edge
 	} from '@xyflow/svelte';
@@ -37,6 +39,7 @@
 	import { nodeType } from '#lib/model/config.js';
 	import { LANES, NODE_H, NODE_W, laneOf, layout } from '#lib/model/graph.js';
 	import GraphNode from './GraphNode.svelte';
+	import Icon from './Icon.svelte';
 	import LaneNode from './LaneNode.svelte';
 	import ViewSync from './ViewSync.svelte';
 
@@ -47,10 +50,12 @@
 	const lanes = $derived(LANES.filter((l) => l === '通用' || editor.systems.some((s) => s === l)));
 	const lay = $derived(layout(editor.visible, lanes));
 
-	/** 亮起的節點與邊：找客戶結果優先，否則為選取物件的直接相連 */
+	/** 亮起的節點與邊：找客戶結果優先，否則為選取（或滑過）物件的直接相連 */
 	const focus = $derived.by(() => {
 		if (editor.result) return editor.result;
-		const s = editor.selected;
+		const s =
+			editor.selected ??
+			(editor.hoverNode ? { kind: 'node' as const, id: editor.hoverNode } : null);
 		if (!s) return null;
 		const edges =
 			s.kind === 'node'
@@ -120,7 +125,9 @@
 					`stroke-width: ${lit ? 2.75 : 1.25}`,
 					e.props['確認狀態'] === '推定' ? 'stroke-dasharray: 5 4' : '',
 					lit ? `filter: drop-shadow(0 0 4px ${color})` : '',
-					focus && !lit ? 'opacity: 0.08' : 'opacity: 0.75'
+					focus && !lit
+						? `opacity: ${editor.selected || editor.result ? 0.08 : 0.3}`
+						: 'opacity: 0.75'
 				].join(';')
 			};
 		})
@@ -130,7 +137,60 @@
 		if (editor.connecting) editor.startEdge(editor.connecting, id);
 		else editor.select({ kind: 'node', id });
 	}
+
+	/** 拖曳連線中（目標卡片的 target 把手要浮到最上層才接得到） */
+	let linking = $state(false);
+
+	/** 拖曳放開：放在節點上 → 選邊類型；放在空白 → 新增節點並連線 */
+	function connectEnd(e: MouseEvent | TouchEvent, from?: string) {
+		linking = false;
+		editor.hoverNode = null;
+		const p = 'changedTouches' in e ? e.changedTouches[0] : e;
+		const to = document
+			.elementFromPoint(p.clientX, p.clientY)
+			?.closest('.svelte-flow__node-graph')
+			?.getAttribute('data-id');
+		if (!from || to === from) return;
+		editor.select({ kind: 'node', id: from });
+		const at = { x: p.clientX, y: p.clientY };
+		editor.menu = to ? { kind: 'connect', from, to, ...at } : { kind: 'drop', from, ...at };
+	}
+
+	const menuAt = (e: MouseEvent) => {
+		e.preventDefault();
+		return { x: e.clientX, y: e.clientY };
+	};
+
+	// hover 工具列：離開節點後留 200ms，讓滑鼠移得到工具列上
+	let hoverTimer: ReturnType<typeof setTimeout> | undefined;
+	function hover(id: string | null) {
+		clearTimeout(hoverTimer);
+		if (linking) return;
+		if (id) editor.hoverNode = id;
+		else hoverTimer = setTimeout(() => (editor.hoverNode = null), 200);
+	}
+	const toolbarNode = $derived(
+		linking || editor.menu
+			? null
+			: [editor.hoverNode, editor.selected?.kind === 'node' && editor.selected.id].find(
+					(id) => id && editor.node(id)
+				) || null
+	);
 </script>
+
+{#snippet tool(label: string, icon: string, run: (e: MouseEvent) => void, danger = false)}
+	<button
+		aria-label={label}
+		title={label}
+		class={[
+			'grid size-7 place-items-center rounded-md text-slate-300 transition-colors',
+			danger ? 'hover:bg-rose-500/15 hover:text-rose-300' : 'hover:bg-sky-400/15 hover:text-sky-200'
+		]}
+		onclick={run}
+	>
+		<Icon name={icon} />
+	</button>
+{/snippet}
 
 <!-- 雙擊節點：縮放到它與鄰居（Svelte Flow 沒有節點雙擊事件，改用 DOM 委派） -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -156,15 +216,34 @@
 		zoomOnDoubleClick={false}
 		deleteKey={null}
 		colorMode="dark"
-		class={editor.connecting ? 'connecting' : ''}
+		class={[editor.connecting && 'connecting', linking && 'linking']}
+		clickConnect={false}
+		connectionDragThreshold={6}
 		onnodeclick={({ node }) => node.type !== 'lane' && nodeClick(node.id)}
 		onedgeclick={({ edge }) => editor.select({ kind: 'edge', id: edge.id })}
 		onpaneclick={() => editor.select(null)}
-		onbeforeconnect={({ source, target }) => {
-			// 拉線只帶入起點終點，由對話框選邊類型後才建立；不讓 Svelte Flow 自己加邊
-			editor.startEdge(source, target);
-			return false;
+		onnodepointerenter={({ node }) => node.type !== 'lane' && hover(node.id)}
+		onnodepointerleave={({ node }) => node.type !== 'lane' && hover(null)}
+		onedgepointerenter={({ edge }) => (editor.hoverEdge = edge.id)}
+		onedgepointerleave={() => (editor.hoverEdge = null)}
+		onnodecontextmenu={({ event, node }) => {
+			const at = menuAt(event);
+			if (node.type === 'lane') editor.menu = { kind: 'pane', lane: node.id.slice(5), ...at };
+			else {
+				editor.select({ kind: 'node', id: node.id });
+				editor.menu = { kind: 'node', id: node.id, ...at };
+			}
 		}}
+		onedgecontextmenu={({ event, edge }) => {
+			const at = menuAt(event);
+			editor.select({ kind: 'edge', id: edge.id });
+			editor.menu = { kind: 'edge', id: edge.id, ...at };
+		}}
+		onpanecontextmenu={({ event }) => (editor.menu = { kind: 'pane', ...menuAt(event) })}
+		onconnectstart={() => (linking = true)}
+		onconnectend={(e, s) => connectEnd(e, s.fromNode?.id)}
+		isValidConnection={(c) => [...editor.edgeErrors(c.source, c.target).values()].some((v) => !v)}
+		onbeforeconnect={() => false}
 	>
 		<Background
 			variant={BackgroundVariant.Dots}
@@ -186,5 +265,40 @@
 			nodeBorderRadius={4}
 		/>
 		<ViewSync {editor} />
+		{#if toolbarNode}
+			{@const n = editor.node(toolbarNode)}
+			<NodeToolbar nodeId={toolbarNode} isVisible position={Position.Top} offset={6}>
+				<!-- svelte-ignore a11y_no_static_element_interactions -->
+				<div
+					class="flex animate-rise items-center gap-0.5 rounded-lg border border-white/10 bg-ink-850/95 p-0.5 shadow-xl shadow-black/40 backdrop-blur"
+					onpointerenter={() => hover(toolbarNode)}
+					onpointerleave={() => hover(null)}
+				>
+					{@render tool('找客戶（F）', 'target', () => editor.findCustomers(toolbarNode))}
+					{@render tool('連到…（或直接拖曳卡片到目標）', 'link', () => {
+						editor.select({ kind: 'node', id: toolbarNode });
+						editor.connecting = toolbarNode;
+					})}
+					{@render tool('聚焦鄰居（雙擊）', 'focus', () => {
+						editor.select({ kind: 'node', id: toolbarNode });
+						editor.fit([...(focus?.nodes ?? [toolbarNode])]);
+					})}
+					{#if !n?.readonly}
+						{@const block = editor.deleteBlock(toolbarNode)}
+						<span class="mx-0.5 h-4 w-px bg-white/10"></span>
+						{@render tool(
+							block ? `無法刪除：${block}` : '刪除（⌫）',
+							'trash',
+							(e) => {
+								const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+								editor.select({ kind: 'node', id: toolbarNode });
+								editor.menu = { kind: 'node', id: toolbarNode, x: r.left, y: r.bottom + 4 };
+							},
+							true
+						)}
+					{/if}
+				</div>
+			</NodeToolbar>
+		{/if}
 	</SvelteFlow>
 </div>

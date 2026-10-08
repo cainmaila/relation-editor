@@ -87,15 +87,42 @@
 		opacity 200ms,
 		stroke-width 200ms;
 }
-.svelte-flow__node-graph .svelte-flow__handle {
-	width: 10px;
-	height: 10px;
-	opacity: 0;
-	transition: opacity 150ms;
+.svelte-flow__node-graph .svelte-flow__handle.easy {
+	/* 整張卡片當把手：看不見，拖曳就連線；邊仍接在上緣／下緣中點 */
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	min-width: 0;
+	min-height: 0;
+	transform: none;
+	border: 0;
+	border-radius: 6px;
+	background: transparent;
+	cursor: pointer;
+	z-index: 1;
 }
-.svelte-flow__node-graph:hover .svelte-flow__handle,
-.svelte-flow.connecting .svelte-flow__handle {
-	opacity: 1;
+.svelte-flow.linking .svelte-flow__handle.easy {
+	cursor: grabbing;
+}
+.svelte-flow.linking .svelte-flow__handle.easy.target {
+	z-index: 3;
+}
+.svelte-flow.connecting .svelte-flow__handle.easy {
+	cursor: crosshair;
+}
+/* 拖曳中滑到的目標：綠＝可建立，紅＝沒有任何合法邊類型 */
+.svelte-flow__handle.easy.connectingto {
+	box-shadow:
+		0 0 0 2px #f43f5e,
+		0 0 18px rgb(244 63 94 / 0.45);
+}
+.svelte-flow__handle.easy.connectingto.valid {
+	box-shadow:
+		0 0 0 2px #34d399,
+		0 0 18px rgb(52 211 153 / 0.45);
+}
+.svelte-flow__edge-label {
+	@apply rounded border border-white/10 px-1.5 py-0.5 font-sans text-[10px] font-medium shadow-lg;
 }
 .svelte-flow__controls,
 .svelte-flow__minimap {

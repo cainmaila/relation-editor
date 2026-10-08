@@ -19,6 +19,14 @@ import { graphMock, idcMock } from './model/mock';
 import type { Graph } from './model/types';
 
 export type Selection = { kind: 'node' | 'edge'; id: string } | null;
+/** 游標處的浮動選單：右鍵物件／空白，或拖曳連線放開處 */
+export type Menu = { x: number; y: number } & (
+	| { kind: 'node'; id: string }
+	| { kind: 'edge'; id: string }
+	| { kind: 'pane'; lane?: string }
+	| { kind: 'connect'; from: string; to: string }
+	| { kind: 'drop'; from: string }
+);
 
 let seq = 0;
 const uid = (p: string) => `${p}-${++seq}`;
@@ -39,6 +47,9 @@ export class Editor {
 	armDelete = $state<string | null>(null);
 	/** 檢視器清單滑過的邊，畫布上高亮 */
 	hoverEdge = $state<string | null>(null);
+	/** 滑過的節點，畫布上亮它的直接相連 */
+	hoverNode = $state<string | null>(null);
+	menu = $state<Menu | null>(null);
 	/** 剛新增的節點，畫布上脈衝提示 */
 	fresh = $state<string | null>(null);
 	/** 畫布視野請求：Canvas 依 seq 變化縮放到 ids（空＝全部） */
@@ -69,6 +80,7 @@ export class Editor {
 	edge = (id: string) => this.graph.edges.find((e) => e.id === id);
 
 	select(sel: Selection) {
+		this.menu = null;
 		this.selected = sel;
 		this.result = null;
 		this.message = '';
@@ -104,15 +116,21 @@ export class Editor {
 
 	deleteBlock = (id: string) => checkDeleteNode(this.graph, id);
 
-	addNode(type: string, name: string): boolean {
-		if (!type || !name.trim()) return this.fail('請選擇類型並填寫名稱');
-		if (nodeType(type).idc) return this.fail(IDC_MESSAGE);
+	/** 名稱留空時用「類型 N」；回傳新節點 id，失敗回傳 null */
+	addNode(type: string, name = ''): string | null {
+		const err = !type ? '請選擇類型' : nodeType(type).idc ? IDC_MESSAGE : '';
+		if (err) {
+			this.fail(err);
+			return null;
+		}
+		let n = 1;
+		while (!name.trim() && this.graph.nodes.some((x) => x.name === `${type} ${n}`)) n++;
 		const id = uid('n');
-		this.graph.nodes.push({ id, type, name: name.trim(), props: {} });
+		this.graph.nodes.push({ id, type, name: name.trim() || `${type} ${n}`, props: {} });
 		this.fresh = id;
 		this.dialog = null;
 		this.reveal(id);
-		return true;
+		return id;
 	}
 
 	startEdge(from: string, to: string) {

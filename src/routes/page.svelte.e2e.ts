@@ -1,11 +1,14 @@
 // PRD §6 情境 1–18 驗收
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 
 const SYSTEMS = ['空間', '電力', '空調', '網路', '消防', 'CCTV', 'IDC'];
 const G = '2F A 區監視與偵測範圍';
 
 const node = (page: Page, name: string) =>
 	page.locator('.svelte-flow__node-graph').filter({ has: page.getByText(name, { exact: true }) });
+/** 節點卡上的狀態圖示（未處理、到不了客戶） */
+const badge = (page: Page, name: string, b: string) =>
+	node(page, name).getByRole('img', { name: b, exact: true });
 const graphNodes = (page: Page) => page.locator('.svelte-flow__node-graph');
 const graphEdges = (page: Page) => page.locator('.svelte-flow__edge');
 const dimmed = (page: Page) => page.locator('.svelte-flow__node-graph .opacity-20');
@@ -32,17 +35,17 @@ const clickPane = (page: Page) =>
 /** 開對話框（先 Esc 關掉可能開著的） */
 async function open(page: Page, button: string, form: string) {
 	await page.keyboard.press('Escape');
-	await page.getByRole('button', { name: button }).click();
+	await page.getByRole('banner').getByRole('button', { name: button, exact: true }).click();
 	return page.getByRole('form', { name: form });
 }
 async function addNode(page: Page, type: string, name: string) {
-	const f = await open(page, '＋ 節點', '新增節點');
+	const f = await open(page, '新增節點', '新增節點');
 	await f.getByLabel('類型').selectOption(type);
 	await f.getByLabel('名稱').fill(name);
 	await f.getByRole('button', { name: '新增節點' }).click();
 }
 async function edgeForm(page: Page, from: string, to: string) {
-	const f = await open(page, '＋ 邊', '新增邊');
+	const f = await open(page, '新增邊', '新增邊');
 	await f.getByLabel('起點').selectOption({ label: from });
 	await f.getByLabel('終點').selectOption({ label: to });
 	return f;
@@ -52,6 +55,16 @@ async function addEdge(page: Page, from: string, to: string, type: string) {
 	await f.getByRole('radio', { name: type }).check();
 	await f.getByRole('button', { name: '新增邊' }).click();
 }
+/** 用滑鼠把卡片拖到另一張卡片或畫布上某點 */
+async function drag(page: Page, from: Locator, to: Locator | { x: number; y: number }) {
+	const a = (await from.boundingBox())!;
+	const b = 'x' in to ? { ...to, width: 0, height: 0 } : (await to.boundingBox())!;
+	await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
+	await page.mouse.down();
+	await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2, { steps: 12 });
+	await page.mouse.up();
+}
+const menu = (page: Page) => page.getByRole('menu').first();
 /** 從詳情的連入／連出清單點選一條邊 */
 const pickEdge = (page: Page, label: string) =>
 	detail(page).getByRole('button', { name: label, exact: true }).click();
@@ -75,7 +88,7 @@ test.describe('看圖', () => {
 		await expect(node(page, '機櫃 A-01')).toContainText('機櫃');
 		await expect(node(page, G)).toBeVisible();
 		await expect(unprocessedList(page)).toContainText('未處理節點（0）');
-		await expect(page.getByText('未處理', { exact: true })).toHaveCount(0);
+		await expect(graphNodes(page).getByRole('img', { name: '未處理', exact: true })).toHaveCount(0);
 	});
 
 	test('情境 2：系統內是二維', async ({ page }) => {
@@ -159,13 +172,13 @@ test.describe('看圖', () => {
 
 test.describe('編輯', () => {
 	test('情境 8：新增節點', async ({ page }) => {
-		const f = await open(page, '＋ 節點', '新增節點');
+		const f = await open(page, '新增節點', '新增節點');
 		await f.getByRole('button', { name: '新增節點' }).click();
-		await expect(status(page)).toHaveText('請選擇類型並填寫名稱');
+		await expect(status(page)).toHaveText('請選擇類型');
 		await expect(graphNodes(page)).toHaveCount(44);
 		await addNode(page, '攝影機', '攝影機 CAM-04');
 		await expect(graphNodes(page)).toHaveCount(45);
-		await expect(node(page, '攝影機 CAM-04')).toContainText('未處理');
+		await expect(badge(page, '攝影機 CAM-04', '未處理')).toHaveCount(1);
 		await expect(unprocessedList(page).getByRole('listitem')).toHaveText(['攝影機 CAM-04']);
 		const lane = (await page
 			.locator('.svelte-flow__node-lane')
@@ -183,28 +196,39 @@ test.describe('編輯', () => {
 		await expect(detail(page).getByLabel('方向')).toHaveValue('單向');
 		await pick(page, G);
 		await expect(detail(page)).toContainText('連入（4）');
-		await expect(node(page, '攝影機 CAM-04')).not.toContainText('未處理');
+		await expect(badge(page, '攝影機 CAM-04', '未處理')).toHaveCount(0);
 		await expect(unprocessedList(page)).toContainText('未處理節點（0）');
 	});
 
-	test('情境 9：拉線帶入起點終點', async ({ page }) => {
+	test('情境 9：拖曳卡片到另一張建立邊', async ({ page }) => {
 		await addNode(page, '攝影機', '攝影機 CAM-04');
 		await fitAll(page);
-		const src = node(page, '攝影機 CAM-04').locator('.svelte-flow__handle.source');
-		const dst = node(page, G).locator('.svelte-flow__handle.target');
-		const a = (await src.boundingBox())!;
-		const b = (await dst.boundingBox())!;
-		await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
-		await page.mouse.down();
-		await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2, { steps: 10 });
-		await page.mouse.up();
-		const f = page.getByRole('form', { name: '新增邊' });
-		await expect(f.getByLabel('起點').locator('option:checked')).toHaveText('攝影機 CAM-04');
-		await expect(f.getByLabel('終點').locator('option:checked')).toHaveText(G);
+		await drag(page, node(page, '攝影機 CAM-04'), node(page, G));
+		const m = page.getByRole('menu', { name: '建立邊' });
+		await expect(m).toContainText(`攝影機 CAM-04 → ${G}`);
+		await expect(m.getByRole('menuitem', { name: '供電' })).toBeDisabled();
 		await expect(graphEdges(page)).toHaveCount(TOTAL_EDGES);
-		await f.getByRole('radio', { name: '監測' }).check();
-		await f.getByRole('button', { name: '新增邊' }).click();
+		await m.getByRole('menuitem', { name: '監測' }).click();
 		await expect(graphEdges(page)).toHaveCount(TOTAL_EDGES + 1);
+		await expect(badge(page, '攝影機 CAM-04', '未處理')).toHaveCount(0);
+	});
+
+	test('情境 8＋9：拖到空白處新增節點並連線', async ({ page }) => {
+		await only(page, ['空間', 'CCTV']);
+		const b = (await page
+			.locator('.svelte-flow__node-lane')
+			.filter({ hasText: 'CCTV' })
+			.boundingBox())!;
+		await drag(page, node(page, G), { x: b.x + b.width / 2, y: b.y + b.height - 20 });
+		const m = page.getByRole('menu', { name: '新增節點並連線' });
+		await m.getByRole('menuitem', { name: '空間' }).hover();
+		await m.getByRole('menuitem', { name: '區域' }).click();
+		await page
+			.getByRole('menu', { name: '建立邊' })
+			.getByRole('menuitem', { name: '包含' })
+			.click();
+		await expect(graphNodes(page)).toHaveCount(11);
+		await expect(detail(page)).toContainText(field('終點', '區域 1'));
 	});
 
 	test('情境 10：違反連接限制時擋下', async ({ page }) => {
@@ -255,7 +279,7 @@ test.describe('編輯', () => {
 		await pick(page, '空調箱 AHU-2F-1');
 		await pickEdge(page, '冷卻：2F A 區');
 		await detail(page).getByRole('button', { name: '刪除邊' }).click();
-		await expect(node(page, '空調箱 AHU-2F-1')).not.toContainText('未處理');
+		await expect(badge(page, '空調箱 AHU-2F-1', '未處理')).toHaveCount(0);
 		await expect(node(page, '2F A 區')).toBeVisible();
 
 		await pick(page, 'Core Switch-2');
@@ -265,7 +289,7 @@ test.describe('編輯', () => {
 		await pickEdge(page, '連線：匯聚 Switch AGG-A');
 		await detail(page).getByRole('button', { name: '刪除邊' }).click();
 		await expect(unprocessedList(page).getByRole('listitem')).toHaveText(['Core Switch-2']);
-		await expect(node(page, '匯聚 Switch AGG-A')).not.toContainText('未處理');
+		await expect(badge(page, '匯聚 Switch AGG-A', '未處理')).toHaveCount(0);
 
 		await pick(page, '機櫃 A-01');
 		await expect(detail(page).getByRole('button', { name: '刪除節點' })).toBeDisabled();
@@ -292,7 +316,7 @@ test.describe('編輯', () => {
 			await expect(detail(page).getByRole('button', { name: '刪除節點' })).toBeDisabled();
 			await expect(detail(page)).toContainText('由 IDC機櫃配置管理維護');
 		}
-		const types = (await open(page, '＋ 節點', '新增節點')).getByLabel('類型');
+		const types = (await open(page, '新增節點', '新增節點')).getByLabel('類型');
 		for (const t of ['機框', '主機', '客戶'])
 			await expect(types.locator(`option[value="${t}"]`)).toHaveCount(0);
 		await page.keyboard.press('Escape');
@@ -345,13 +369,15 @@ test.describe('找客戶', () => {
 	});
 
 	test('情境 17：標出到不了客戶的節點', async ({ page }) => {
-		await expect(page.getByText('到不了客戶', { exact: true })).toHaveCount(0);
+		await expect(
+			graphNodes(page).getByRole('img', { name: '到不了客戶', exact: true })
+		).toHaveCount(0);
 		await addNode(page, 'Switch', 'Switch B');
 		await addEdge(page, '匯聚 Switch AGG-A', 'Switch B', '連線');
-		await expect(node(page, 'Switch B')).not.toContainText('未處理');
-		await expect(node(page, 'Switch B')).toContainText('到不了客戶');
+		await expect(badge(page, 'Switch B', '未處理')).toHaveCount(0);
+		await expect(badge(page, 'Switch B', '到不了客戶')).toHaveCount(1);
 		await addEdge(page, 'Switch B', '主機 H-03', '連線');
-		await expect(node(page, 'Switch B')).not.toContainText('到不了客戶');
+		await expect(badge(page, 'Switch B', '到不了客戶')).toHaveCount(0);
 		expect(await findCustomers(page, 'Switch B')).toEqual(['客戶乙']);
 	});
 
@@ -359,7 +385,7 @@ test.describe('找客戶', () => {
 		await pick(page, '機櫃 PDU A-04-A');
 		await pickEdge(page, '供電：機櫃 A-04');
 		await detail(page).getByRole('button', { name: '刪除邊' }).click();
-		await expect(node(page, '機櫃 PDU A-04-A')).toContainText('到不了客戶');
+		await expect(badge(page, '機櫃 PDU A-04-A', '到不了客戶')).toHaveCount(1);
 		await addNode(page, '攝影機', '攝影機 CAM-04');
 		await addEdge(page, '攝影機 CAM-04', G, '監測');
 		expect((await findCustomers(page, '攝影機 CAM-04')).sort()).toEqual(['客戶乙', '客戶甲']);
@@ -394,5 +420,49 @@ test.describe('編輯器操作', () => {
 		await page.getByRole('checkbox', { name: '網路' }).click({ modifiers: ['Alt'] });
 		for (const s of SYSTEMS)
 			await expect(page.getByRole('checkbox', { name: s })).toBeChecked({ checked: s === '網路' });
+	});
+
+	test('右鍵泳道新增該系統節點', async ({ page }) => {
+		await page
+			.locator('.svelte-flow__node-lane')
+			.filter({ hasText: 'CCTV' })
+			.click({ button: 'right', position: { x: 20, y: 12 } });
+		await menu(page).getByRole('menuitem', { name: '新增攝影機' }).click();
+		await expect(graphNodes(page)).toHaveCount(45);
+		await expect(badge(page, '攝影機 1', '未處理')).toHaveCount(1);
+		await expect(detail(page).getByLabel('名稱', { exact: true })).toHaveValue('攝影機 1');
+	});
+
+	test('右鍵空白處：子選單新增節點', async ({ page }) => {
+		await clickPane(page);
+		await page.locator('.svelte-flow__pane').click({ button: 'right', position: { x: 5, y: 5 } });
+		await menu(page).getByRole('menuitem', { name: '新增節點' }).hover();
+		await menu(page).getByRole('menuitem', { name: '消防' }).hover();
+		await menu(page).getByRole('menuitem', { name: '偵測器' }).click();
+		await expect(graphNodes(page)).toHaveCount(45);
+		await expect(page.getByRole('menu')).toHaveCount(0);
+	});
+
+	test('右鍵節點：找客戶、不能刪的顯示原因', async ({ page }) => {
+		await fitAll(page);
+		await node(page, '台電市電').click({ button: 'right' });
+		await menu(page).getByRole('menuitem', { name: '找客戶' }).click();
+		await expect(page.getByRole('region', { name: '找客戶結果' })).toContainText('3');
+		await fitAll(page);
+		await node(page, '機櫃 A-01').click({ button: 'right' });
+		await expect(menu(page).getByRole('menuitem', { name: /刪除節點/ })).toBeDisabled();
+		await page.keyboard.press('Escape');
+		await expect(page.getByRole('menu')).toHaveCount(0);
+	});
+
+	test('右鍵節點刪除需二次確認', async ({ page }) => {
+		await fitAll(page);
+		await node(page, '偵測器 SD-02').click({ button: 'right' });
+		await menu(page).getByRole('menuitem', { name: '刪除節點' }).click();
+		await expect(graphNodes(page)).toHaveCount(44);
+		await menu(page)
+			.getByRole('menuitem', { name: /確認刪除/ })
+			.click();
+		await expect(graphNodes(page)).toHaveCount(43);
 	});
 });

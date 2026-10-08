@@ -3,6 +3,7 @@
 	import { Editor } from '#lib/editor.svelte.js';
 	import Canvas from '#lib/components/Canvas.svelte';
 	import ChecksPanel from '#lib/components/ChecksPanel.svelte';
+	import ContextMenu from '#lib/components/ContextMenu.svelte';
 	import DetailPanel from '#lib/components/DetailPanel.svelte';
 	import EdgeDialog from '#lib/components/EdgeDialog.svelte';
 	import NodeDialog from '#lib/components/NodeDialog.svelte';
@@ -42,14 +43,16 @@
 			const v = !editor.panels.left && !editor.panels.right;
 			editor.panels.left = editor.panels.right = v;
 		} else if (e.key === 'Escape') {
-			if (editor.dialog) editor.dialog = null;
+			if (editor.menu) editor.menu = null;
+			else if (editor.dialog) editor.dialog = null;
 			else if (editor.connecting || editor.armDelete) editor.connecting = editor.armDelete = null;
 			else if (editor.result) editor.result = null;
 			else editor.select(null);
 		} else {
 			// 以下單鍵快捷鍵：輸入中或對話框開著時不觸發
 			const t = e.target as HTMLElement;
-			if (mod || e.altKey || editor.dialog || t.closest('input, select, textarea')) return;
+			if (mod || e.altKey || editor.dialog || editor.menu || t.closest('input, select, textarea'))
+				return;
 			const s = editor.selected;
 			if (k === 'n') editor.dialog = 'node';
 			else if (k === 'e') {
@@ -126,6 +129,7 @@
 	{editor.message}
 </p>
 
+{#if editor.menu}<ContextMenu {editor} />{/if}
 {#if editor.dialog === 'node'}<NodeDialog {editor} />{/if}
 {#if editor.dialog === 'edge'}<EdgeDialog {editor} />{/if}
 {#if editor.dialog === 'search'}<SearchPalette {editor} />{/if}

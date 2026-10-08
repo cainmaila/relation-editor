@@ -2,6 +2,7 @@
 	import type { Editor } from '#lib/editor.svelte.js';
 	import { SYSTEMS, nodeType } from '#lib/model/config.js';
 	import { SYSTEM_COLORS } from './Canvas.svelte';
+	import Icon from './Icon.svelte';
 
 	let { editor, onjump }: { editor: Editor; onjump: (region: string) => void } = $props();
 
@@ -10,6 +11,17 @@
 	const all = $derived(editor.systems.length === SYSTEMS.length);
 	const focusMode = $derived(!editor.panels.left && !editor.panels.right);
 </script>
+
+{#snippet iconBtn(label: string, keys: string, icon: string, run: () => void)}
+	<button
+		class="grid size-8 place-items-center rounded-md text-slate-300 transition-colors hover:bg-white/8 hover:text-slate-50"
+		aria-label={label}
+		title="{label}（{keys}）"
+		onclick={run}
+	>
+		<Icon name={icon} />
+	</button>
+{/snippet}
 
 {#snippet toggle(on: boolean, label: string, keys: string, flip: () => void, icon: string)}
 	<button
@@ -22,10 +34,7 @@
 		title="{label}（{keys}）"
 		onclick={flip}
 	>
-		<svg viewBox="0 0 16 16" class="size-4 fill-none stroke-current" stroke-width="1.4">
-			<rect x="1.5" y="2.5" width="13" height="11" rx="2" />
-			<path d={icon} />
-		</svg>
+		<Icon name={icon} />
 	</button>
 {/snippet}
 
@@ -37,19 +46,21 @@
 			class="grid size-7 place-items-center rounded-md bg-linear-to-br from-sky-400 to-indigo-500 font-mono text-[11px] font-bold text-ink-950"
 			>TP</span
 		>
-		<div class="leading-tight">
-			<h1 class="text-sm font-semibold text-slate-50">關係鏈編輯器</h1>
-			<p class="text-[10px] text-slate-500">示意資料・不存檔</p>
-		</div>
+		<h1 class="text-sm font-semibold text-slate-50">關係鏈編輯器</h1>
+		<span
+			class="rounded-full border border-amber-300/20 px-1.5 py-px text-[10px] text-amber-200/80"
+			title="示意資料，重新整理即還原，不會存檔">示意</span
+		>
 	</div>
 
-	<fieldset class="flex items-center gap-1" title="點：切換，⌥/Alt＋點：只看此系統">
+	<fieldset class="flex items-center gap-1 border-l border-white/8 pl-3">
 		<legend class="sr-only">系統</legend>
 		<button
 			class={[
-				'rounded-full px-2.5 py-1 text-xs transition-colors',
-				all ? 'bg-white/10 text-slate-100' : 'text-slate-400 hover:bg-white/5'
+				'mr-0.5 rounded-md px-2 py-1.5 text-xs transition-colors',
+				all ? 'text-slate-500' : 'bg-sky-400/15 text-sky-200 hover:bg-sky-400/25'
 			]}
+			title="顯示全部系統"
 			onclick={() => (editor.systems = [...SYSTEMS])}>全部</button
 		>
 		{#each SYSTEMS as s (s)}
@@ -57,11 +68,12 @@
 			<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
 			<label
 				style:--c={SYSTEM_COLORS[s]}
+				title="{s} · {count(s)} 節點（⌥＋點：只看{s}）"
 				class={[
-					'flex cursor-pointer items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition-colors select-none',
+					'relative grid size-8 cursor-pointer place-items-center rounded-md border transition-colors select-none',
 					on
-						? 'border-(--c)/40 bg-(--c)/10 text-slate-100'
-						: 'border-white/8 text-slate-500 hover:text-slate-300'
+						? 'border-(--c)/35 bg-(--c)/12 text-(--c)'
+						: 'border-transparent text-slate-600 hover:bg-white/5 hover:text-slate-400'
 				]}
 				onclick={(e) => {
 					if (!e.altKey) return;
@@ -73,59 +85,55 @@
 					type="checkbox"
 					value={s}
 					bind:group={editor.systems}
-					class="size-2 appearance-none rounded-full border-0 bg-slate-600 ring-0 checked:bg-(--c) checked:bg-none focus:ring-0 focus:ring-offset-0"
+					class="absolute inset-0 size-full cursor-pointer appearance-none rounded-md border-0 bg-transparent opacity-0 focus:ring-0"
 				/>
-				{s}
-				<span class="font-mono text-[10px] text-slate-500">{count(s)}</span>
+				<span class="sr-only">{s}</span>
+				<Icon name={s} />
+				<span
+					class={[
+						'absolute -right-1 -bottom-1 rounded-sm px-0.5 font-mono text-[9px] leading-3',
+						on ? 'bg-ink-900 text-slate-300' : 'text-slate-600'
+					]}>{count(s)}</span
+				>
 			</label>
 		{/each}
 	</fieldset>
 
-	<button
-		class="ml-auto flex w-40 items-center gap-2 rounded-md border border-white/10 bg-ink-950/60 px-2.5 py-1.5 text-xs text-slate-500 hover:border-white/20"
-		onclick={() => (editor.dialog = 'search')}
-	>
-		<svg viewBox="0 0 16 16" class="size-3.5 fill-none stroke-current" stroke-width="1.6"
-			><circle cx="7" cy="7" r="4.5" /><path d="m10.5 10.5 3 3" /></svg
-		>
-		搜尋節點
-		<span class="ml-auto kbd">⌘K</span>
-	</button>
-
-	<div class="flex items-center gap-1 font-mono text-xs">
-		<span class="hidden px-1.5 text-slate-400 2xl:inline"
-			><b class="text-slate-100">{editor.graph.nodes.length}</b> 節點</span
-		>
-		<span class="hidden px-1.5 text-slate-400 2xl:inline"
-			><b class="text-slate-100">{editor.graph.edges.length}</b> 邊</span
-		>
+	<div class="ml-auto flex items-center gap-1 font-mono text-xs">
 		<button
-			class="rounded px-1.5 py-0.5 text-slate-400 hover:bg-white/5"
+			class="flex items-center gap-1.5 rounded-md px-2 py-1.5 hover:bg-white/5"
+			aria-label="未處理 {editor.unprocessed.size}"
+			title="未處理節點：沒連到 TPKC 大樓"
 			onclick={() => onjump('未處理節點')}
-			><b class={editor.unprocessed.size ? 'text-yellow-300' : 'text-slate-100'}
+		>
+			<Icon
+				name="warn"
+				class={['size-4', editor.unprocessed.size ? 'text-yellow-300' : 'text-slate-600']}
+			/>
+			<b class={editor.unprocessed.size ? 'text-yellow-200' : 'text-slate-500'}
 				>{editor.unprocessed.size}</b
-			> 未處理</button
-		>
+			>
+		</button>
 		<button
-			class="rounded px-1.5 py-0.5 text-slate-400 hover:bg-white/5"
+			class="flex items-center gap-1.5 rounded-md px-2 py-1.5 hover:bg-white/5"
+			aria-label="到不了客戶 {editor.unreachable.size}"
+			title="到不了客戶：沿方向走不到任何客戶"
 			onclick={() => onjump('到不了客戶節點')}
-			><b class={editor.unreachable.size ? 'text-rose-300' : 'text-slate-100'}
-				>{editor.unreachable.size}</b
-			> 到不了客戶</button
 		>
+			<Icon
+				name="broken"
+				class={['size-4', editor.unreachable.size ? 'text-rose-300' : 'text-slate-600']}
+			/>
+			<b class={editor.unreachable.size ? 'text-rose-200' : 'text-slate-500'}
+				>{editor.unreachable.size}</b
+			>
+		</button>
 	</div>
 
-	<div class="flex items-center gap-1.5">
-		<button
-			class="btn-ghost py-1 text-xs"
-			title="新增節點（N）"
-			onclick={() => (editor.dialog = 'node')}>＋ 節點 <span class="kbd">N</span></button
-		>
-		<button
-			class="btn-ghost py-1 text-xs"
-			title="新增邊（E）"
-			onclick={() => (editor.dialog = 'edge')}>＋ 邊 <span class="kbd">E</span></button
-		>
+	<div class="flex items-center gap-0.5 border-l border-white/8 pl-3">
+		{@render iconBtn('搜尋節點', '⌘K', 'search', () => (editor.dialog = 'search'))}
+		{@render iconBtn('新增節點', 'N 或右鍵畫布', 'node-plus', () => (editor.dialog = 'node'))}
+		{@render iconBtn('新增邊', 'E 或拖曳卡片', 'edge-plus', () => (editor.dialog = 'edge'))}
 	</div>
 
 	<div class="flex items-center gap-0.5 border-l border-white/8 pl-3">
@@ -134,7 +142,7 @@
 			'左欄 檢查',
 			'⌘B',
 			() => (editor.panels.left = !editor.panels.left),
-			'M5.5 2.5v11'
+			'panel-left'
 		)}
 		{@render toggle(
 			focusMode,
@@ -144,14 +152,14 @@
 				const v = focusMode;
 				editor.panels.left = editor.panels.right = v;
 			},
-			'M4 6V5h1M12 6V5h-1M4 10v1h1M12 10v1h-1'
+			'panel-none'
 		)}
 		{@render toggle(
 			editor.panels.right,
 			'右欄 檢視器',
 			'⌘I',
 			() => (editor.panels.right = !editor.panels.right),
-			'M10.5 2.5v11'
+			'panel-right'
 		)}
 	</div>
 </header>

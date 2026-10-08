@@ -3,6 +3,7 @@
 	import { IDC_MESSAGE, nodeType } from '#lib/model/config.js';
 	import type { Props } from '#lib/model/types.js';
 	import { EDGE_COLORS, SYSTEM_COLORS } from './Canvas.svelte';
+	import Icon from './Icon.svelte';
 
 	let { editor }: { editor: Editor } = $props();
 
@@ -37,6 +38,11 @@
 		else editor.deleteNode(id);
 	}
 
+	const TIPS = [
+		['drag', '拖曳建立關聯', '把一張卡片拖到另一張；拖到空白處可順手新增節點'],
+		['mouse', '右鍵', '節點、邊、泳道、空白處都有就地選單'],
+		['target', '滑過節點', '浮出工具列：找客戶、連到、聚焦、刪除']
+	];
 	const SHORTCUTS = [
 		['⌘K', '搜尋節點'],
 		['N', '新增節點'],
@@ -49,6 +55,19 @@
 		['⌘.', '專注模式']
 	];
 </script>
+
+{#snippet act(label: string, tip: string, icon: string, run: () => void, on = false)}
+	<button
+		class={[
+			'grid size-8 place-items-center rounded-md transition-colors',
+			on ? 'bg-sky-400/20 text-sky-200' : 'text-slate-300 hover:bg-white/8 hover:text-slate-50'
+		]}
+		aria-label={label}
+		aria-pressed={on}
+		title={tip}
+		onclick={run}><Icon name={icon} /></button
+	>
+{/snippet}
 
 {#snippet section(title: string)}
 	<h3 class="mb-2 eyebrow">{title}</h3>
@@ -71,8 +90,11 @@
 			<div class="mt-3 flex gap-1.5">
 				<input aria-label="屬性名稱" placeholder="名稱" bind:value={propKey} class="field py-1" />
 				<input aria-label="屬性值" placeholder="值" bind:value={propValue} class="field py-1" />
-				<button class="btn-ghost shrink-0 px-2.5 py-1 text-xs" onclick={() => addProp(props)}
-					>新增屬性</button
+				<button
+					class="btn-ghost shrink-0 px-2"
+					aria-label="新增屬性"
+					title="新增屬性"
+					onclick={() => addProp(props)}><Icon name="node-plus" /></button
 				>
 			</div>
 		{/if}
@@ -92,14 +114,16 @@
 						onmouseenter={() => (editor.hoverEdge = e.id)}
 						onmouseleave={() => (editor.hoverEdge = null)}
 					>
-						<span class="w-8 shrink-0 font-mono text-[10px]" style:color={EDGE_COLORS[e.type]}
-							>{e.type}</span
+						<span style:color={EDGE_COLORS[e.type]} title={e.type}
+							><Icon name={e.type} class="size-3.5" /></span
 						>
-						<span class="text-slate-500">{other === 'from' ? '←' : '→'}</span>
+						<span class="text-slate-600">{other === 'from' ? '←' : '→'}</span>
 						<span class="size-1.5 shrink-0 rounded-full" style:background={colorOf(e[other])}
 						></span>
 						<span class="truncate text-slate-200">{nameOf(e[other])}</span>
-						{#if e.bidirectional}<span class="ml-auto text-[10px] text-slate-500">雙向</span>{/if}
+						{#if e.bidirectional}<span class="ml-auto text-slate-500" title="雙向"
+								><Icon name="swap" class="size-3" /></span
+							>{/if}
 					</button>
 				</li>
 			{:else}
@@ -113,11 +137,7 @@
 	<div
 		class="mx-5 mb-1 flex items-center gap-2 rounded-md border border-emerald-400/20 bg-emerald-400/5 px-3 py-2 text-xs text-emerald-200"
 	>
-		<svg viewBox="0 0 16 16" class="size-3.5 shrink-0 fill-current">
-			<path
-				d="M5 7V5a3 3 0 1 1 6 0v2h.5A1.5 1.5 0 0 1 13 8.5v5a1.5 1.5 0 0 1-1.5 1.5h-7A1.5 1.5 0 0 1 3 13.5v-5A1.5 1.5 0 0 1 4.5 7H5Zm1.5 0h3V5a1.5 1.5 0 0 0-3 0v2Z"
-			/>
-		</svg>
+		<Icon name="lock" class="size-3.5" />
 		<span>唯讀・{IDC_MESSAGE}</span>
 	</div>
 {/snippet}
@@ -166,9 +186,16 @@
 	{#if node}
 		{@const sys = nodeType(node.type).system}
 		<header class="px-5 pt-5 pb-3">
-			<p class="flex items-center gap-1.5 text-xs text-slate-400">
-				<span class="size-2 rounded-full" style:background={SYSTEM_COLORS[sys ?? '通用']}></span>
-				節點
+			<p class="flex items-center gap-2 text-xs text-slate-400">
+				<span
+					class="grid size-6 place-items-center rounded-md bg-(--c)/12 text-(--c)"
+					style:--c={SYSTEM_COLORS[sys ?? '通用']}
+					title="系統：{sys ?? '無（通用）'}"><Icon name={sys ?? '通用'} class="size-3.5" /></span
+				>
+				<span class="text-slate-500">類型</span>
+				<span class="font-mono text-slate-200">{node.type}</span>
+				<span class="ml-1 text-slate-500">系統</span>
+				<span class="text-slate-200">{sys ?? '（無）'}</span>
 			</p>
 			<input
 				aria-label="名稱"
@@ -176,41 +203,52 @@
 				disabled={ro}
 				class="-mx-1.5 mt-1.5 field border-transparent bg-transparent px-1.5 text-lg font-semibold hover:border-white/10 disabled:mx-0 disabled:px-0"
 			/>
-			<dl class="mt-2 grid grid-cols-[3rem_1fr] gap-y-1 text-xs">
-				<dt class="text-slate-500">類型</dt>
-				<dd class="font-mono text-slate-200">{node.type}</dd>
-				<dt class="text-slate-500">系統</dt>
-				<dd class="text-slate-200">{sys ?? '（無）'}</dd>
-			</dl>
 		</header>
 
 		{#if ro}{@render idcBanner()}{/if}
 		{#if editor.unprocessed.has(node.id)}
 			<p
-				class="mx-5 mb-1 rounded-md border border-yellow-400/25 bg-yellow-400/5 px-3 py-2 text-xs leading-relaxed text-yellow-200"
+				class="mx-5 mb-1 flex gap-2 rounded-md border border-yellow-400/25 bg-yellow-400/5 px-3 py-2 text-xs leading-relaxed text-yellow-200"
 			>
-				還沒連到「TPKC 大樓」。從節點下方圓點拉線，或按「連到…」整理進主圖。
+				<Icon name="warn" class="mt-0.5 size-3.5" />
+				<span>未處理：把這張卡片拖到主圖上的節點，就能接上「TPKC 大樓」。</span>
 			</p>
 		{:else if editor.unreachable.has(node.id)}
 			<p
-				class="mx-5 mb-1 rounded-md border border-rose-500/25 bg-rose-500/5 px-3 py-2 text-xs leading-relaxed text-rose-200"
+				class="mx-5 mb-1 flex gap-2 rounded-md border border-rose-500/25 bg-rose-500/5 px-3 py-2 text-xs leading-relaxed text-rose-200"
 			>
-				沿方向走不到任何客戶：補一條往下游的邊即可接上關係鏈。
+				<Icon name="broken" class="mt-0.5 size-3.5" />
+				<span>到不了客戶：拖到下游節點補一條邊即可接上。</span>
 			</p>
 		{/if}
 
-		<div class="flex flex-wrap items-center gap-2 px-5 py-3">
-			<button class="btn-primary" onclick={() => editor.findCustomers(node.id)}>
-				找客戶 <span class="kbd border-ink-950/20 bg-ink-950/10 text-ink-950/70">F</span>
-			</button>
+		<div class="flex items-center gap-1 px-5 py-3">
 			<button
-				class={['btn-ghost', editor.connecting === node.id && 'border-sky-400 text-sky-300']}
-				onclick={() => (editor.connecting = editor.connecting === node.id ? null : node.id)}
-				>連到…</button
+				class="btn-primary px-2.5"
+				aria-label="找客戶"
+				title="找客戶：它壞了影響哪些客戶（F）"
+				onclick={() => editor.findCustomers(node.id)}
 			>
+				<Icon name="target" />找客戶
+			</button>
+			{@render act(
+				'連到…',
+				'連到…：再點目標節點（或直接拖曳卡片）',
+				'link',
+				() => (editor.connecting = editor.connecting === node.id ? null : node.id),
+				editor.connecting === node.id
+			)}
+			{@render act('聚焦鄰居', '聚焦鄰居（雙擊節點）', 'focus', () =>
+				editor.fit([node.id, ...incoming.map((e) => e.from), ...outgoing.map((e) => e.to)])
+			)}
+			{#if sys}{@render act('只看此系統', `只看${sys}`, 'solo', () => editor.solo(sys))}{/if}
 			{#if editor.armDelete !== node.id}
-				<button class="ml-auto btn-danger" disabled={!!block} onclick={() => removeNode(node.id)}
-					>刪除節點</button
+				<button
+					class="ml-auto grid size-8 place-items-center rounded-md text-rose-300 transition-colors hover:bg-rose-500/15 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent"
+					aria-label="刪除節點"
+					title={block ? `無法刪除：${block}` : '刪除節點（⌫）'}
+					disabled={!!block}
+					onclick={() => removeNode(node.id)}><Icon name="trash" /></button
 				>
 			{/if}
 		</div>
@@ -239,8 +277,11 @@
 		{@render edgeList('連出', outgoing, 'to')}
 	{:else if edge}
 		<header class="px-5 pt-5 pb-3">
-			<p class="flex items-center gap-1.5 text-xs text-slate-400">
-				<span class="h-0.5 w-3 rounded" style:background={EDGE_COLORS[edge.type]}></span>
+			<p class="flex items-center gap-2 text-xs text-slate-400">
+				<span
+					class="grid size-6 place-items-center rounded-md bg-(--c)/12 text-(--c)"
+					style:--c={EDGE_COLORS[edge.type]}><Icon name={edge.type} class="size-3.5" /></span
+				>
 				邊
 			</p>
 			<dl class="mt-2 grid grid-cols-[3rem_1fr] items-center gap-y-1.5 text-sm">
@@ -277,29 +318,31 @@
 		</header>
 		{#if ro}{@render idcBanner()}{/if}
 		<div class="flex px-5 py-3">
-			<button class="ml-auto btn-danger" disabled={ro} onclick={() => editor.deleteEdge(edge.id)}
-				>刪除邊</button
+			<button
+				class="ml-auto grid size-8 place-items-center rounded-md text-rose-300 transition-colors hover:bg-rose-500/15 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent"
+				aria-label="刪除邊"
+				title={ro ? IDC_MESSAGE : '刪除邊（⌫）'}
+				disabled={ro}
+				onclick={() => editor.deleteEdge(edge.id)}><Icon name="trash" /></button
 			>
 		</div>
 		{@render propsEditor(edge.props)}
 	{:else}
 		<div class="flex flex-1 flex-col px-5 py-6">
 			<p class="eyebrow">檢視器</p>
-			<p class="mt-3 text-sm leading-relaxed text-slate-300">
-				點選節點或邊查看詳情、修改屬性；選節點後可<b class="text-sky-300">找客戶</b
-				>，看它壞掉會影響誰。
-			</p>
-			<ol class="mt-5 flex flex-col gap-3 text-xs text-slate-400">
-				<li class="flex gap-3">
-					<span class="font-mono text-sky-300">01</span>上方膠囊切換系統，⌥＋點只看一個
-				</li>
-				<li class="flex gap-3">
-					<span class="font-mono text-sky-300">02</span>點節點聚焦，雙擊放大到它的鄰居
-				</li>
-				<li class="flex gap-3">
-					<span class="font-mono text-sky-300">03</span>滑到節點，從下方圓點拉線到另一節點即可連線
-				</li>
-			</ol>
+			<ul class="mt-4 flex flex-col gap-2">
+				{#each TIPS as [icon, title, text] (title)}
+					<li class="flex gap-3 rounded-lg border border-white/6 bg-white/2 p-3">
+						<span
+							class="grid size-8 shrink-0 place-items-center rounded-md bg-sky-400/10 text-sky-300"
+							><Icon name={icon} /></span
+						>
+						<span class="text-xs leading-relaxed text-slate-400"
+							><b class="block text-[13px] font-medium text-slate-100">{title}</b>{text}</span
+						>
+					</li>
+				{/each}
+			</ul>
 			<h3 class="mt-8 mb-2 eyebrow">快捷鍵</h3>
 			<dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-xs">
 				{#each SHORTCUTS as [k, v] (k)}
