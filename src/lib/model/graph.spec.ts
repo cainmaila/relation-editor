@@ -245,3 +245,24 @@ it('收疊：同類且上游相同的機櫃 PDU ×8 收成一張，邊合併', (
 	expect(v.edges.flatMap((e) => e.members).sort()).toEqual(g.edges.map((e) => e.id).sort());
 	expect(layout(v).pos.size).toBe(37);
 });
+
+it('收疊：重複上游不影響分組，成員互連不收疊（避免自環）', () => {
+	const n = (id: string) => ({ id, type: 'T', name: id, props: {} });
+	const e = (id: string, type: string, from: string, to: string) => ({ id, type, from, to });
+	const g = {
+		nodes: ['X', 'a', 'b', 'c', 'd'].map(n),
+		edges: [
+			e('1', '供電', 'X', 'a'),
+			e('2', '供電', 'X', 'b'),
+			e('3', '供電', 'X', 'c'),
+			e('4', '連線', 'X', 'c'), // c 有兩條平行邊，仍與 a、b 同組
+			e('5', '供電', 'X', 'd'),
+			e('6', '承載', 'd', 'a') // 承載不計入上游；d、a 互連，兩者不收疊
+		]
+	} as unknown as Graph;
+	expect([...stacks(g).values()]).toEqual([]);
+	g.edges.pop();
+	expect([...stacks(g).values()]).toEqual([['a', 'b', 'c', 'd']]);
+	const v = collapse(g, stacks(g));
+	expect(v.edges.every((x) => x.from !== x.to)).toBe(true);
+});

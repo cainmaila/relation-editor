@@ -116,15 +116,23 @@ export function checkDeleteNode(g: Graph, id: string): string | null {
 export function stacks(g: Graph): Map<string, string[]> {
 	const groups = new Map<string, string[]>();
 	for (const n of g.nodes) {
-		const up = g.edges
-			.filter((e) => e.to === n.id && e.type !== '承載')
-			.map((e) => e.from)
-			.sort();
+		const up = [
+			...new Set(g.edges.filter((e) => e.to === n.id && e.type !== '承載').map((e) => e.from))
+		].sort();
 		if (!up.length) continue;
 		const key = `stack:${n.type}:${up.join('|')}`;
 		groups.set(key, [...(groups.get(key) ?? []), n.id]);
 	}
-	return new Map([...groups].filter(([, ids]) => ids.length >= 3));
+	// 成員之間有邊會讓合併邊變自環，這類成員不收疊
+	const linked = (ids: string[], id: string) =>
+		g.edges.some(
+			(e) => (e.from === id && ids.includes(e.to)) || (e.to === id && ids.includes(e.from))
+		);
+	return new Map(
+		[...groups]
+			.map(([k, ids]) => [k, ids.filter((id) => !linked(ids, id))] as const)
+			.filter(([, ids]) => ids.length >= 3)
+	);
 }
 
 export type ViewEdge = GEdge & { members: string[] };

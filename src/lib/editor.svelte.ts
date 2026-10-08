@@ -101,7 +101,16 @@ export class Editor {
 		collapse(
 			this.visible,
 			// eslint-disable-next-line svelte/prefer-svelte-reactivity -- derived 每次重建，不需響應
-			new Map(this.stacking ? [...this.stacks].filter(([k]) => !this.expanded.includes(k)) : [])
+			new Map(
+				this.stacking
+					? [...this.stacks].filter(
+							([k, ids]) =>
+								!this.expanded.includes(k) &&
+								// 選取中的節點不可被收進疊卡
+								!(this.selected?.kind === 'node' && ids.includes(this.selected.id))
+						)
+					: []
+			)
 		)
 	);
 
