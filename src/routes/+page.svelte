@@ -1,11 +1,11 @@
 <script lang="ts">
-	import { tick } from 'svelte';
 	import { Editor } from '#lib/editor.svelte.js';
 	import Canvas from '#lib/components/Canvas.svelte';
-	import ChecksPanel from '#lib/components/ChecksPanel.svelte';
+	import Legend from '#lib/components/Legend.svelte';
 	import ContextMenu from '#lib/components/ContextMenu.svelte';
 	import DetailPanel from '#lib/components/DetailPanel.svelte';
 	import EdgeDialog from '#lib/components/EdgeDialog.svelte';
+	import OutlinePanel from '#lib/components/OutlinePanel.svelte';
 	import NodeDialog from '#lib/components/NodeDialog.svelte';
 	import Pane from '#lib/components/Pane.svelte';
 	import SearchPalette from '#lib/components/SearchPalette.svelte';
@@ -23,16 +23,6 @@
 		return () => clearTimeout(t);
 	});
 
-	async function jump(region: string) {
-		editor.panels.left = true;
-		await tick();
-		const el = document.querySelector<HTMLDetailsElement>(`[aria-label="${region}"]`);
-		if (el) {
-			el.open = true;
-			el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-		}
-	}
-
 	function key(e: KeyboardEvent) {
 		const mod = e.metaKey || e.ctrlKey;
 		const k = e.key.toLowerCase();
@@ -46,6 +36,7 @@
 			if (editor.menu) editor.menu = null;
 			else if (editor.dialog) editor.dialog = null;
 			else if (editor.connecting || editor.armDelete) editor.connecting = editor.armDelete = null;
+			else if (editor.legend) editor.legend = false;
 			else if (editor.result) editor.result = null;
 			else editor.select(null);
 		} else {
@@ -55,6 +46,7 @@
 				return;
 			const s = editor.selected;
 			if (k === 'n') editor.dialog = 'node';
+			else if (e.key === '?') editor.legend = !editor.legend;
 			else if (k === 'e') {
 				if (s?.kind === 'node') editor.draft = { from: s.id, to: '', type: '' };
 				editor.dialog = 'edge';
@@ -77,13 +69,22 @@
 <svelte:window onkeydown={key} />
 
 <div class="flex h-screen flex-col">
-	<TopBar {editor} onjump={jump} />
+	<TopBar {editor} />
 	<div class="flex min-h-0 flex-1">
-		<Pane side="left" label="檢查" bind:open={editor.panels.left} width={260} min={220} max={420}>
-			<ChecksPanel {editor} />
+		<Pane
+			side="left"
+			label="大綱"
+			bind:open={editor.panels.left}
+			width={260}
+			min={220}
+			max={420}
+			attention={editor.unprocessed.size + editor.unreachable.size > 0}
+		>
+			<OutlinePanel {editor} />
 		</Pane>
 		<main class="relative min-w-0 flex-1">
 			<Canvas {editor} />
+			<Legend {editor} />
 			{#if editor.connecting}
 				<div
 					class="pointer-events-none absolute top-4 left-1/2 flex -translate-x-1/2 animate-rise items-center gap-2 rounded-full border border-sky-400/40 bg-ink-850/90 px-4 py-2 text-xs text-sky-100 shadow-xl backdrop-blur"

@@ -55,6 +55,10 @@ export class Editor {
 	/** 畫布視野請求：Canvas 依 seq 變化縮放到 ids（空＝全部） */
 	view = $state({ ids: [] as string[], seq: 0 });
 	panels = $state({ left: true, right: true });
+	/** 大綱只列有此問題的節點 */
+	issue = $state<'unprocessed' | 'unreachable' | null>(null);
+	/** 畫布角落的圖例卡 */
+	legend = $state(false);
 
 	unprocessed = $derived(unprocessed(this.graph));
 	unreachable = $derived(unreachable(this.graph));

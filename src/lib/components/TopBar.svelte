@@ -4,7 +4,13 @@
 	import { SYSTEM_COLORS } from './Canvas.svelte';
 	import Icon from './Icon.svelte';
 
-	let { editor, onjump }: { editor: Editor; onjump: (region: string) => void } = $props();
+	let { editor }: { editor: Editor } = $props();
+
+	/** 開左欄大綱並只列該問題的節點 */
+	const show = (i: 'unprocessed' | 'unreachable') => {
+		editor.panels.left = true;
+		editor.issue = i;
+	};
 
 	const count = (s: string) =>
 		editor.graph.nodes.filter((n) => nodeType(n.type).system === s).length;
@@ -104,7 +110,7 @@
 			class="flex items-center gap-1.5 rounded-md px-2 py-1.5 hover:bg-white/5"
 			aria-label="未處理 {editor.unprocessed.size}"
 			title="未處理節點：沒連到 TPKC 大樓"
-			onclick={() => onjump('未處理節點')}
+			onclick={() => show('unprocessed')}
 		>
 			<Icon
 				name="warn"
@@ -118,7 +124,7 @@
 			class="flex items-center gap-1.5 rounded-md px-2 py-1.5 hover:bg-white/5"
 			aria-label="到不了客戶 {editor.unreachable.size}"
 			title="到不了客戶：沿方向走不到任何客戶"
-			onclick={() => onjump('到不了客戶節點')}
+			onclick={() => show('unreachable')}
 		>
 			<Icon
 				name="broken"
@@ -139,7 +145,7 @@
 	<div class="flex items-center gap-0.5 border-l border-white/8 pl-3">
 		{@render toggle(
 			editor.panels.left,
-			'左欄 檢查',
+			'左欄 大綱',
 			'⌘B',
 			() => (editor.panels.left = !editor.panels.left),
 			'panel-left'

@@ -17,7 +17,14 @@ const detail = (page: Page) => page.getByRole('complementary', { name: '詳情' 
 const field = (k: string, v: string) => new RegExp(`${k}\\s*${v}`);
 const TOTAL_EDGES = 70; // 圖 50 條＋IDC 20 條
 const status = (page: Page) => page.getByRole('status');
-const unprocessedList = (page: Page) => page.getByRole('region', { name: '未處理節點' });
+const outline = (page: Page) => page.getByRole('navigation', { name: '大綱' });
+const unprocessedChip = (page: Page) => outline(page).getByRole('button', { name: '只列未處理' });
+/** 大綱切到「只列未處理」後的節點列 */
+async function unprocessedList(page: Page) {
+	const chip = unprocessedChip(page);
+	if ((await chip.getAttribute('aria-pressed')) !== 'true') await chip.click();
+	return outline(page).getByRole('listitem');
+}
 
 async function only(page: Page, systems: string[]) {
 	for (const s of SYSTEMS)
@@ -86,7 +93,7 @@ test.describe('看圖', () => {
 		await expect(node(page, '機櫃 A-01').locator('[title="空間"]')).toBeVisible();
 		await expect(node(page, '機櫃 A-01')).toContainText('機櫃');
 		await expect(node(page, G)).toBeVisible();
-		await expect(unprocessedList(page)).toContainText('未處理節點（0）');
+		await expect(unprocessedChip(page)).toHaveText(/未處理\s*0$/);
 		await expect(graphNodes(page).getByRole('img', { name: '未處理', exact: true })).toHaveCount(0);
 	});
 
@@ -179,7 +186,7 @@ test.describe('編輯', () => {
 		await addNode(page, '攝影機', '攝影機 CAM-04');
 		await expect(graphNodes(page)).toHaveCount(45);
 		await expect(badge(page, '攝影機 CAM-04', '未處理')).toHaveCount(1);
-		await expect(unprocessedList(page).getByRole('listitem')).toHaveText(['攝影機 CAM-04']);
+		await expect(await unprocessedList(page)).toHaveText(['攝影機 CAM-04']);
 		await expect(node(page, '攝影機 CAM-04').locator('[title="CCTV"]')).toBeVisible();
 	});
 
@@ -191,7 +198,7 @@ test.describe('編輯', () => {
 		await pick(page, G);
 		await expect(detail(page)).toContainText('連入（4）');
 		await expect(badge(page, '攝影機 CAM-04', '未處理')).toHaveCount(0);
-		await expect(unprocessedList(page)).toContainText('未處理節點（0）');
+		await expect(unprocessedChip(page)).toHaveText(/未處理\s*0$/);
 	});
 
 	test('情境 9：拖曳卡片到另一張建立邊', async ({ page }) => {
@@ -285,7 +292,7 @@ test.describe('編輯', () => {
 		await pick(page, 'Core Switch-2');
 		await pickEdge(page, '連線：匯聚 Switch AGG-A');
 		await detail(page).getByRole('button', { name: '刪除邊' }).click();
-		await expect(unprocessedList(page).getByRole('listitem')).toHaveText(['Core Switch-2']);
+		await expect(await unprocessedList(page)).toHaveText(['Core Switch-2']);
 		await expect(badge(page, '匯聚 Switch AGG-A', '未處理')).toHaveCount(0);
 
 		await pick(page, '機櫃 A-01');
@@ -395,11 +402,11 @@ test.describe('編輯器操作', () => {
 		const w0 = (await canvas.boundingBox())!.width;
 		await page.keyboard.press('ControlOrMeta+b');
 		await page.keyboard.press('ControlOrMeta+i');
-		await expect(unprocessedList(page)).toHaveCount(0);
+		await expect(outline(page)).toHaveCount(0);
 		await expect(detail(page)).toHaveCount(0);
 		await expect.poll(async () => (await canvas.boundingBox())!.width).toBeGreaterThan(w0 + 400);
 		await page.getByRole('button', { name: '專注模式' }).click();
-		await expect(unprocessedList(page)).toBeVisible();
+		await expect(outline(page)).toBeVisible();
 		await expect(detail(page)).toBeVisible();
 	});
 
