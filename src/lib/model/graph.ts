@@ -138,9 +138,12 @@ export function stacks(g: Graph): Map<string, string[]> {
 	return new Map(
 		[...groups]
 			.map(([k, ids]) => [k, ids.filter((id) => !linked(ids, id))] as const)
-			.filter(([, ids]) => ids.length >= 3)
+			.filter(([, ids]) => ids.length >= STACK_MIN)
 	);
 }
+
+/** 至少幾個成員才收成一疊 */
+export const STACK_MIN = 3;
 
 export type ViewEdge = GEdge & { members: string[] };
 
@@ -248,4 +251,19 @@ export function layout(g: Graph) {
 		c.forEach((id) => pos.set(id, { x: i * (NODE_W + COL_GAP), y: y.get(id)! }))
 	);
 	return { pos };
+}
+
+type XY = { x: number; y: number };
+
+/** 沿用 prev 的位置；新節點用 next 的欄，與同欄卡片重疊就排到該欄最下方 */
+export function pin(prev: Map<string, XY>, next: Map<string, XY>) {
+	const out = new Map<string, XY>();
+	for (const id of next.keys()) if (prev.has(id)) out.set(id, prev.get(id)!);
+	for (const [id, p] of next) {
+		if (out.has(id)) continue;
+		const col = [...out.values()].filter((q) => q.x === p.x);
+		const hit = col.some((q) => Math.abs(q.y - p.y) < NODE_H + GAP);
+		out.set(id, hit ? { x: p.x, y: Math.max(...col.map((q) => q.y)) + NODE_H + GAP } : p);
+	}
+	return out;
 }

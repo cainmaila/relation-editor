@@ -37,7 +37,7 @@
 	import '@xyflow/svelte/dist/style.css';
 	import type { Editor } from '#lib/editor.svelte.js';
 	import { nodeType } from '#lib/model/config.js';
-	import { NODE_H, NODE_W, layout } from '#lib/model/graph.js';
+	import { NODE_H, NODE_W, layout, pin } from '#lib/model/graph.js';
 	import GraphNode from './GraphNode.svelte';
 	import Icon from './Icon.svelte';
 	import ViewSync from './ViewSync.svelte';
@@ -48,8 +48,25 @@
 
 	const view = $derived(editor.canvas);
 	const lay = $derived(layout(view));
+	/** 檢視操作（系統、收疊、重新排版）才整張重排；編輯圖時既有節點留在原位，免得畫面跳動 */
+	const viewKey = $derived(
+		[
+			editor.systems.join(),
+			// 疊卡消失時的過期 key 清除不算檢視操作
+			editor.expanded.filter((k) => editor.stacks.has(k)).join(),
+			editor.stacking,
+			editor.relayout
+		].join('/')
+	);
+	let last: { key: string; pos: ReturnType<typeof layout>['pos'] } | undefined;
+	// 刻意在 derived 內記住上次位置（非響應變數）：只有 lay／viewKey 變動才會重算
+	const pos = $derived.by(() => {
+		const p = last?.key === viewKey ? pin(last.pos, lay.pos) : lay.pos;
+		last = { key: viewKey, pos: p };
+		return p;
+	});
 	/** 堆疊卡代表的節點；一般節點就是自己 */
-	const members = (id: string) => editor.stacks.get(id) ?? [id];
+	const members = (id: string) => editor.closed.get(id) ?? [id];
 
 	/** 亮起的節點與邊：找客戶結果優先，其次選取（或滑過）物件的直接相連，最後是大綱篩選 */
 	const focus = $derived.by(() => {
@@ -83,11 +100,12 @@
 			const ids = members(n.id);
 			const any = (set: Set<string>) => ids.some((id) => set.has(id));
 			const stack = ids.length > 1;
+			const active = !!editor.selected && ids.includes(editor.selected.id);
 			return {
 				id: n.id,
 				connectable: !stack,
 				type: 'graph',
-				position: lay.pos.get(n.id)!,
+				position: pos.get(n.id)!,
 				width: NODE_W,
 				height: NODE_H,
 				data: {
@@ -101,53 +119,80 @@
 					unreachable: any(editor.unreachable),
 					dim: !!focus && !any(focus.nodes),
 					soft: !editor.selected && !editor.result && !editor.matched,
-					active: editor.selected?.id === n.id,
-					origin: editor.result !== null && editor.selected?.id === n.id,
+					active,
+					origin: editor.result !== null && active,
 					fresh: editor.fresh === n.id
 				}
 			};
 		})
 	]);
 
+	// 只有主機：機框→主機（包含）與主機→機框（承載）畫成一條雙向線（資料仍是兩條邊）
+	const hostPair = $derived.by(() => {
+		const type = new Map(view.nodes.map((n) => [n.id, n.type]));
+		const back = new Map(
+			view.edges
+				.filter((e) => e.type === '承載' && type.get(e.from) === '主機')
+				.map((e) => [`${e.to}>${e.from}`, e])
+		);
+		return new Map(
+			view.edges
+				.filter((e) => e.type === '包含' && type.get(e.to) === '主機')
+				.flatMap((e) => {
+					const b = back.get(`${e.from}>${e.to}`);
+					return b ? [[e.id, b] as const] : [];
+				})
+		);
+	});
+	const merged = $derived(new Set([...hostPair.values()].map((b) => b.id)));
+
 	const edges = $derived<Edge[]>(
-		view.edges.map((e) => {
-			const color = EDGE_COLORS[e.type] ?? '#94a3b8';
-			const marker = { type: MarkerType.ArrowClosed, color, width: 14, height: 14 };
-			const lit =
-				e.members.some((id) => focus?.edges.has(id) || editor.hoverEdge === id) ||
-				editor.hoverEdge === e.id;
-			// 反向邊（例：承載 主機→機框）改由左畫到右、箭頭放起點，走卡片下方的 back 把手，不和同對節點的邊疊在一起
-			const back = lay.pos.get(e.from)!.x > lay.pos.get(e.to)!.x;
-			return {
-				id: e.id,
-				...(back
-					? {
-							source: e.to,
-							target: e.from,
-							sourceHandle: 'back',
-							targetHandle: 'back',
-							markerStart: marker,
-							markerEnd: e.bidirectional ? marker : undefined
-						}
-					: {
-							source: e.from,
-							target: e.to,
-							markerEnd: marker,
-							markerStart: e.bidirectional ? marker : undefined
-						}),
-				interactionWidth: 24,
-				animated: e.members.some((id) => editor.result?.edges.has(id)),
-				style: [
-					`stroke: ${color}`,
-					`stroke-width: ${lit ? 2.75 : 1.25}`,
-					e.props['確認狀態'] === '推定' ? 'stroke-dasharray: 5 4' : '',
-					lit ? `filter: drop-shadow(0 0 4px ${color})` : '',
-					focus && !lit
-						? `opacity: ${editor.selected || editor.result ? 0.08 : 0.3}`
-						: 'opacity: 0.75'
-				].join(';')
-			};
-		})
+		view.edges
+			.filter((e) => !merged.has(e.id))
+			.map((e) => {
+				const pair = hostPair.get(e.id);
+				if (pair) e = { ...e, bidirectional: true, members: [...e.members, ...pair.members] };
+				const color = EDGE_COLORS[e.type] ?? '#94a3b8';
+				const marker = { type: MarkerType.ArrowClosed, color, width: 14, height: 14 };
+				const lit =
+					e.members.some((id) => focus?.edges.has(id) || editor.hoverEdge === id) ||
+					editor.hoverEdge === e.id;
+				// 反向邊（例：承載 主機→機框）改由左畫到右、箭頭放起點，走卡片下方的 back 把手，不和同對節點的邊疊在一起
+				// 用排版的層級判斷（不用保留的位置），編輯後一般邊不會被當成反向
+				const back = lay.pos.get(e.from)!.x > lay.pos.get(e.to)!.x;
+				const animated = e.members.some((id) => editor.result?.edges.has(id));
+				return {
+					id: e.id,
+					// 沒有包含可合併的承載邊只在相關時畫出
+					hidden: e.type === '承載' && !lit && !animated,
+					...(back
+						? {
+								source: e.to,
+								target: e.from,
+								sourceHandle: 'back',
+								targetHandle: 'back',
+								markerStart: marker,
+								markerEnd: e.bidirectional ? marker : undefined
+							}
+						: {
+								source: e.from,
+								target: e.to,
+								markerEnd: marker,
+								markerStart: e.bidirectional ? marker : undefined
+							}),
+					interactionWidth: 24,
+					animated,
+					style: [
+						`stroke: ${color}`,
+						`stroke-width: ${lit ? 2.75 : 1.25}`,
+						e.props['確認狀態'] === '推定' ? 'stroke-dasharray: 5 4' : '',
+						lit ? `filter: drop-shadow(0 0 4px ${color})` : '',
+						focus && !lit
+							? `opacity: ${editor.selected || editor.result ? 0.08 : 0.3}`
+							: 'opacity: 0.75'
+					].join(';')
+				};
+			})
 	);
 
 	/** 這一下點擊展開了疊卡（雙擊的後半不該再選取／縮放重排後的卡片） */
@@ -212,7 +257,7 @@
 		linking || editor.menu
 			? null
 			: [editor.hoverNode, editor.selected?.kind === 'node' && editor.selected.id].find(
-					(id) => id && editor.node(id)
+					(id) => id && editor.node(id) && pos.has(id)
 				) || null
 	);
 </script>

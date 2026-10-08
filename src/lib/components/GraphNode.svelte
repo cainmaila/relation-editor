@@ -21,7 +21,7 @@
 
 <script lang="ts">
 	import { Handle, Position, type NodeProps, type Node } from '@xyflow/svelte';
-	import { IDC_MESSAGE } from '#lib/model/config.js';
+	import { IDC_MESSAGE, UNREACHABLE_LABEL } from '#lib/model/config.js';
 	import Icon from './Icon.svelte';
 
 	let { data }: NodeProps<Node<GraphNodeData>> = $props();
@@ -65,9 +65,9 @@
 		{#if data.unreachable}
 			<span
 				class={['relative z-2 text-rose-300', !data.unprocessed && 'ml-auto']}
-				title="到不了客戶"
+				title={UNREACHABLE_LABEL}
 			>
-				<Icon name="broken" class="size-3" label="到不了客戶" />
+				<Icon name="broken" class="size-3" label={UNREACHABLE_LABEL} />
 			</span>
 		{/if}
 	</span>

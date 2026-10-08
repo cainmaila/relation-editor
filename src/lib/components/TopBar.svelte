@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Editor } from '#lib/editor.svelte.js';
-	import { SYSTEMS, nodeType } from '#lib/model/config.js';
+	import { SYSTEMS, UNREACHABLE_LABEL, nodeType } from '#lib/model/config.js';
 	import { SYSTEM_COLORS } from './Canvas.svelte';
 	import Icon from './Icon.svelte';
 
@@ -122,8 +122,8 @@
 		</button>
 		<button
 			class="flex items-center gap-1.5 rounded-md px-2 py-1.5 hover:bg-white/5"
-			aria-label="到不了客戶 {editor.unreachable.size}"
-			title="到不了客戶：沿方向走不到任何客戶"
+			aria-label="{UNREACHABLE_LABEL} {editor.unreachable.size}"
+			title="{UNREACHABLE_LABEL}：沿方向走不到任何客戶"
 			onclick={() => show('unreachable')}
 		>
 			<Icon

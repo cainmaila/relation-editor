@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Editor } from '#lib/editor.svelte.js';
-	import { IDC_MESSAGE, nodeType } from '#lib/model/config.js';
+	import { CONFIRM_STATES, IDC_MESSAGE, UNREACHABLE_LABEL, nodeType } from '#lib/model/config.js';
 	import type { Props } from '#lib/model/types.js';
 	import { EDGE_COLORS, SYSTEM_COLORS } from './Canvas.svelte';
 	import Icon from './Icon.svelte';
@@ -29,6 +29,8 @@
 
 	function addProp(props: Props) {
 		if (!propKey.trim()) return;
+		if (propKey.trim() === '確認狀態' && !CONFIRM_STATES.includes(propValue))
+			return void (editor.message = `確認狀態只能是：${CONFIRM_STATES.join('、')}`);
 		props[propKey.trim()] = propValue;
 		propKey = propValue = '';
 	}
@@ -81,7 +83,13 @@
 			{#each Object.keys(props) as k (k)}
 				<dt class="text-xs text-slate-400">{k}</dt>
 				<dd>
-					<input aria-label={k} bind:value={props[k]} disabled={ro} class="field py-1" />
+					{#if k === '確認狀態'}
+						<select aria-label={k} bind:value={props[k]} disabled={ro} class="field py-1">
+							{#each CONFIRM_STATES as v (v)}<option>{v}</option>{/each}
+						</select>
+					{:else}
+						<input aria-label={k} bind:value={props[k]} disabled={ro} class="field py-1" />
+					{/if}
 				</dd>
 			{:else}
 				<p class="col-span-2 text-xs text-slate-500">尚無屬性</p>
@@ -219,7 +227,7 @@
 				class="mx-5 mb-1 flex gap-2 rounded-md border border-rose-500/25 bg-rose-500/5 px-3 py-2 text-xs leading-relaxed text-rose-200"
 			>
 				<Icon name="broken" class="mt-0.5 size-3.5" />
-				<span>到不了客戶：拖到下游節點補一條邊即可接上。</span>
+				<span>{UNREACHABLE_LABEL}：拖到下游節點補一條邊即可接上。</span>
 			</p>
 		{/if}
 

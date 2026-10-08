@@ -11,6 +11,7 @@ import {
 	checkDeleteNode,
 	collapse,
 	findCustomers,
+	STACK_MIN,
 	stacks,
 	unprocessed,
 	unreachable,
@@ -67,11 +68,17 @@ export class Editor {
 	stacking = $state(true);
 	/** 手動展開的堆疊 key */
 	expanded = $state<string[]>([]);
+	/** 每加一就整張重新排版（編輯圖時既有節點不動） */
+	relayout = $state(0);
+	/** 編輯後才成為疊卡成員的節點：不收進疊卡，免得畫面上的卡片消失；重新排版時清掉 */
+	loose = $state<string[]>([]);
 
 	unprocessed = $derived(unprocessed(this.graph));
 	unreachable = $derived(unreachable(this.graph));
 
 	/** 大綱篩選命中的節點；沒在篩選或左欄收合時為 null（收合時看不到篩選，不淡化畫布） */
+	/** 名稱是否符合搜尋文字（沒輸入＝符合） */
+	byText = (name: string) => name.toLowerCase().includes(this.query.trim().toLowerCase());
 	matched = $derived.by(() => {
 		const k = this.query.trim().toLowerCase();
 		const i = this.issue;
@@ -79,7 +86,7 @@ export class Editor {
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- derived 每次重建，不需響應
 		return new Set(
 			this.graph.nodes
-				.filter((n) => (!k || n.name.toLowerCase().includes(k)) && (!i || this[i].has(n.id)))
+				.filter((n) => (!k || this.byText(n.name)) && (!i || this[i].has(n.id)))
 				.map((n) => n.id)
 		);
 	});
@@ -96,23 +103,20 @@ export class Editor {
 	});
 
 	stacks = $derived(stacks(this.visible));
-	/** 畫布實際畫的圖：收起的堆疊換成代表卡 */
-	canvas = $derived(
-		collapse(
-			this.visible,
-			// eslint-disable-next-line svelte/prefer-svelte-reactivity -- derived 每次重建，不需響應
-			new Map(
-				this.stacking
-					? [...this.stacks].filter(
-							([k, ids]) =>
-								!this.expanded.includes(k) &&
-								// 選取中的節點不可被收進疊卡
-								!(this.selected?.kind === 'node' && ids.includes(this.selected.id))
-						)
-					: []
-			)
+	/** 收起的堆疊（扣掉 loose 後仍 ≥3 個才收）：key → 收進去的成員 */
+	closed = $derived(
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- derived 每次重建，不需響應
+		new Map(
+			this.stacking
+				? [...this.stacks]
+						.filter(([k]) => !this.expanded.includes(k))
+						.map(([k, ids]) => [k, ids.filter((id) => !this.loose.includes(id))] as const)
+						.filter(([, ids]) => ids.length >= STACK_MIN)
+				: []
 		)
 	);
+	/** 畫布實際畫的圖：收起的堆疊換成代表卡 */
+	canvas = $derived(collapse(this.visible, this.closed));
 
 	#stackKey = $derived(
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- derived 每次重建，不需響應
@@ -121,6 +125,23 @@ export class Editor {
 
 	/** 節點所在的堆疊 key */
 	stackOf = (id: string) => this.#stackKey.get(id);
+
+	/** 改圖；因此新進疊卡的節點留在外面 */
+	#keepOut(edit: () => void) {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- 只做比對，不需響應
+		const before = new Map(this.#stackKey);
+		edit();
+		for (const [id, k] of this.#stackKey) if (before.get(id) !== k) this.loose.push(id);
+		// 已刪除的節點不留在 loose
+		this.loose = this.loose.filter((id) => this.node(id));
+	}
+
+	/** 整張重新排版並入鏡 */
+	rearrange() {
+		this.loose = [];
+		this.relayout++;
+		this.fit();
+	}
 
 	expand(key: string) {
 		if (!this.expanded.includes(key)) this.expanded.push(key);
@@ -148,6 +169,8 @@ export class Editor {
 		this.message = '';
 		this.connecting = null;
 		this.armDelete = null;
+		// 詳情欄的邊列會在選取改變時卸載，收不到 mouseleave
+		this.hoverEdge = null;
 	}
 
 	/** 縮放到指定節點；空陣列＝全部 */
@@ -155,12 +178,10 @@ export class Editor {
 		this.view = { ids, seq: this.view.seq + 1 };
 	}
 
-	/** 選取並置中；節點所屬系統沒勾就順手勾上 */
+	/** 選取並置中；節點所屬系統沒勾就順手勾上。收起的成員不展開（免得整張重排），改亮它的疊卡 */
 	reveal(id: string) {
 		const s = nodeType(this.node(id)!.type).system;
 		if (s && !this.systems.includes(s)) this.systems.push(s);
-		const k = this.stackOf(id);
-		if (k && !this.expanded.includes(k)) this.expanded.push(k);
 		this.select({ kind: 'node', id });
 		this.fit([id]);
 	}
@@ -190,7 +211,9 @@ export class Editor {
 		let n = 1;
 		while (!name.trim() && this.graph.nodes.some((x) => x.name === `${type} ${n}`)) n++;
 		const id = uid('n');
-		this.graph.nodes.push({ id, type, name: name.trim() || `${type} ${n}`, props: {} });
+		this.#keepOut(() =>
+			this.graph.nodes.push({ id, type, name: name.trim() || `${type} ${n}`, props: {} })
+		);
 		this.fresh = id;
 		this.dialog = null;
 		this.reveal(id);
@@ -209,7 +232,17 @@ export class Editor {
 		const err = validateEdge(this.graph, from, to, type);
 		if (err) return this.fail(err);
 		const id = uid('e');
-		this.graph.edges.push({ id, type, from, to, bidirectional: false, props: {} });
+		// 編輯器手拉的邊沒有資料來源，依 PRD 定義為推定
+		this.#keepOut(() =>
+			this.graph.edges.push({
+				id,
+				type,
+				from,
+				to,
+				bidirectional: false,
+				props: { 確認狀態: '推定' }
+			})
+		);
 		this.draft = { from: '', to: '', type: '' };
 		this.dialog = null;
 		this.select({ kind: 'edge', id });
@@ -219,14 +252,16 @@ export class Editor {
 	deleteNode(id: string) {
 		const err = checkDeleteNode(this.graph, id);
 		if (err) return this.fail(err);
-		this.graph.edges = this.graph.edges.filter((e) => e.from !== id && e.to !== id);
-		this.graph.nodes = this.graph.nodes.filter((n) => n.id !== id);
+		this.#keepOut(() => {
+			this.graph.edges = this.graph.edges.filter((e) => e.from !== id && e.to !== id);
+			this.graph.nodes = this.graph.nodes.filter((n) => n.id !== id);
+		});
 		this.select(null);
 	}
 
 	deleteEdge(id: string) {
 		if (this.edge(id)?.readonly) return this.fail(IDC_MESSAGE);
-		this.graph.edges = this.graph.edges.filter((e) => e.id !== id);
+		this.#keepOut(() => (this.graph.edges = this.graph.edges.filter((e) => e.id !== id)));
 		this.select(null);
 	}
 

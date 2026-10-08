@@ -2,7 +2,7 @@
 	// 左欄大綱：搜尋、問題篩選、依系統分組的節點清單。點列＝選取並置中，滑過＝畫布亮起
 	import { tick, untrack } from 'svelte';
 	import type { Editor } from '#lib/editor.svelte.js';
-	import { SYSTEMS, nodeType } from '#lib/model/config.js';
+	import { SYSTEMS, UNREACHABLE_LABEL, nodeType } from '#lib/model/config.js';
 	import { SYSTEM_COLORS } from './Canvas.svelte';
 	import Icon from './Icon.svelte';
 
@@ -20,7 +20,7 @@
 		},
 		{
 			key: 'unreachable',
-			label: '到不了客戶',
+			label: UNREACHABLE_LABEL,
 			icon: 'broken',
 			tone: 'text-rose-300',
 			on: 'border-rose-300/40 bg-rose-300/10 text-rose-100',
@@ -35,6 +35,8 @@
 
 	const issue = $derived(ISSUES.find((i) => i.key === editor.issue));
 	const filtering = $derived(!!editor.matched);
+	/** 只看文字有沒有命中（判斷空結果是不是問題篩選造成的） */
+	const textHits = $derived(editor.graph.nodes.some((n) => editor.byText(n.name)));
 	const groups = $derived(
 		[...SYSTEMS, null]
 			.map((s) => ({
@@ -195,6 +197,12 @@
 				{#if issue && !editor.query.trim()}
 					<Icon name="check" class="size-3.5 text-emerald-400" />
 					<span class="text-emerald-300/90">{issue.ok}</span>
+				{:else if issue && textHits}
+					<span>「{editor.query.trim()}」裡沒有{issue.label}的節點</span>
+					<button
+						class="ml-auto text-sky-300 hover:text-sky-200"
+						onclick={() => (editor.issue = null)}>清除{issue.label}篩選</button
+					>
 				{:else}
 					沒有符合的節點
 				{/if}

@@ -6,7 +6,7 @@ const G = '2F A 區監視與偵測範圍';
 
 const node = (page: Page, name: string) =>
 	page.locator('.svelte-flow__node-graph').filter({ has: page.getByText(name, { exact: true }) });
-/** 節點卡上的狀態圖示（未處理、到不了客戶） */
+/** 節點卡上的狀態圖示（未處理、無客戶路徑） */
 const badge = (page: Page, name: string, b: string) =>
 	node(page, name).getByRole('img', { name: b, exact: true });
 const graphNodes = (page: Page) => page.locator('.svelte-flow__node-graph');
@@ -15,7 +15,7 @@ const dimmed = (page: Page) => page.locator('.svelte-flow__node-graph .opacity-2
 const detail = (page: Page) => page.getByRole('complementary', { name: '詳情' });
 /** 詳情的「欄位 值」 */
 const field = (k: string, v: string) => new RegExp(`${k}\\s*${v}`);
-const TOTAL_EDGES = 70; // 圖 50 條＋IDC 20 條
+const TOTAL_EDGES = 65; // 圖 50 條＋IDC 20 條，承載 5 條沒選到主機／機框時不畫
 const status = (page: Page) => page.getByRole('status');
 const outline = (page: Page) => page.getByRole('navigation', { name: '大綱' });
 const unprocessedChip = (page: Page) => outline(page).getByRole('button', { name: '只列未處理' });
@@ -381,14 +381,14 @@ test.describe('找客戶', () => {
 
 	test('情境 17：標出到不了客戶的節點', async ({ page }) => {
 		await expect(
-			graphNodes(page).getByRole('img', { name: '到不了客戶', exact: true })
+			graphNodes(page).getByRole('img', { name: '無客戶路徑', exact: true })
 		).toHaveCount(0);
 		await addNode(page, 'Switch', 'Switch B');
 		await addEdge(page, '匯聚 Switch AGG-A', 'Switch B', '連線');
 		await expect(badge(page, 'Switch B', '未處理')).toHaveCount(0);
-		await expect(badge(page, 'Switch B', '到不了客戶')).toHaveCount(1);
+		await expect(badge(page, 'Switch B', '無客戶路徑')).toHaveCount(1);
 		await addEdge(page, 'Switch B', '主機 H-03', '連線');
-		await expect(badge(page, 'Switch B', '到不了客戶')).toHaveCount(0);
+		await expect(badge(page, 'Switch B', '無客戶路徑')).toHaveCount(0);
 		expect(await findCustomers(page, 'Switch B')).toEqual(['客戶乙']);
 	});
 
@@ -396,7 +396,7 @@ test.describe('找客戶', () => {
 		await pick(page, '機櫃 PDU A-04-A');
 		await pickEdge(page, '供電：機櫃 A-04');
 		await detail(page).getByRole('button', { name: '刪除邊' }).click();
-		await expect(badge(page, '機櫃 PDU A-04-A', '到不了客戶')).toHaveCount(1);
+		await expect(badge(page, '機櫃 PDU A-04-A', '無客戶路徑')).toHaveCount(1);
 		await addNode(page, '攝影機', '攝影機 CAM-04');
 		await addEdge(page, '攝影機 CAM-04', G, '監測');
 		expect((await findCustomers(page, '攝影機 CAM-04')).sort()).toEqual(['客戶乙', '客戶甲']);
@@ -428,13 +428,16 @@ test.describe('編輯器操作', () => {
 		await expect(dimmed(page)).toHaveCount(0);
 	});
 
-	test('承載邊由左往右畫，不折回', async ({ page }) => {
-		const paths = page.locator('.svelte-flow__edge[data-id^="承載:"] path.svelte-flow__edge-path');
-		await expect(paths).not.toHaveCount(0);
-		for (const d of await paths.evaluateAll((ps) => ps.map((p) => p.getAttribute('d')!))) {
-			const xs = [...d.matchAll(/(-?[\d.]+)[ ,](-?[\d.]+)/g)].map((m) => +m[1]);
-			expect(xs[0]).toBeLessThan(xs.at(-1)!);
-		}
+	test('主機與機框的包含、承載合併成一條雙向線', async ({ page }) => {
+		await expect(page.locator('.svelte-flow__edge[data-id^="承載:"]')).toHaveCount(0);
+		await pick(page, '主機 H-01');
+		await expect(page.locator('.svelte-flow__edge[data-id^="承載:"]')).toHaveCount(0);
+		const line = page.locator('.svelte-flow__edge[data-id^="包含:"] path.svelte-flow__edge-path');
+		const both = await line.evaluateAll(
+			(ps) =>
+				ps.filter((p) => p.getAttribute('marker-start') && p.getAttribute('marker-end')).length
+		);
+		expect(both).toBe(5);
 	});
 
 	test('⌘K 搜尋節點並選取', async ({ page }) => {
@@ -490,17 +493,17 @@ test.describe('編輯器操作', () => {
 		await expect(graphNodes(page)).toHaveCount(37);
 		const stack = node(page, '機櫃 PDU ×8');
 		await expect(stack).toContainText('8 個同類');
-		// 大綱點成員：自動展開並選取
+		// 大綱點成員：選取但不展開（不重排），詳情顯示成員
 		await outline(page).getByRole('button', { name: '機櫃 PDU A-02-A' }).click();
-		await expect(graphNodes(page)).toHaveCount(44);
+		await expect(graphNodes(page)).toHaveCount(37);
 		await expect(detail(page).getByLabel('名稱', { exact: true })).toHaveValue('機櫃 PDU A-02-A');
+		await fitAll(page);
+		await stack.click();
+		await expect(graphNodes(page)).toHaveCount(44);
 		await fitAll(page);
 		await node(page, '機櫃 PDU A-02-A').click({ button: 'right' });
 		await menu(page).getByRole('menuitem', { name: '收疊同類（8）' }).click();
 		await expect(graphNodes(page)).toHaveCount(37);
-		await fitAll(page);
-		await stack.click();
-		await expect(graphNodes(page)).toHaveCount(44);
 	});
 
 	test('雙擊疊卡只展開，不選到重排後的卡片', async ({ page }) => {
@@ -528,5 +531,74 @@ test.describe('編輯器操作', () => {
 			.getByRole('menuitem', { name: /確認刪除/ })
 			.click();
 		await expect(graphNodes(page)).toHaveCount(43);
+	});
+});
+
+test.describe('手測回報', () => {
+	test('詳情欄點過的邊，選別的節點後不再亮著', async ({ page }) => {
+		await pick(page, 'Core Switch-1');
+		await detail(page).getByRole('button', { name: '連線：匯聚 Switch AGG-A' }).hover();
+		await pickEdge(page, '連線：匯聚 Switch AGG-A');
+		await pick(page, '台電市電');
+		await expect(
+			page
+				.locator('.svelte-flow__edge[data-id="連線:Core Switch-1>匯聚 Switch AGG-A"] path')
+				.first()
+		).toHaveAttribute('style', /stroke-width: 1.25/);
+	});
+
+	test('選取疊卡成員、新增邊都不重排；右鍵「重新排版」才重排', async ({ page }) => {
+		await stackToggle(page).click();
+		const at = () =>
+			graphNodes(page).evaluateAll((ns) =>
+				Object.fromEntries(ns.map((n) => [n.dataset.id, (n as HTMLElement).style.transform]))
+			);
+		const before = await at();
+		await outline(page).getByRole('button', { name: '機櫃 PDU A-02-A' }).click();
+		expect(await at()).toEqual(before);
+		await addEdge(page, '偵測器 SD-01', '機櫃 A-03', '監測');
+		expect(await at()).toEqual(before);
+		await page.keyboard.press('Escape');
+		await page.locator('.svelte-flow__pane').click({ button: 'right', position: { x: 5, y: 5 } });
+		await menu(page).getByRole('menuitem', { name: '重新排版' }).click();
+		expect(await at()).not.toEqual(before);
+	});
+
+	test('系統隱藏時從大綱點節點，畫面移到該節點', async ({ page }) => {
+		await page.getByRole('checkbox', { name: '消防' }).setChecked(false);
+		await outline(page).getByRole('button', { name: '偵測器 SD-02' }).click();
+		const pane = (await page.locator('.svelte-flow').boundingBox())!;
+		await expect
+			.poll(async () => {
+				const r = (await node(page, '偵測器 SD-02').boundingBox())!;
+				return Math.abs(r.x + r.width / 2 - pane.x - pane.width / 2);
+			})
+			.toBeLessThan(5);
+	});
+
+	test('文字與問題篩選疊加沒結果時，說明並可一鍵清除', async ({ page }) => {
+		await outline(page).getByLabel('篩選節點').fill('Switch');
+		await unprocessedChip(page).click();
+		await expect(outline(page)).toContainText('「Switch」裡沒有未處理的節點');
+		await outline(page).getByRole('button', { name: '清除未處理篩選' }).click();
+		await expect(outline(page).getByRole('button', { name: 'Core Switch-1' })).toBeVisible();
+	});
+
+	test('文字本身沒命中時不怪問題篩選', async ({ page }) => {
+		await outline(page).getByLabel('篩選節點').fill('zzz');
+		await unprocessedChip(page).click();
+		await expect(outline(page)).toContainText('沒有符合的節點');
+		await expect(outline(page).getByRole('button', { name: '清除未處理篩選' })).toHaveCount(0);
+	});
+
+	test('新邊確認狀態預設推定（虛線），只能選已確認／推定', async ({ page }) => {
+		await addEdge(page, '偵測器 SD-01', '機櫃 A-03', '監測');
+		const s = detail(page).getByLabel('確認狀態');
+		await expect(s).toHaveValue('推定');
+		await expect(s.locator('option')).toHaveText(['已確認', '推定']);
+		const path = page.locator('.svelte-flow__edge[data-id^="e-"] path').first();
+		await expect(path).toHaveAttribute('style', /stroke-dasharray/);
+		await s.selectOption('已確認');
+		await expect(path).not.toHaveAttribute('style', /stroke-dasharray/);
 	});
 });

@@ -2,6 +2,7 @@
 	// 畫布左下角的圖例卡；? 鍵或按鈕開關（鍵盤處理在 +page.svelte）
 	import type { Editor } from '#lib/editor.svelte.js';
 	import { EDGE_COLORS, SYSTEM_COLORS } from './Canvas.svelte';
+	import { UNREACHABLE_LABEL } from '#lib/model/config.js';
 	import Icon from './Icon.svelte';
 
 	let { editor }: { editor: Editor } = $props();
@@ -45,8 +46,9 @@
 					<Icon name="warn" class="size-3.5 text-yellow-300" />未處理
 				</li>
 				<li class="flex items-center gap-1.5">
-					<Icon name="broken" class="size-3.5 text-rose-300" />到不了客戶
+					<Icon name="broken" class="size-3.5 text-rose-300" />{UNREACHABLE_LABEL}
 				</li>
+				<li class="col-span-2 text-slate-500">主機與機框之間的包含、承載合併成一條雙向線</li>
 			</ul>
 		</section>
 	{/if}
