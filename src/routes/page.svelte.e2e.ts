@@ -20,21 +20,36 @@ async function only(page: Page, systems: string[]) {
 	for (const s of SYSTEMS)
 		await page.getByRole('checkbox', { name: s }).setChecked(systems.includes(s));
 }
-const pick = (page: Page, name: string) => node(page, name).click();
+/** 先全部顯示（新增、找客戶後視野會移動）再點 */
+const fitAll = (page: Page) => page.locator('.svelte-flow__controls-fitview').click();
+async function pick(page: Page, name: string) {
+	await fitAll(page);
+	await node(page, name).click();
+}
 const clickPane = (page: Page) =>
 	page.locator('.svelte-flow__pane').click({ position: { x: 5, y: 5 } });
 
+/** 開對話框（先 Esc 關掉可能開著的） */
+async function open(page: Page, button: string, form: string) {
+	await page.keyboard.press('Escape');
+	await page.getByRole('button', { name: button }).click();
+	return page.getByRole('form', { name: form });
+}
 async function addNode(page: Page, type: string, name: string) {
-	const f = page.getByRole('form', { name: '新增節點' });
+	const f = await open(page, '＋ 節點', '新增節點');
 	await f.getByLabel('類型').selectOption(type);
 	await f.getByLabel('名稱').fill(name);
 	await f.getByRole('button', { name: '新增節點' }).click();
 }
-async function addEdge(page: Page, from: string, to: string, type: string) {
-	const f = page.getByRole('form', { name: '新增邊' });
+async function edgeForm(page: Page, from: string, to: string) {
+	const f = await open(page, '＋ 邊', '新增邊');
 	await f.getByLabel('起點').selectOption({ label: from });
 	await f.getByLabel('終點').selectOption({ label: to });
-	await f.getByLabel('邊類型').selectOption(type);
+	return f;
+}
+async function addEdge(page: Page, from: string, to: string, type: string) {
+	const f = await edgeForm(page, from, to);
+	await f.getByRole('radio', { name: type }).check();
 	await f.getByRole('button', { name: '新增邊' }).click();
 }
 /** 從詳情的連入／連出清單點選一條邊 */
@@ -144,7 +159,8 @@ test.describe('看圖', () => {
 
 test.describe('編輯', () => {
 	test('情境 8：新增節點', async ({ page }) => {
-		await page.getByRole('form', { name: '新增節點' }).getByRole('button').click();
+		const f = await open(page, '＋ 節點', '新增節點');
+		await f.getByRole('button', { name: '新增節點' }).click();
 		await expect(status(page)).toHaveText('請選擇類型並填寫名稱');
 		await expect(graphNodes(page)).toHaveCount(44);
 		await addNode(page, '攝影機', '攝影機 CAM-04');
@@ -173,6 +189,7 @@ test.describe('編輯', () => {
 
 	test('情境 9：拉線帶入起點終點', async ({ page }) => {
 		await addNode(page, '攝影機', '攝影機 CAM-04');
+		await fitAll(page);
 		const src = node(page, '攝影機 CAM-04').locator('.svelte-flow__handle.source');
 		const dst = node(page, G).locator('.svelte-flow__handle.target');
 		const a = (await src.boundingBox())!;
@@ -185,16 +202,20 @@ test.describe('編輯', () => {
 		await expect(f.getByLabel('起點').locator('option:checked')).toHaveText('攝影機 CAM-04');
 		await expect(f.getByLabel('終點').locator('option:checked')).toHaveText(G);
 		await expect(graphEdges(page)).toHaveCount(TOTAL_EDGES);
-		await f.getByLabel('邊類型').selectOption('監測');
+		await f.getByRole('radio', { name: '監測' }).check();
 		await f.getByRole('button', { name: '新增邊' }).click();
 		await expect(graphEdges(page)).toHaveCount(TOTAL_EDGES + 1);
 	});
 
 	test('情境 10：違反連接限制時擋下', async ({ page }) => {
-		await addEdge(page, '機櫃 A-01', 'UPS-1', '供電');
-		await expect(status(page)).toHaveText('「供電」只能由電力設備連出');
-		await addEdge(page, '偵測器 SD-01', '客戶甲', '監測');
-		await expect(status(page)).toHaveText('「監測」只能連到空間或通用節點');
+		// 不合法的類型事先停用並寫出原因
+		let f = await edgeForm(page, '機櫃 A-01', 'UPS-1');
+		await expect(f.getByRole('radio', { name: '供電' })).toBeDisabled();
+		await expect(f).toContainText('「供電」只能由電力設備連出');
+		f = await edgeForm(page, '偵測器 SD-01', '客戶甲');
+		await expect(f.getByRole('radio', { name: '監測' })).toBeDisabled();
+		await expect(f).toContainText('「監測」只能連到空間或通用節點');
+		await page.keyboard.press('Escape');
 		await expect(graphEdges(page)).toHaveCount(TOTAL_EDGES);
 	});
 
@@ -225,6 +246,8 @@ test.describe('編輯', () => {
 	test('情境 12：刪除節點與邊', async ({ page }) => {
 		await pick(page, '偵測器 SD-02');
 		await detail(page).getByRole('button', { name: '刪除節點' }).click();
+		await expect(detail(page)).toContainText('連同 1 條邊一起刪除？');
+		await detail(page).getByRole('button', { name: '確認刪除' }).click();
 		await expect(node(page, '偵測器 SD-02')).toHaveCount(0);
 		await pick(page, G);
 		await expect(detail(page)).toContainText('連入（2）');
@@ -245,8 +268,8 @@ test.describe('編輯', () => {
 		await expect(node(page, '匯聚 Switch AGG-A')).not.toContainText('未處理');
 
 		await pick(page, '機櫃 A-01');
-		await detail(page).getByRole('button', { name: '刪除節點' }).click();
-		await expect(status(page)).toHaveText('機櫃底下有 IDC 資料，請先在 IDC機櫃配置管理移除機框');
+		await expect(detail(page).getByRole('button', { name: '刪除節點' })).toBeDisabled();
+		await expect(detail(page)).toContainText('機櫃底下有 IDC 資料，請先在 IDC機櫃配置管理移除機框');
 		await expect(node(page, '機櫃 A-01')).toBeVisible();
 		await expect(graphEdges(page)).toHaveCount(TOTAL_EDGES - 4);
 	});
@@ -269,9 +292,10 @@ test.describe('編輯', () => {
 			await expect(detail(page).getByRole('button', { name: '刪除節點' })).toBeDisabled();
 			await expect(detail(page)).toContainText('由 IDC機櫃配置管理維護');
 		}
-		const types = page.getByRole('form', { name: '新增節點' }).getByLabel('類型');
+		const types = (await open(page, '＋ 節點', '新增節點')).getByLabel('類型');
 		for (const t of ['機框', '主機', '客戶'])
 			await expect(types.locator(`option[value="${t}"]`)).toHaveCount(0);
+		await page.keyboard.press('Escape');
 
 		await pick(page, 'ToR Switch A-04');
 		await pickEdge(page, '連線：主機 H-05');
@@ -339,5 +363,36 @@ test.describe('找客戶', () => {
 		await addNode(page, '攝影機', '攝影機 CAM-04');
 		await addEdge(page, '攝影機 CAM-04', G, '監測');
 		expect((await findCustomers(page, '攝影機 CAM-04')).sort()).toEqual(['客戶乙', '客戶甲']);
+	});
+});
+
+test.describe('編輯器操作', () => {
+	test('面板可收合，畫布變寬', async ({ page }) => {
+		const canvas = page.locator('.svelte-flow');
+		const w0 = (await canvas.boundingBox())!.width;
+		await page.keyboard.press('ControlOrMeta+b');
+		await page.keyboard.press('ControlOrMeta+i');
+		await expect(unprocessedList(page)).toHaveCount(0);
+		await expect(detail(page)).toHaveCount(0);
+		await expect.poll(async () => (await canvas.boundingBox())!.width).toBeGreaterThan(w0 + 400);
+		await page.getByRole('button', { name: '專注模式' }).click();
+		await expect(unprocessedList(page)).toBeVisible();
+		await expect(detail(page)).toBeVisible();
+	});
+
+	test('⌘K 搜尋節點並選取', async ({ page }) => {
+		await only(page, ['電力']);
+		await page.keyboard.press('ControlOrMeta+k');
+		await page.getByRole('textbox', { name: '搜尋節點' }).fill('A-03');
+		await page.keyboard.press('Enter');
+		// 機櫃 A-03 屬空間，沒勾也會自動勾上
+		await expect(page.getByRole('checkbox', { name: '空間' })).toBeChecked();
+		await expect(detail(page).getByLabel('名稱', { exact: true })).toHaveValue('機櫃 A-03');
+	});
+
+	test('Alt＋點系統只看該系統', async ({ page }) => {
+		await page.getByRole('checkbox', { name: '網路' }).click({ modifiers: ['Alt'] });
+		for (const s of SYSTEMS)
+			await expect(page.getByRole('checkbox', { name: s })).toBeChecked({ checked: s === '網路' });
 	});
 });

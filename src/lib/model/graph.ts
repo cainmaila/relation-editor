@@ -127,7 +127,6 @@ export const laneOf = (n: GNode): Lane => nodeType(n.type).system ?? '通用';
 export const NODE_W = 160;
 export const NODE_H = 44;
 const GAP = 16;
-const COLS = 2;
 export const LANE_PAD = 24;
 export const LANE_HEADER = 48;
 
@@ -138,7 +137,7 @@ export interface LaneBox {
 	height: number;
 }
 
-/** 泳道排版：每個系統一欄，欄內依同系統邊的深度由上而下；同深度每列最多 COLS 個，同深度只有一個的泳道用單欄 */
+/** 泳道排版：每個系統一欄單列，欄內依同系統邊的深度由上而下（單列較窄，整張圖在一般螢幕縮放後仍讀得到字） */
 export function layout(g: Graph, lanes: Lane[]) {
 	const pos = new Map<string, { x: number; y: number }>();
 	const boxes: LaneBox[] = [];
@@ -160,23 +159,18 @@ export function layout(g: Graph, lanes: Lane[]) {
 			return v;
 		};
 		members.forEach((n) => d(n.id));
-		const counts = [...depth.values()].reduce<number[]>(
-			(c, v) => ((c[v] = (c[v] ?? 0) + 1), c),
-			[]
-		);
-		const cols = Math.min(COLS, Math.max(1, ...counts.filter(Boolean)));
-		const width = cols * NODE_W + (cols - 1) * GAP + 2 * LANE_PAD;
+		const width = NODE_W + 2 * LANE_PAD;
 		let y = LANE_HEADER;
 		const maxDepth = Math.max(-1, ...depth.values());
 		for (let level = 0; level <= maxDepth; level++) {
 			const row = members.filter((n) => depth.get(n.id) === level);
 			row.forEach((n, i) =>
 				pos.set(n.id, {
-					x: x + LANE_PAD + (i % cols) * (NODE_W + GAP),
-					y: y + Math.floor(i / cols) * (NODE_H + GAP)
+					x: x + LANE_PAD,
+					y: y + i * (NODE_H + GAP)
 				})
 			);
-			y += Math.ceil(row.length / cols) * (NODE_H + GAP) + (row.length ? GAP : 0);
+			y += row.length * (NODE_H + GAP) + (row.length ? GAP : 0);
 		}
 		boxes.push({ lane, x, width, height: y + LANE_PAD });
 		x += width + GAP;

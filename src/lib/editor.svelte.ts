@@ -31,6 +31,19 @@ export class Editor {
 	message = $state('');
 	/** 新增邊表單（拉線時帶入起點終點） */
 	draft = $state({ from: '', to: '', type: '' });
+	/** 開著的對話框 */
+	dialog = $state<'node' | 'edge' | 'search' | null>(null);
+	/** 連線模式起點：之後點的節點即終點 */
+	connecting = $state<string | null>(null);
+	/** 等待確認刪除的節點 */
+	armDelete = $state<string | null>(null);
+	/** 檢視器清單滑過的邊，畫布上高亮 */
+	hoverEdge = $state<string | null>(null);
+	/** 剛新增的節點，畫布上脈衝提示 */
+	fresh = $state<string | null>(null);
+	/** 畫布視野請求：Canvas 依 seq 變化縮放到 ids（空＝全部） */
+	view = $state({ ids: [] as string[], seq: 0 });
+	panels = $state({ left: true, right: true });
 
 	unprocessed = $derived(unprocessed(this.graph));
 	unreachable = $derived(unreachable(this.graph));
@@ -59,20 +72,54 @@ export class Editor {
 		this.selected = sel;
 		this.result = null;
 		this.message = '';
+		this.connecting = null;
+		this.armDelete = null;
 	}
+
+	/** 縮放到指定節點；空陣列＝全部 */
+	fit(ids: string[] = []) {
+		this.view = { ids, seq: this.view.seq + 1 };
+	}
+
+	/** 選取並置中；節點所屬系統沒勾就順手勾上 */
+	reveal(id: string) {
+		const s = nodeType(this.node(id)!.type).system;
+		if (s && !this.systems.includes(s)) this.systems.push(s);
+		this.select({ kind: 'node', id });
+		this.fit([id]);
+	}
+
+	/** 只看一個系統；已是唯一勾選時恢復全部 */
+	solo(s: System) {
+		this.systems = this.systems.length === 1 && this.systems[0] === s ? [...SYSTEMS] : [s];
+	}
+
+	/** 各邊類型對 from→to 的檢查結果（null＝可建立） */
+	edgeErrors(from: string, to: string) {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- 每次呼叫重算，不需響應
+		return new Map(
+			CREATABLE_EDGE_TYPES.map((t) => [t.name, validateEdge(this.graph, from, to, t.name)])
+		);
+	}
+
+	deleteBlock = (id: string) => checkDeleteNode(this.graph, id);
 
 	addNode(type: string, name: string): boolean {
 		if (!type || !name.trim()) return this.fail('請選擇類型並填寫名稱');
 		if (nodeType(type).idc) return this.fail(IDC_MESSAGE);
 		const id = uid('n');
 		this.graph.nodes.push({ id, type, name: name.trim(), props: {} });
-		this.select({ kind: 'node', id });
+		this.fresh = id;
+		this.dialog = null;
+		this.reveal(id);
 		return true;
 	}
 
 	startEdge(from: string, to: string) {
-		this.draft = { from, to, type: '' };
-		this.message = '拉線完成，請選擇邊類型';
+		const ok = [...this.edgeErrors(from, to)].filter(([, err]) => !err);
+		this.draft = { from, to, type: ok.length === 1 ? ok[0][0] : '' };
+		this.connecting = null;
+		this.dialog = 'edge';
 	}
 
 	addEdge(from: string, to: string, type: string): boolean {
@@ -82,6 +129,7 @@ export class Editor {
 		const id = uid('e');
 		this.graph.edges.push({ id, type, from, to, bidirectional: false, props: {} });
 		this.draft = { from: '', to: '', type: '' };
+		this.dialog = null;
 		this.select({ kind: 'edge', id });
 		return true;
 	}
@@ -102,6 +150,7 @@ export class Editor {
 
 	findCustomers(id: string) {
 		this.result = findCustomers(this.graph, id);
+		this.fit([...this.result.nodes]);
 	}
 
 	private fail(msg: string) {
