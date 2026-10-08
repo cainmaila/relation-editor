@@ -11,6 +11,7 @@ import {
 	checkDeleteNode,
 	collapse,
 	findCustomers,
+	STACK_MIN,
 	stacks,
 	unprocessed,
 	unreachable,
@@ -76,6 +77,8 @@ export class Editor {
 	unreachable = $derived(unreachable(this.graph));
 
 	/** 大綱篩選命中的節點；沒在篩選或左欄收合時為 null（收合時看不到篩選，不淡化畫布） */
+	/** 名稱是否符合搜尋文字（沒輸入＝符合） */
+	byText = (name: string) => name.toLowerCase().includes(this.query.trim().toLowerCase());
 	matched = $derived.by(() => {
 		const k = this.query.trim().toLowerCase();
 		const i = this.issue;
@@ -83,7 +86,7 @@ export class Editor {
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- derived 每次重建，不需響應
 		return new Set(
 			this.graph.nodes
-				.filter((n) => (!k || n.name.toLowerCase().includes(k)) && (!i || this[i].has(n.id)))
+				.filter((n) => (!k || this.byText(n.name)) && (!i || this[i].has(n.id)))
 				.map((n) => n.id)
 		);
 	});
@@ -108,7 +111,7 @@ export class Editor {
 				? [...this.stacks]
 						.filter(([k]) => !this.expanded.includes(k))
 						.map(([k, ids]) => [k, ids.filter((id) => !this.loose.includes(id))] as const)
-						.filter(([, ids]) => ids.length >= 3)
+						.filter(([, ids]) => ids.length >= STACK_MIN)
 				: []
 		)
 	);
@@ -129,6 +132,8 @@ export class Editor {
 		const before = new Map(this.#stackKey);
 		edit();
 		for (const [id, k] of this.#stackKey) if (before.get(id) !== k) this.loose.push(id);
+		// 已刪除的節點不留在 loose
+		this.loose = this.loose.filter((id) => this.node(id));
 	}
 
 	/** 整張重新排版並入鏡 */

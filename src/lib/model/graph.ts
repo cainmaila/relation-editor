@@ -138,9 +138,12 @@ export function stacks(g: Graph): Map<string, string[]> {
 	return new Map(
 		[...groups]
 			.map(([k, ids]) => [k, ids.filter((id) => !linked(ids, id))] as const)
-			.filter(([, ids]) => ids.length >= 3)
+			.filter(([, ids]) => ids.length >= STACK_MIN)
 	);
 }
+
+/** 至少幾個成員才收成一疊 */
+export const STACK_MIN = 3;
 
 export type ViewEdge = GEdge & { members: string[] };
 

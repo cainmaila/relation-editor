@@ -59,6 +59,7 @@
 		].join('/')
 	);
 	let last: { key: string; pos: ReturnType<typeof layout>['pos'] } | undefined;
+	// 刻意在 derived 內記住上次位置（非響應變數）：只有 lay／viewKey 變動才會重算
 	const pos = $derived.by(() => {
 		const p = last?.key === viewKey ? pin(last.pos, lay.pos) : lay.pos;
 		last = { key: viewKey, pos: p };

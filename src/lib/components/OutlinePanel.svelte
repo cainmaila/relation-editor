@@ -36,10 +36,7 @@
 	const issue = $derived(ISSUES.find((i) => i.key === editor.issue));
 	const filtering = $derived(!!editor.matched);
 	/** 只看文字有沒有命中（判斷空結果是不是問題篩選造成的） */
-	const textHits = $derived.by(() => {
-		const k = editor.query.trim().toLowerCase();
-		return editor.graph.nodes.some((n) => n.name.toLowerCase().includes(k));
-	});
+	const textHits = $derived(editor.graph.nodes.some((n) => editor.byText(n.name)));
 	const groups = $derived(
 		[...SYSTEMS, null]
 			.map((s) => ({
