@@ -227,7 +227,7 @@
 				class="mx-5 mb-1 flex gap-2 rounded-md border border-rose-500/25 bg-rose-500/5 px-3 py-2 text-xs leading-relaxed text-rose-200"
 			>
 				<Icon name="broken" class="mt-0.5 size-3.5" />
-				<span>到不了客戶：拖到下游節點補一條邊即可接上。</span>
+				<span>無客戶路徑：拖到下游節點補一條邊即可接上。</span>
 			</p>
 		{/if}
 

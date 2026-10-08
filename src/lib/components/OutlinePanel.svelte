@@ -20,7 +20,7 @@
 		},
 		{
 			key: 'unreachable',
-			label: '到不了客戶',
+			label: '無客戶路徑',
 			icon: 'broken',
 			tone: 'text-rose-300',
 			on: 'border-rose-300/40 bg-rose-300/10 text-rose-100',

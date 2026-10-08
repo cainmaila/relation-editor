@@ -65,9 +65,9 @@
 		{#if data.unreachable}
 			<span
 				class={['relative z-2 text-rose-300', !data.unprocessed && 'ml-auto']}
-				title="到不了客戶"
+				title="無客戶路徑"
 			>
-				<Icon name="broken" class="size-3" label="到不了客戶" />
+				<Icon name="broken" class="size-3" label="無客戶路徑" />
 			</span>
 		{/if}
 	</span>

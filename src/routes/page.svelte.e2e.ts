@@ -6,7 +6,7 @@ const G = '2F A 區監視與偵測範圍';
 
 const node = (page: Page, name: string) =>
 	page.locator('.svelte-flow__node-graph').filter({ has: page.getByText(name, { exact: true }) });
-/** 節點卡上的狀態圖示（未處理、到不了客戶） */
+/** 節點卡上的狀態圖示（未處理、無客戶路徑） */
 const badge = (page: Page, name: string, b: string) =>
 	node(page, name).getByRole('img', { name: b, exact: true });
 const graphNodes = (page: Page) => page.locator('.svelte-flow__node-graph');
@@ -381,14 +381,14 @@ test.describe('找客戶', () => {
 
 	test('情境 17：標出到不了客戶的節點', async ({ page }) => {
 		await expect(
-			graphNodes(page).getByRole('img', { name: '到不了客戶', exact: true })
+			graphNodes(page).getByRole('img', { name: '無客戶路徑', exact: true })
 		).toHaveCount(0);
 		await addNode(page, 'Switch', 'Switch B');
 		await addEdge(page, '匯聚 Switch AGG-A', 'Switch B', '連線');
 		await expect(badge(page, 'Switch B', '未處理')).toHaveCount(0);
-		await expect(badge(page, 'Switch B', '到不了客戶')).toHaveCount(1);
+		await expect(badge(page, 'Switch B', '無客戶路徑')).toHaveCount(1);
 		await addEdge(page, 'Switch B', '主機 H-03', '連線');
-		await expect(badge(page, 'Switch B', '到不了客戶')).toHaveCount(0);
+		await expect(badge(page, 'Switch B', '無客戶路徑')).toHaveCount(0);
 		expect(await findCustomers(page, 'Switch B')).toEqual(['客戶乙']);
 	});
 
@@ -396,7 +396,7 @@ test.describe('找客戶', () => {
 		await pick(page, '機櫃 PDU A-04-A');
 		await pickEdge(page, '供電：機櫃 A-04');
 		await detail(page).getByRole('button', { name: '刪除邊' }).click();
-		await expect(badge(page, '機櫃 PDU A-04-A', '到不了客戶')).toHaveCount(1);
+		await expect(badge(page, '機櫃 PDU A-04-A', '無客戶路徑')).toHaveCount(1);
 		await addNode(page, '攝影機', '攝影機 CAM-04');
 		await addEdge(page, '攝影機 CAM-04', G, '監測');
 		expect((await findCustomers(page, '攝影機 CAM-04')).sort()).toEqual(['客戶乙', '客戶甲']);

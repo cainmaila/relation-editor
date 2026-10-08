@@ -45,7 +45,7 @@
 					<Icon name="warn" class="size-3.5 text-yellow-300" />未處理
 				</li>
 				<li class="flex items-center gap-1.5">
-					<Icon name="broken" class="size-3.5 text-rose-300" />到不了客戶
+					<Icon name="broken" class="size-3.5 text-rose-300" />無客戶路徑
 				</li>
 				<li class="col-span-2 text-slate-500">
 					承載（主機→所屬機框）只在選取或滑過主機、機框，或找客戶時畫出

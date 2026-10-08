@@ -122,8 +122,8 @@
 		</button>
 		<button
 			class="flex items-center gap-1.5 rounded-md px-2 py-1.5 hover:bg-white/5"
-			aria-label="到不了客戶 {editor.unreachable.size}"
-			title="到不了客戶：沿方向走不到任何客戶"
+			aria-label="無客戶路徑 {editor.unreachable.size}"
+			title="無客戶路徑：沿方向走不到任何客戶"
 			onclick={() => show('unreachable')}
 		>
 			<Icon
