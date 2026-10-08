@@ -23,7 +23,7 @@ export type Selection = { kind: 'node' | 'edge'; id: string } | null;
 export type Menu = { x: number; y: number } & (
 	| { kind: 'node'; id: string }
 	| { kind: 'edge'; id: string }
-	| { kind: 'pane'; lane?: string }
+	| { kind: 'pane' }
 	| { kind: 'connect'; from: string; to: string }
 	| { kind: 'drop'; from: string }
 );

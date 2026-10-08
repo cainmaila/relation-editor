@@ -1,13 +1,5 @@
-// 圖的純邏輯：未處理、找客戶、到不了客戶、連接限制、刪除檢查、泳道排版。
-import {
-	CUSTOMER_TYPE,
-	IDC_MESSAGE,
-	ROOT_ID,
-	SYSTEMS,
-	edgeType,
-	nodeType,
-	type System
-} from './config';
+// 圖的純邏輯：未處理、找客戶、到不了客戶、連接限制、刪除檢查、分層排版。
+import { CUSTOMER_TYPE, IDC_MESSAGE, ROOT_ID, edgeType, nodeType } from './config';
 import type { GEdge, GNode, Graph } from './types';
 
 const isCustomer = (g: Graph, id: string) =>
@@ -119,69 +111,82 @@ export function checkDeleteNode(g: Graph, id: string): string | null {
 	return null;
 }
 
-export type Lane = System | '通用';
-/** 通用節點放空間與電力之間的中間帶 */
-export const LANES: Lane[] = [SYSTEMS[0], '通用', ...SYSTEMS.slice(1)];
-export const laneOf = (n: GNode): Lane => nodeType(n.type).system ?? '通用';
-
 export const NODE_W = 160;
 export const NODE_H = 44;
-const GAP = 16;
-/** 上下層間距，讓層間的邊看得清楚 */
-const ROW_GAP = 40;
-export const LANE_PAD = 24;
-export const LANE_HEADER = 48;
+const GAP = 12;
+/** 欄間距，留空間給層間的邊 */
+const COL_GAP = 96;
 
-export interface LaneBox {
-	lane: Lane;
-	x: number;
-	width: number;
-	height: number;
-}
+/**
+ * 分層排版（由左往右）：x＝沿邊方向的層級（上游在左、客戶在最右欄），y＝同層的平行節點。
+ * 系統不佔位置，改由顏色區分；找客戶永遠往右走。
+ */
+export function layout(g: Graph) {
+	// 承載（主機→機框）與包含反向，排版時略過以免成環
+	const flow = g.edges.filter((e) => e.type !== '承載');
+	const into = (id: string) => flow.filter((e) => e.to === id).map((e) => e.from);
+	const out = (id: string) => flow.filter((e) => e.from === id).map((e) => e.to);
 
-/** 泳道排版：欄內是一棵樹，深度往下、兄弟往右（父節點置中於子節點上方），同層平行的節點才不會疊成假鏈 */
-export function layout(g: Graph, lanes: Lane[]) {
-	const pos = new Map<string, { x: number; y: number }>();
-	const boxes: LaneBox[] = [];
-	let x = 0;
-	for (const lane of lanes) {
-		const members = g.nodes.filter((n) => laneOf(n) === lane);
-		const ids = new Set(members.map((n) => n.id));
-		// 承載（主機→機框）與包含反向，排版時略過以免成環
-		const inner = g.edges.filter((e) => ids.has(e.from) && ids.has(e.to) && e.type !== '承載');
-		const depth = new Map<string, number>();
-		const visiting = new Set<string>();
-		const d = (id: string): number => {
-			if (depth.has(id)) return depth.get(id)!;
-			if (visiting.has(id)) return 0;
-			visiting.add(id);
-			const parents = inner.filter((e) => e.to === id).map((e) => d(e.from) + 1);
-			const v = Math.max(0, ...parents);
-			depth.set(id, v);
-			return v;
-		};
-		members.forEach((n) => d(n.id));
-		// 多父節點只掛在第一個「剛好淺一層」的父節點下，確保每個節點只擺一次
-		const parent = new Map<string, string>();
-		for (const e of inner)
-			if (!parent.has(e.to) && depth.get(e.from)! + 1 === depth.get(e.to)) parent.set(e.to, e.from);
-		let slot = 0;
-		const place = (id: string): number => {
-			const kids = members.filter((n) => parent.get(n.id) === id).map((n) => place(n.id));
-			const s = kids.length ? (kids[0] + kids[kids.length - 1]) / 2 : slot++;
-			pos.set(id, {
-				x: x + LANE_PAD + s * (NODE_W + GAP),
-				y: LANE_HEADER + depth.get(id)! * (NODE_H + ROW_GAP)
-			});
-			return s;
-		};
-		members.filter((n) => !parent.has(n.id)).forEach((n) => place(n.id));
-		const width = Math.max(1, slot) * (NODE_W + GAP) - GAP + 2 * LANE_PAD;
-		const rows = Math.max(-1, ...depth.values()) + 1;
-		boxes.push({ lane, x, width, height: LANE_HEADER + rows * (NODE_H + ROW_GAP) + LANE_PAD });
-		x += width + GAP;
+	// 層級＝最長上游路徑；客戶固定放最後一欄
+	const layer = new Map<string, number>();
+	const visiting = new Set<string>();
+	const d = (id: string): number => {
+		if (layer.has(id)) return layer.get(id)!;
+		if (visiting.has(id)) return 0;
+		visiting.add(id);
+		const v = Math.max(0, ...into(id).map((p) => d(p) + 1));
+		layer.set(id, v);
+		return v;
+	};
+	const rest = g.nodes.filter((n) => n.type !== CUSTOMER_TYPE);
+	rest.forEach((n) => d(n.id));
+	const last = Math.max(-1, ...rest.map((n) => layer.get(n.id)!)) + 1;
+	g.nodes.forEach((n) => n.type === CUSTOMER_TYPE && layer.set(n.id, last));
+
+	const cols: string[][] = [];
+	g.nodes.forEach((n) => (cols[layer.get(n.id)!] ??= []).push(n.id));
+	for (let i = 0; i < cols.length; i++) cols[i] ??= [];
+
+	// 同欄排序：重心法來回掃幾次，減少交叉
+	const idx = new Map<string, number>();
+	cols.forEach((c) => c.forEach((id, i) => idx.set(id, i)));
+	const avg = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
+	for (let k = 0; k < 4; k++) {
+		const down = k % 2 === 0;
+		for (const col of down ? cols : [...cols].reverse()) {
+			const bc = (id: string) => {
+				const nb = (down ? into(id) : out(id)).map((x) => idx.get(x)!);
+				return nb.length ? avg(nb) : idx.get(id)!;
+			};
+			const key = new Map(col.map((id) => [id, bc(id)]));
+			col.sort((a, b) => key.get(a)! - key.get(b)!);
+			col.forEach((id, i) => idx.set(id, i));
+		}
 	}
-	const height = Math.max(0, ...boxes.map((b) => b.height));
-	boxes.forEach((b) => (b.height = height));
-	return { pos, boxes };
+
+	// y：盡量對齊上游（反向再對齊下游），同欄依序往下推開不重疊
+	const y = new Map<string, number>();
+	const settle = (col: string[], want: (id: string) => number | null) => {
+		let min = -Infinity;
+		for (const id of col) {
+			const v = Math.max(want(id) ?? y.get(id) ?? min, min === -Infinity ? 0 : min);
+			y.set(id, v);
+			min = v + NODE_H + GAP;
+		}
+	};
+	const near = (ids: string[]) => {
+		const ys = ids.filter((i) => y.has(i)).map((i) => y.get(i)!);
+		return ys.length ? avg(ys) : null;
+	};
+	cols.forEach((c) => settle(c, (id) => near(into(id))));
+	// 源頭（沒有上游）往下游的位置靠
+	[...cols]
+		.reverse()
+		.forEach((c) => settle(c, (id) => (into(id).length ? y.get(id)! : near(out(id)))));
+
+	const pos = new Map<string, { x: number; y: number }>();
+	cols.forEach((c, i) =>
+		c.forEach((id) => pos.set(id, { x: i * (NODE_W + COL_GAP), y: y.get(id)! }))
+	);
+	return { pos };
 }

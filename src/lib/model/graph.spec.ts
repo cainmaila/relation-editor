@@ -3,7 +3,6 @@ import {
 	checkDeleteNode,
 	findCustomers,
 	layout,
-	LANES,
 	NODE_W,
 	NODE_H,
 	unprocessed,
@@ -183,23 +182,22 @@ describe('找客戶', () => {
 	});
 });
 
-it('layout：每個節點都有位置，電力由上而下', () => {
-	const g = full();
-	const { pos } = layout(g, LANES);
+it('layout：每個節點都有位置，沿供電方向由左往右，客戶在最右欄', () => {
+	const { pos } = layout(full());
 	expect(pos.size).toBe(44);
-	expect(pos.get('台電市電')!.y).toBeLessThan(pos.get('UPS-1')!.y);
-	expect(pos.get('UPS-1')!.y).toBeLessThan(pos.get('樓層 PDU 2F-A')!.y);
-	expect(pos.get('樓層 PDU 2F-A')!.y).toBeLessThan(pos.get('機櫃 PDU A-04-B')!.y);
+	const x = (id: string) => pos.get(id)!.x;
+	expect(x('台電市電')).toBeLessThan(x('UPS-1'));
+	expect(x('UPS-1')).toBeLessThan(x('樓層 PDU 2F-A'));
+	expect(x('樓層 PDU 2F-A')).toBeLessThan(x('機櫃 PDU A-04-B'));
+	const maxX = Math.max(...[...pos.values()].map((p) => p.x));
+	['客戶甲', '客戶乙', '客戶丙'].forEach((c) => expect(x(c)).toBe(maxX));
 });
 
-it('layout：平行的兄弟節點橫向展開，父節點置中，卡片不重疊', () => {
-	const { pos } = layout(full(), LANES);
+it('layout：平行的兄弟節點同一欄，卡片不重疊', () => {
+	const { pos } = layout(full());
 	const cabs = ['機櫃 A-01', '機櫃 A-02', '機櫃 A-03', '機櫃 A-04'].map((id) => pos.get(id)!);
-	expect(new Set(cabs.map((p) => p.y)).size).toBe(1);
-	expect(new Set(cabs.map((p) => p.x)).size).toBe(4);
-	const row = pos.get('A 排')!;
-	expect(row.x).toBeGreaterThan(cabs[0].x);
-	expect(row.x).toBeLessThan(cabs[3].x);
+	expect(new Set(cabs.map((p) => p.x)).size).toBe(1);
+	expect(new Set(cabs.map((p) => p.y)).size).toBe(4);
 	const all = [...pos.values()];
 	all.forEach((a, i) =>
 		all.slice(i + 1).forEach((b) => {

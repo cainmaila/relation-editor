@@ -8,7 +8,7 @@
 		承載: '#e879f9',
 		監測: '#f472b6'
 	};
-	/** 系統識別色：節點色條、泳道表頭、篩選膠囊共用 */
+	/** 系統識別色：節點色條、篩選膠囊、圖例共用 */
 	export const SYSTEM_COLORS: Record<string, string> = {
 		空間: '#a5b4fc',
 		通用: '#e2e8f0',
@@ -37,18 +37,16 @@
 	import '@xyflow/svelte/dist/style.css';
 	import type { Editor } from '#lib/editor.svelte.js';
 	import { nodeType } from '#lib/model/config.js';
-	import { LANES, NODE_H, NODE_W, laneOf, layout } from '#lib/model/graph.js';
+	import { NODE_H, NODE_W, layout } from '#lib/model/graph.js';
 	import GraphNode from './GraphNode.svelte';
 	import Icon from './Icon.svelte';
-	import LaneNode from './LaneNode.svelte';
 	import ViewSync from './ViewSync.svelte';
 
 	let { editor }: { editor: Editor } = $props();
 
-	const nodeTypes = { graph: GraphNode, lane: LaneNode };
+	const nodeTypes = { graph: GraphNode };
 
-	const lanes = $derived(LANES.filter((l) => l === '通用' || editor.systems.some((s) => s === l)));
-	const lay = $derived(layout(editor.visible, lanes));
+	const lay = $derived(layout(editor.visible));
 
 	/** 亮起的節點與邊：找客戶結果優先，否則為選取（或滑過）物件的直接相連 */
 	const focus = $derived.by(() => {
@@ -71,21 +69,6 @@
 	});
 
 	const nodes = $derived<Node[]>([
-		...lay.boxes.map((b) => ({
-			id: `lane:${b.lane}`,
-			type: 'lane',
-			position: { x: b.x, y: 0 },
-			data: {
-				label: b.lane === '通用' ? '' : b.lane,
-				color: SYSTEM_COLORS[b.lane],
-				count: editor.visible.nodes.filter((n) => laneOf(n) === b.lane).length
-			},
-			width: b.width,
-			height: b.height,
-			selectable: false,
-			connectable: false,
-			zIndex: -1
-		})),
 		...editor.visible.nodes.map((n) => ({
 			id: n.id,
 			type: 'graph',
@@ -95,11 +78,13 @@
 			data: {
 				name: n.name,
 				type: n.type,
+				system: nodeType(n.type).system ?? '通用',
 				color: SYSTEM_COLORS[nodeType(n.type).system ?? '通用'],
 				readonly: !!n.readonly,
 				unprocessed: editor.unprocessed.has(n.id),
 				unreachable: editor.unreachable.has(n.id),
 				dim: !!focus && !focus.nodes.has(n.id),
+				soft: !editor.selected && !editor.result,
 				active: editor.selected?.id === n.id,
 				origin: editor.result !== null && editor.selected?.id === n.id,
 				fresh: editor.fresh === n.id
@@ -219,20 +204,16 @@
 		class={[editor.connecting && 'connecting', linking && 'linking']}
 		clickConnect={false}
 		connectionDragThreshold={6}
-		onnodeclick={({ node }) => node.type !== 'lane' && nodeClick(node.id)}
+		onnodeclick={({ node }) => nodeClick(node.id)}
 		onedgeclick={({ edge }) => editor.select({ kind: 'edge', id: edge.id })}
 		onpaneclick={() => editor.select(null)}
-		onnodepointerenter={({ node }) => node.type !== 'lane' && hover(node.id)}
-		onnodepointerleave={({ node }) => node.type !== 'lane' && hover(null)}
+		onnodepointerenter={({ node }) => hover(node.id)}
+		onnodepointerleave={() => hover(null)}
 		onedgepointerenter={({ edge }) => (editor.hoverEdge = edge.id)}
 		onedgepointerleave={() => (editor.hoverEdge = null)}
 		onnodecontextmenu={({ event, node }) => {
-			const at = menuAt(event);
-			if (node.type === 'lane') editor.menu = { kind: 'pane', lane: node.id.slice(5), ...at };
-			else {
-				editor.select({ kind: 'node', id: node.id });
-				editor.menu = { kind: 'node', id: node.id, ...at };
-			}
+			editor.select({ kind: 'node', id: node.id });
+			editor.menu = { kind: 'node', id: node.id, ...menuAt(event) };
 		}}
 		onedgecontextmenu={({ event, edge }) => {
 			const at = menuAt(event);
@@ -260,8 +241,7 @@
 			position="bottom-right"
 			pannable
 			zoomable
-			nodeColor={(n) => (n.type === 'lane' ? 'transparent' : (n.data.color as string))}
-			nodeStrokeColor={(n) => (n.type === 'lane' ? '#1f2a3d' : 'transparent')}
+			nodeColor={(n) => n.data.color as string}
 			nodeBorderRadius={4}
 		/>
 		<ViewSync {editor} />

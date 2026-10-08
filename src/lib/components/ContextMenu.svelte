@@ -34,10 +34,10 @@
 	};
 
 	/** 依系統分組的可新增類型；pick 收到類型名 */
-	function typeMenu(pick: (t: string) => void, only?: string): Item[] {
+	function typeMenu(pick: (t: string) => void): Item[] {
 		return [...SYSTEMS, null]
 			.map((s) => ({ s: s ?? '通用', types: CREATABLE_NODE_TYPES.filter((t) => t.system === s) }))
-			.filter((g) => g.types.length && (!only || g.s === only))
+			.filter((g) => g.types.length)
 			.map((g) => ({
 				label: g.s,
 				icon: g.s,
@@ -56,7 +56,7 @@
 		}
 		if (m.kind === 'connect') return `${nameOf(m.from)} → ${nameOf(m.to)}`;
 		if (m.kind === 'drop') return `從 ${nameOf(m.from)} 新增並連線`;
-		return m.lane && m.lane !== '通用' ? `${m.lane} 泳道` : '';
+		return '';
 	});
 	const ro = $derived(
 		m.kind === 'node'
@@ -155,11 +155,8 @@
 				if (to) editor.menu = { kind: 'connect', from, to, x, y };
 			});
 		}
-		const lane = m.lane && m.lane !== '通用' ? m.lane : undefined;
-		const own = lane ? typeMenu(add, lane)[0]?.sub : undefined;
 		return [
-			...(own ?? []).map((t) => ({ ...t, label: `新增${t.label}`, icon: 'node-plus' })),
-			{ label: own ? '其他節點' : '新增節點', icon: 'node-plus', keys: 'N', sub: typeMenu(add) },
+			{ label: '新增節點', icon: 'node-plus', keys: 'N', sub: typeMenu(add) },
 			{ label: '新增邊…', icon: 'edge-plus', keys: 'E', run: done(() => (editor.dialog = 'edge')) },
 			{
 				label: '搜尋節點',

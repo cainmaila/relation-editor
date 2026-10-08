@@ -26,7 +26,7 @@
 </script>
 
 <!-- 整張卡片就是連線把手：拖到別的卡片上即建立關聯（target 在拖曳中才浮上來接） -->
-<Handle type="target" position={Position.Top} class="easy" />
+<Handle type="target" position={Position.Left} class="easy" />
 <div
 	style:--c={data.color}
 	class={[
@@ -69,4 +69,4 @@
 		{/if}
 	</span>
 </div>
-<Handle type="source" position={Position.Bottom} class="easy" />
+<Handle type="source" position={Position.Right} class="easy" />

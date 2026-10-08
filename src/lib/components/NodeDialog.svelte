@@ -12,7 +12,7 @@
 		s,
 		types: CREATABLE_NODE_TYPES.filter((t) => t.system === s)
 	}));
-	const lane = $derived(type ? (nodeType(type).system ?? '中間帶（通用）') : '');
+	const lane = $derived(type ? (nodeType(type).system ?? '通用') : '');
 
 	function submit(e: SubmitEvent) {
 		e.preventDefault();
@@ -53,7 +53,7 @@
 						class="size-2 rounded-full"
 						style:background={SYSTEM_COLORS[nodeType(type).system ?? '通用']}
 					></span>
-					將放在 <b class="text-slate-200">{lane}</b>
+					系統 <b class="text-slate-200">{lane}</b>
 				</span>
 			{:else}
 				<span class="text-xs text-slate-500">機框、主機、客戶由 IDC 維護，不能在此新增</span>

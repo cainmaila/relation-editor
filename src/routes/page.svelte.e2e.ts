@@ -81,10 +81,9 @@ test.beforeEach(async ({ page }) => {
 
 test.describe('看圖', () => {
 	test('情境 1：一眼看懂整張圖', async ({ page }) => {
-		for (const s of SYSTEMS)
-			await expect(
-				page.locator('.svelte-flow__node-lane').getByRole('heading', { name: s, exact: true })
-			).toBeVisible();
+		// 系統不再分欄：每個系統有開關，節點以系統圖示＋色條區分
+		for (const s of SYSTEMS) await expect(page.getByRole('checkbox', { name: s })).toBeVisible();
+		await expect(node(page, '機櫃 A-01').locator('[title="空間"]')).toBeVisible();
 		await expect(node(page, '機櫃 A-01')).toContainText('機櫃');
 		await expect(node(page, G)).toBeVisible();
 		await expect(unprocessedList(page)).toContainText('未處理節點（0）');
@@ -96,10 +95,11 @@ test.describe('看圖', () => {
 		// 電力 11 個＋永遠顯示的通用節點
 		await expect(graphNodes(page)).toHaveCount(12);
 		await expect(graphEdges(page)).toHaveCount(10);
-		const y = async (n: string) => (await node(page, n).boundingBox())!.y;
-		expect(await y('台電市電')).toBeLessThan(await y('UPS-1'));
-		expect(await y('UPS-1')).toBeLessThan(await y('樓層 PDU 2F-A'));
-		expect(await y('樓層 PDU 2F-A')).toBeLessThan(await y('機櫃 PDU A-01-A'));
+		// 沿邊方向由左往右
+		const x = async (n: string) => (await node(page, n).boundingBox())!.x;
+		expect(await x('台電市電')).toBeLessThan(await x('UPS-1'));
+		expect(await x('UPS-1')).toBeLessThan(await x('樓層 PDU 2F-A'));
+		expect(await x('樓層 PDU 2F-A')).toBeLessThan(await x('機櫃 PDU A-01-A'));
 		await only(page, ['空間']);
 		// 空間 8 個＋通用節點；7 條包含＋通用節點→機櫃 A-01、A-02
 		await expect(graphNodes(page)).toHaveCount(9);
@@ -180,13 +180,7 @@ test.describe('編輯', () => {
 		await expect(graphNodes(page)).toHaveCount(45);
 		await expect(badge(page, '攝影機 CAM-04', '未處理')).toHaveCount(1);
 		await expect(unprocessedList(page).getByRole('listitem')).toHaveText(['攝影機 CAM-04']);
-		const lane = (await page
-			.locator('.svelte-flow__node-lane')
-			.filter({ hasText: 'CCTV' })
-			.boundingBox())!;
-		const box = (await node(page, '攝影機 CAM-04').boundingBox())!;
-		expect(box.x).toBeGreaterThan(lane.x);
-		expect(box.x + box.width).toBeLessThan(lane.x + lane.width);
+		await expect(node(page, '攝影機 CAM-04').locator('[title="CCTV"]')).toBeVisible();
 	});
 
 	test('情境 9：新增邊', async ({ page }) => {
@@ -215,11 +209,8 @@ test.describe('編輯', () => {
 
 	test('情境 8＋9：拖到空白處新增節點並連線', async ({ page }) => {
 		await only(page, ['空間', 'CCTV']);
-		const b = (await page
-			.locator('.svelte-flow__node-lane')
-			.filter({ hasText: 'CCTV' })
-			.boundingBox())!;
-		await drag(page, node(page, G), { x: b.x + b.width / 2, y: b.y + b.height - 20 });
+		const b = (await page.locator('.svelte-flow__pane').boundingBox())!;
+		await drag(page, node(page, G), { x: b.x + b.width / 2, y: b.y + b.height - 30 });
 		const m = page.getByRole('menu', { name: '新增節點並連線' });
 		await m.getByRole('menuitem', { name: '空間' }).hover();
 		await m.getByRole('menuitem', { name: '區域' }).click();
@@ -422,12 +413,11 @@ test.describe('編輯器操作', () => {
 			await expect(page.getByRole('checkbox', { name: s })).toBeChecked({ checked: s === '網路' });
 	});
 
-	test('右鍵泳道新增該系統節點', async ({ page }) => {
-		const lane = page.locator('.svelte-flow__node-lane').filter({ hasText: 'CCTV' });
-		// 標頭可能被跨泳道的邊蓋住，點泳道底部空白
-		const { height } = (await lane.boundingBox())!;
-		await lane.click({ button: 'right', position: { x: 10, y: height - 10 } });
-		await menu(page).getByRole('menuitem', { name: '新增攝影機' }).click();
+	test('右鍵空白處新增節點：自動命名、可直接改名', async ({ page }) => {
+		await page.locator('.svelte-flow__pane').click({ button: 'right', position: { x: 5, y: 5 } });
+		await menu(page).getByRole('menuitem', { name: '新增節點' }).hover();
+		await menu(page).getByRole('menuitem', { name: 'CCTV' }).hover();
+		await menu(page).getByRole('menuitem', { name: '攝影機' }).click();
 		await expect(graphNodes(page)).toHaveCount(45);
 		await expect(badge(page, '攝影機 1', '未處理')).toHaveCount(1);
 		await expect(detail(page).getByLabel('名稱', { exact: true })).toHaveValue('攝影機 1');
