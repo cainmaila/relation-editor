@@ -503,6 +503,22 @@ test.describe('編輯器操作', () => {
 		await expect(graphNodes(page)).toHaveCount(44);
 	});
 
+	test('雙擊疊卡只展開，不選到重排後的卡片', async ({ page }) => {
+		await stackToggle(page).click();
+		await fitAll(page);
+		await node(page, '機櫃 PDU ×8').dblclick();
+		await expect(graphNodes(page)).toHaveCount(44);
+		await expect(detail(page).getByLabel('名稱', { exact: true })).toHaveCount(0);
+	});
+
+	test('畫布選取收合分組內的節點，大綱自動展開該分組', async ({ page }) => {
+		const power = outline(page).getByRole('region', { name: '電力' });
+		await power.getByRole('button').first().click();
+		await expect(power.getByRole('button').first()).toHaveAttribute('aria-expanded', 'false');
+		await pick(page, '機櫃 PDU A-01-A');
+		await expect(power.getByRole('button').first()).toHaveAttribute('aria-expanded', 'true');
+	});
+
 	test('右鍵節點刪除需二次確認', async ({ page }) => {
 		await fitAll(page);
 		await node(page, '偵測器 SD-02').click({ button: 'right' });

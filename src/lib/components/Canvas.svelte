@@ -150,9 +150,22 @@
 		})
 	);
 
-	function nodeClick(id: string) {
-		if (editor.stacks.has(id)) editor.expand(id);
-		else if (editor.connecting) editor.startEdge(editor.connecting, id);
+	/** 這一下點擊展開了疊卡（雙擊的後半不該再選取／縮放重排後的卡片） */
+	let expandedByClick = false;
+
+	// 疊卡不存在了就忘掉展開記錄，免得之後同 key 重新成疊時直接展開
+	$effect(() => {
+		if (editor.expanded.some((k) => !editor.stacks.has(k)))
+			editor.expanded = editor.expanded.filter((k) => editor.stacks.has(k));
+	});
+
+	function nodeClick(id: string, detail: number) {
+		if (detail > 1 && expandedByClick) return;
+		expandedByClick = false;
+		if (editor.stacks.has(id)) {
+			expandedByClick = true;
+			editor.expand(id);
+		} else if (editor.connecting) editor.startEdge(editor.connecting, id);
 		else editor.select({ kind: 'node', id });
 	}
 
@@ -226,7 +239,7 @@
 		editor.connecting && 'cursor-crosshair [&_.svelte-flow__node]:cursor-crosshair'
 	]}
 	ondblclick={(e) => {
-		if ((e.target as HTMLElement).closest('.svelte-flow__node-graph') && focus)
+		if (!expandedByClick && (e.target as HTMLElement).closest('.svelte-flow__node-graph') && focus)
 			editor.fit([...focus.nodes]);
 	}}
 >
@@ -245,7 +258,7 @@
 		class={[editor.connecting && 'connecting', linking && 'linking']}
 		clickConnect={false}
 		connectionDragThreshold={6}
-		onnodeclick={({ node }) => nodeClick(node.id)}
+		onnodeclick={({ node, event }) => nodeClick(node.id, event.detail)}
 		onedgeclick={({ edge }) => edgeClick(edge.id)}
 		onpaneclick={() => editor.select(null)}
 		onnodepointerenter={({ node }) => hover(node.id)}

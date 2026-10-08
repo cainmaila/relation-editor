@@ -1,5 +1,6 @@
 <script lang="ts">
 	// 左欄大綱：搜尋、問題篩選、依系統分組的節點清單。點列＝選取並置中，滑過＝畫布亮起
+	import { tick, untrack } from 'svelte';
 	import type { Editor } from '#lib/editor.svelte.js';
 	import { SYSTEMS, nodeType } from '#lib/model/config.js';
 	import { SYSTEM_COLORS } from './Canvas.svelte';
@@ -46,11 +47,15 @@
 			.filter((g) => g.nodes.length)
 	);
 
-	// 畫布上選取時，大綱捲到該列
+	// 選取時，大綱展開所屬分組並捲到該列
 	$effect(() => {
 		const id = editor.selected?.kind === 'node' && editor.selected.id;
-		if (id)
-			list?.querySelector(`[data-id="${CSS.escape(id)}"]`)?.scrollIntoView({ block: 'nearest' });
+		if (!id) return;
+		const name = nodeType(editor.node(id)!.type).system ?? '通用';
+		untrack(() => (closed = closed.filter((x) => x !== name)));
+		tick().then(() =>
+			list?.querySelector(`[data-id="${CSS.escape(id)}"]`)?.scrollIntoView({ block: 'nearest' })
+		);
 	});
 </script>
 
