@@ -583,6 +583,13 @@ test.describe('手測回報', () => {
 		await expect(outline(page).getByRole('button', { name: 'Core Switch-1' })).toBeVisible();
 	});
 
+	test('文字本身沒命中時不怪問題篩選', async ({ page }) => {
+		await outline(page).getByLabel('篩選節點').fill('zzz');
+		await unprocessedChip(page).click();
+		await expect(outline(page)).toContainText('沒有符合的節點');
+		await expect(outline(page).getByRole('button', { name: '清除未處理篩選' })).toHaveCount(0);
+	});
+
 	test('新邊確認狀態預設推定（虛線），只能選已確認／推定', async ({ page }) => {
 		await addEdge(page, '偵測器 SD-01', '機櫃 A-03', '監測');
 		const s = detail(page).getByLabel('確認狀態');

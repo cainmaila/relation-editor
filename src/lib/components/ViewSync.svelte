@@ -22,20 +22,20 @@
 			});
 		});
 
+	// 系統變動整張入鏡。要宣告在視野請求之前：reveal() 同時勾回系統又請求置中時，置中排在後面才會生效
+	let first = true;
+	$effect(() => {
+		void editor.systems.join();
+		if (first) first = false;
+		else go([]);
+	});
+
 	$effect(() => {
 		// 收起的成員改對準它的堆疊卡
 		if (editor.view.seq) {
 			const owner = untrack(() => editor.canvas.owner);
 			go([...new Set(editor.view.ids.map((id) => owner.get(id) ?? id))]);
 		}
-	});
-
-	let first = true;
-	$effect(() => {
-		void editor.systems.join();
-		if (first) first = false;
-		// reveal() 順手勾回系統時，別蓋掉對選取節點的置中
-		else if (!untrack(() => editor.selected)) go([]);
 	});
 
 	// 面板收合／展開後畫布變寬：沒選東西時等寬度動畫完重新入鏡

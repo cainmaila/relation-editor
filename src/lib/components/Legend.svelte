@@ -48,7 +48,7 @@
 					<Icon name="broken" class="size-3.5 text-rose-300" />到不了客戶
 				</li>
 				<li class="col-span-2 text-slate-500">
-					承載（主機→所屬機框）只在選取主機、機框或找客戶時畫出
+					承載（主機→所屬機框）只在選取或滑過主機、機框，或找客戶時畫出
 				</li>
 			</ul>
 		</section>

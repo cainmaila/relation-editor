@@ -29,7 +29,8 @@
 
 	function addProp(props: Props) {
 		if (!propKey.trim()) return;
-		if (propKey.trim() === '確認狀態' && !CONFIRM_STATES.includes(propValue)) return;
+		if (propKey.trim() === '確認狀態' && !CONFIRM_STATES.includes(propValue))
+			return void (editor.message = `確認狀態只能是：${CONFIRM_STATES.join('、')}`);
 		props[propKey.trim()] = propValue;
 		propKey = propValue = '';
 	}
