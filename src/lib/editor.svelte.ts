@@ -19,6 +19,7 @@ import {
 	type CustomerResult
 } from './model/graph';
 import { graphMock, idcMock } from './model/mock';
+import { bigMock } from './model/bigMock';
 import type { Graph } from './model/types';
 
 export type Selection = { kind: 'node' | 'edge'; id: string } | null;
@@ -30,6 +31,10 @@ export type Menu = { x: number; y: number } & (
 	| { kind: 'connect'; from: string; to: string }
 	| { kind: 'drop'; from: string }
 );
+
+/** 效能實驗：讀網址參數（SSR 時沒有 window，回傳 false） */
+const spikeParam = (k: string) =>
+	typeof window !== 'undefined' && new URLSearchParams(window.location.search).has(k);
 
 let seq = 0;
 const uid = (p: string) => `${p}-${++seq}`;
@@ -65,7 +70,8 @@ export class Editor {
 	/** 大綱篩選文字 */
 	query = $state('');
 	/** 同類兄弟節點收成一疊（關掉＝全部展開） */
-	stacking = $state(true);
+	// 效能實驗：?nostack=1 關掉收疊（全部展開）
+	stacking = $state(!spikeParam('nostack'));
 	/** 手動展開的堆疊 key */
 	expanded = $state<string[]>([]);
 	/** 每加一就整張重新排版（編輯圖時既有節點不動） */
@@ -154,6 +160,8 @@ export class Editor {
 	}
 
 	static initial(): Graph {
+		// 效能實驗：?big=1 換成 10k 節點（僅 spike 分支）
+		if (spikeParam('big')) return bigMock();
 		const a = graphMock();
 		const b = idcMock();
 		return { nodes: [...a.nodes, ...b.nodes], edges: [...a.edges, ...b.edges] };

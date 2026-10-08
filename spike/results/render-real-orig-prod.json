@@ -1,0 +1,63 @@
+{
+  "summary": {
+    "label": "real-orig",
+    "query": "",
+    "runs": 1,
+    "domNodes": 1398,
+    "domEdges": 2697,
+    "domAllElements": 42466,
+    "tFirstMs": 9433,
+    "tSettledMs": 9438,
+    "heapIdleMB": 165.2,
+    "heapAfterMB": 173.9,
+    "wheelP95": 16.7,
+    "wheelMax": 33.4,
+    "wheelLongTaskMs": 0,
+    "panP95": 16.7,
+    "panMax": 16.7,
+    "panLongTaskMs": 0,
+    "hoverP95": 16.8,
+    "hoverMax": 16.8,
+    "hoverLongTaskMs": 0
+  },
+  "runs": [
+    {
+      "tFirst": 9432.79999999702,
+      "tSettled": 9437.5,
+      "dom": {
+        "nodes": 1398,
+        "edges": 2697,
+        "allElements": 42466
+      },
+      "heapIdle": 165.2,
+      "heapAfter": 173.9,
+      "wheel": {
+        "frames": 91,
+        "p50": 16.7,
+        "p95": 16.7,
+        "max": 33.4,
+        "over50ms": 0,
+        "longTasks": 0,
+        "longTaskTotalMs": 0
+      },
+      "pan": {
+        "frames": 72,
+        "p50": 16.7,
+        "p95": 16.7,
+        "max": 16.7,
+        "over50ms": 0,
+        "longTasks": 0,
+        "longTaskTotalMs": 0
+      },
+      "hover": {
+        "frames": 37,
+        "p50": 16.7,
+        "p95": 16.8,
+        "max": 16.8,
+        "over50ms": 0,
+        "longTasks": 0,
+        "longTaskTotalMs": 0
+      }
+    }
+  ]
+}

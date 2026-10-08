@@ -2,22 +2,16 @@
 import { CUSTOMER_TYPE, IDC_MESSAGE, ROOT_ID, edgeType, nodeType } from './config';
 import type { GEdge, GNode, Graph } from './types';
 
-/** 每個節點相連的邊（兩端都記）：走訪只看相連的邊，不掃全部 */
-const incident = (g: Graph) => {
-	const m = new Map<string, GEdge[]>();
-	const push = (id: string, e: GEdge) => m.get(id)?.push(e) ?? m.set(id, [e]);
-	for (const e of g.edges) (push(e.from, e), push(e.to, e));
-	return m;
-};
+const isCustomer = (g: Graph, id: string) =>
+	g.nodes.find((n) => n.id === id)?.type === CUSTOMER_TYPE;
 
 /** 不看方向連不到根節點的節點 */
 export function unprocessed(g: Graph): Set<string> {
 	const seen = new Set([ROOT_ID]);
 	const queue = [ROOT_ID];
-	const inc = incident(g);
-	for (let i = 0; i < queue.length; i++) {
-		const id = queue[i];
-		for (const e of inc.get(id) ?? []) {
+	while (queue.length) {
+		const id = queue.shift()!;
+		for (const e of g.edges) {
 			const other = e.from === id ? e.to : e.to === id ? e.from : null;
 			if (other && !seen.has(other)) {
 				seen.add(other);
@@ -37,10 +31,9 @@ const prev = (e: GEdge, id: string) =>
 function walk(g: Graph, starts: string[], step: (e: GEdge, id: string) => string | null) {
 	const seen = new Set(starts);
 	const queue = [...starts];
-	const inc = incident(g);
-	for (let i = 0; i < queue.length; i++) {
-		const id = queue[i];
-		for (const e of inc.get(id) ?? []) {
+	while (queue.length) {
+		const id = queue.shift()!;
+		for (const e of g.edges) {
 			const other = step(e, id);
 			if (other && !seen.has(other)) {
 				seen.add(other);
@@ -84,7 +77,7 @@ export function findCustomers(g: Graph, start: string): CustomerResult {
 			.map((e) => e.id)
 	);
 	const customers = g.nodes
-		.filter((n) => n.id !== start && nodes.has(n.id) && n.type === CUSTOMER_TYPE)
+		.filter((n) => n.id !== start && nodes.has(n.id) && isCustomer(g, n.id))
 		.map((n) => n.name);
 	return { customers, nodes, edges };
 }
@@ -138,18 +131,13 @@ export function stacks(g: Graph): Map<string, string[]> {
 		groups.set(key, [...(groups.get(key) ?? []), n.id]);
 	}
 	// 成員之間有邊會讓合併邊變自環，這類成員不收疊
-	const nbr = new Map<string, Set<string>>();
-	for (const e of g.edges) {
-		(nbr.get(e.from) ?? nbr.set(e.from, new Set()).get(e.from)!).add(e.to);
-		(nbr.get(e.to) ?? nbr.set(e.to, new Set()).get(e.to)!).add(e.from);
-	}
-	const linked = (ids: Set<string>, id: string) => [...(nbr.get(id) ?? [])].some((x) => ids.has(x));
+	const linked = (ids: string[], id: string) =>
+		g.edges.some(
+			(e) => (e.from === id && ids.includes(e.to)) || (e.to === id && ids.includes(e.from))
+		);
 	return new Map(
 		[...groups]
-			.map(([k, ids]) => {
-				const set = new Set(ids);
-				return [k, ids.filter((id) => !linked(set, id))] as const;
-			})
+			.map(([k, ids]) => [k, ids.filter((id) => !linked(ids, id))] as const)
 			.filter(([, ids]) => ids.length >= STACK_MIN)
 	);
 }
@@ -166,12 +154,11 @@ export type ViewEdge = GEdge & { members: string[] };
 export function collapse(g: Graph, closed: Map<string, string[]>) {
 	const owner = new Map<string, string>();
 	closed.forEach((ids, key) => ids.forEach((id) => owner.set(id, key)));
-	const byId = new Map(g.nodes.map((n) => [n.id, n]));
 	const at = (id: string) => owner.get(id) ?? id;
 	const nodes: GNode[] = [
 		...g.nodes.filter((n) => !owner.has(n.id)),
 		...[...closed].map(([id, ids]) => {
-			const type = byId.get(ids[0])!.type;
+			const type = g.nodes.find((n) => n.id === ids[0])!.type;
 			return { id, type, name: `${type} ×${ids.length}`, props: {} };
 		})
 	];
@@ -199,14 +186,8 @@ const COL_GAP = 96;
 export function layout(g: Graph) {
 	// 承載（主機→機框）與包含反向，排版時略過以免成環
 	const flow = g.edges.filter((e) => e.type !== '承載');
-	const inMap = new Map<string, string[]>();
-	const outMap = new Map<string, string[]>();
-	for (const e of flow) {
-		(inMap.get(e.to) ?? inMap.set(e.to, []).get(e.to)!).push(e.from);
-		(outMap.get(e.from) ?? outMap.set(e.from, []).get(e.from)!).push(e.to);
-	}
-	const into = (id: string) => inMap.get(id) ?? [];
-	const out = (id: string) => outMap.get(id) ?? [];
+	const into = (id: string) => flow.filter((e) => e.to === id).map((e) => e.from);
+	const out = (id: string) => flow.filter((e) => e.from === id).map((e) => e.to);
 
 	// 層級＝最長上游路徑；客戶固定放最後一欄
 	const layer = new Map<string, number>();

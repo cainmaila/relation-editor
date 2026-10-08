@@ -1,0 +1,30 @@
+[
+  {
+    "name": "real 2066",
+    "nodes": 2066,
+    "edges": 4020,
+    "stacks": 18,
+    "stackedMembers": 686,
+    "stacksMs": 99.5,
+    "collapseMs": 2.6,
+    "layoutCollapsedMs": 252.7,
+    "collapseExpandedMs": 1.7,
+    "layoutExpandedMs": 141.3,
+    "canvasNodesCollapsed": 1398,
+    "canvasNodesExpanded": 2066
+  },
+  {
+    "name": "bigMock 10k",
+    "nodes": 10330,
+    "edges": 20100,
+    "stacks": 90,
+    "stackedMembers": 3430,
+    "stacksMs": 841.2,
+    "collapseMs": 9,
+    "layoutCollapsedMs": 1969.5,
+    "collapseExpandedMs": 1.9,
+    "layoutExpandedMs": 3513.3,
+    "canvasNodesCollapsed": 6990,
+    "canvasNodesExpanded": 10330
+  }
+]
