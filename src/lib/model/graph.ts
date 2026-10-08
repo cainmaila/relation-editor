@@ -138,7 +138,7 @@ export interface LaneBox {
 	height: number;
 }
 
-/** 泳道排版：每個系統一欄，欄內依同系統邊的深度由上而下；同深度每列最多 COLS 個 */
+/** 泳道排版：每個系統一欄，欄內依同系統邊的深度由上而下；同深度每列最多 COLS 個，同深度只有一個的泳道用單欄 */
 export function layout(g: Graph, lanes: Lane[]) {
 	const pos = new Map<string, { x: number; y: number }>();
 	const boxes: LaneBox[] = [];
@@ -160,7 +160,11 @@ export function layout(g: Graph, lanes: Lane[]) {
 			return v;
 		};
 		members.forEach((n) => d(n.id));
-		const cols = lane === '通用' ? 1 : COLS;
+		const counts = [...depth.values()].reduce<number[]>(
+			(c, v) => ((c[v] = (c[v] ?? 0) + 1), c),
+			[]
+		);
+		const cols = Math.min(COLS, Math.max(1, ...counts.filter(Boolean)));
 		const width = cols * NODE_W + (cols - 1) * GAP + 2 * LANE_PAD;
 		let y = LANE_HEADER;
 		const maxDepth = Math.max(-1, ...depth.values());

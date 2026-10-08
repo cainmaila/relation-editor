@@ -1,0 +1,343 @@
+// PRD §6 情境 1–18 驗收
+import { expect, test, type Page } from '@playwright/test';
+
+const SYSTEMS = ['空間', '電力', '空調', '網路', '消防', 'CCTV', 'IDC'];
+const G = '2F A 區監視與偵測範圍';
+
+const node = (page: Page, name: string) =>
+	page.locator('.svelte-flow__node-graph').filter({ has: page.getByText(name, { exact: true }) });
+const graphNodes = (page: Page) => page.locator('.svelte-flow__node-graph');
+const graphEdges = (page: Page) => page.locator('.svelte-flow__edge');
+const dimmed = (page: Page) => page.locator('.svelte-flow__node-graph .opacity-20');
+const detail = (page: Page) => page.getByRole('complementary', { name: '詳情' });
+/** 詳情的「欄位 值」 */
+const field = (k: string, v: string) => new RegExp(`${k}\\s*${v}`);
+const TOTAL_EDGES = 70; // 圖 50 條＋IDC 20 條
+const status = (page: Page) => page.getByRole('status');
+const unprocessedList = (page: Page) => page.getByRole('region', { name: '未處理節點' });
+
+async function only(page: Page, systems: string[]) {
+	for (const s of SYSTEMS)
+		await page.getByRole('checkbox', { name: s }).setChecked(systems.includes(s));
+}
+const pick = (page: Page, name: string) => node(page, name).click();
+const clickPane = (page: Page) =>
+	page.locator('.svelte-flow__pane').click({ position: { x: 5, y: 5 } });
+
+async function addNode(page: Page, type: string, name: string) {
+	const f = page.getByRole('form', { name: '新增節點' });
+	await f.getByLabel('類型').selectOption(type);
+	await f.getByLabel('名稱').fill(name);
+	await f.getByRole('button', { name: '新增節點' }).click();
+}
+async function addEdge(page: Page, from: string, to: string, type: string) {
+	const f = page.getByRole('form', { name: '新增邊' });
+	await f.getByLabel('起點').selectOption({ label: from });
+	await f.getByLabel('終點').selectOption({ label: to });
+	await f.getByLabel('邊類型').selectOption(type);
+	await f.getByRole('button', { name: '新增邊' }).click();
+}
+/** 從詳情的連入／連出清單點選一條邊 */
+const pickEdge = (page: Page, label: string) =>
+	detail(page).getByRole('button', { name: label, exact: true }).click();
+async function findCustomers(page: Page, name: string) {
+	await pick(page, name);
+	await detail(page).getByRole('button', { name: '找客戶' }).click();
+	return page.getByRole('region', { name: '找客戶結果' }).getByRole('listitem').allTextContents();
+}
+
+test.beforeEach(async ({ page }) => {
+	await page.goto('/');
+	await expect(graphNodes(page)).toHaveCount(44);
+});
+
+test.describe('看圖', () => {
+	test('情境 1：一眼看懂整張圖', async ({ page }) => {
+		for (const s of SYSTEMS)
+			await expect(
+				page.locator('.svelte-flow__node-lane').getByRole('heading', { name: s, exact: true })
+			).toBeVisible();
+		await expect(node(page, '機櫃 A-01')).toContainText('機櫃');
+		await expect(node(page, G)).toBeVisible();
+		await expect(unprocessedList(page)).toContainText('未處理節點（0）');
+		await expect(page.getByText('未處理', { exact: true })).toHaveCount(0);
+	});
+
+	test('情境 2：系統內是二維', async ({ page }) => {
+		await only(page, ['電力']);
+		// 電力 11 個＋永遠顯示的通用節點
+		await expect(graphNodes(page)).toHaveCount(12);
+		await expect(graphEdges(page)).toHaveCount(10);
+		const y = async (n: string) => (await node(page, n).boundingBox())!.y;
+		expect(await y('台電市電')).toBeLessThan(await y('UPS-1'));
+		expect(await y('UPS-1')).toBeLessThan(await y('樓層 PDU 2F-A'));
+		expect(await y('樓層 PDU 2F-A')).toBeLessThan(await y('機櫃 PDU A-01-A'));
+		await only(page, ['空間']);
+		// 空間 8 個＋通用節點；7 條包含＋通用節點→機櫃 A-01、A-02
+		await expect(graphNodes(page)).toHaveCount(9);
+		await expect(graphEdges(page)).toHaveCount(9);
+	});
+
+	test('情境 3：系統相連就成為多維', async ({ page }) => {
+		await only(page, ['空間', '電力']);
+		await expect(graphEdges(page)).toHaveCount(9 + 10 + 8);
+		await only(page, ['空間', '電力', '空調']);
+		await expect(graphEdges(page)).toHaveCount(9 + 10 + 8 + 2);
+	});
+
+	test('情境 4：通用節點整理跨系統連線', async ({ page }) => {
+		await only(page, ['空間', '消防', 'CCTV']);
+		await pick(page, G);
+		await expect(detail(page)).toContainText('連入（3）');
+		await expect(detail(page)).toContainText('連出（2）');
+		await expect(detail(page).getByLabel('名稱', { exact: true })).toHaveValue(G);
+		await expect(detail(page).getByText('通用節點', { exact: true })).toBeVisible(); // 類型欄
+	});
+
+	test('情境 5：聚焦一個節點', async ({ page }) => {
+		await pick(page, '機櫃 A-01');
+		await expect(dimmed(page)).toHaveCount(44 - 8);
+		for (const n of [
+			'A 排',
+			'機櫃 PDU A-01-A',
+			'機櫃 PDU A-01-B',
+			G,
+			'機框 A-01-F1',
+			'機框 A-01-F2',
+			'ToR Switch A-01'
+		])
+			await expect(node(page, n).locator('.opacity-20')).toHaveCount(0);
+		await clickPane(page);
+		await expect(dimmed(page)).toHaveCount(0);
+	});
+
+	test('情境 6：一櫃多客戶', async ({ page }) => {
+		await only(page, ['空間', 'IDC']);
+		await pick(page, '機櫃 A-01');
+		await expect(detail(page).getByRole('button', { name: '包含：機框 A-01-F1' })).toBeVisible();
+		await expect(detail(page).getByRole('button', { name: '包含：機框 A-01-F2' })).toBeVisible();
+		await pick(page, '機框 A-01-F1');
+		await expect(detail(page).getByRole('button', { name: '包含：主機 H-01' })).toBeVisible();
+		await expect(detail(page).getByRole('button', { name: '服務：客戶甲' })).toBeVisible();
+		await pick(page, '機框 A-01-F2');
+		await expect(detail(page).getByRole('button', { name: '包含：主機 H-02' })).toBeVisible();
+		await expect(detail(page).getByRole('button', { name: '服務：客戶乙' })).toBeVisible();
+	});
+
+	test('情境 7：看節點與邊的詳情', async ({ page }) => {
+		await pick(page, '機櫃 PDU A-01-A');
+		await expect(detail(page)).toContainText(field('類型', '機櫃 PDU'));
+		await expect(detail(page)).toContainText(field('系統', '電力'));
+		await expect(detail(page).getByLabel('額定電流')).toHaveValue('32A');
+		await pickEdge(page, '供電：機櫃 A-01');
+		await expect(detail(page)).toContainText(field('類型', '供電'));
+		await expect(detail(page)).toContainText(field('起點', '機櫃 PDU A-01-A'));
+		await expect(detail(page)).toContainText(field('終點', '機櫃 A-01'));
+		await expect(detail(page).getByLabel('方向')).toHaveValue('單向');
+		await expect(detail(page).getByLabel('路別')).toHaveValue('A');
+		await expect(detail(page).getByLabel('確認狀態')).toHaveValue('已確認');
+		await pick(page, 'UPS-1');
+		await pickEdge(page, '供電：樓層 PDU 2F-A');
+		await expect(detail(page).getByLabel('確認狀態')).toHaveValue('推定');
+	});
+});
+
+test.describe('編輯', () => {
+	test('情境 8：新增節點', async ({ page }) => {
+		await page.getByRole('form', { name: '新增節點' }).getByRole('button').click();
+		await expect(status(page)).toHaveText('請選擇類型並填寫名稱');
+		await expect(graphNodes(page)).toHaveCount(44);
+		await addNode(page, '攝影機', '攝影機 CAM-04');
+		await expect(graphNodes(page)).toHaveCount(45);
+		await expect(node(page, '攝影機 CAM-04')).toContainText('未處理');
+		await expect(unprocessedList(page).getByRole('listitem')).toHaveText(['攝影機 CAM-04']);
+		const lane = (await page
+			.locator('.svelte-flow__node-lane')
+			.filter({ hasText: 'CCTV' })
+			.boundingBox())!;
+		const box = (await node(page, '攝影機 CAM-04').boundingBox())!;
+		expect(box.x).toBeGreaterThan(lane.x);
+		expect(box.x + box.width).toBeLessThan(lane.x + lane.width);
+	});
+
+	test('情境 9：新增邊', async ({ page }) => {
+		await addNode(page, '攝影機', '攝影機 CAM-04');
+		await addEdge(page, '攝影機 CAM-04', G, '監測');
+		await expect(detail(page)).toContainText(field('起點', '攝影機 CAM-04'));
+		await expect(detail(page).getByLabel('方向')).toHaveValue('單向');
+		await pick(page, G);
+		await expect(detail(page)).toContainText('連入（4）');
+		await expect(node(page, '攝影機 CAM-04')).not.toContainText('未處理');
+		await expect(unprocessedList(page)).toContainText('未處理節點（0）');
+	});
+
+	test('情境 9：拉線帶入起點終點', async ({ page }) => {
+		await addNode(page, '攝影機', '攝影機 CAM-04');
+		const src = node(page, '攝影機 CAM-04').locator('.svelte-flow__handle.source');
+		const dst = node(page, G).locator('.svelte-flow__handle.target');
+		const a = (await src.boundingBox())!;
+		const b = (await dst.boundingBox())!;
+		await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
+		await page.mouse.down();
+		await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2, { steps: 10 });
+		await page.mouse.up();
+		const f = page.getByRole('form', { name: '新增邊' });
+		await expect(f.getByLabel('起點').locator('option:checked')).toHaveText('攝影機 CAM-04');
+		await expect(f.getByLabel('終點').locator('option:checked')).toHaveText(G);
+		await expect(graphEdges(page)).toHaveCount(TOTAL_EDGES);
+		await f.getByLabel('邊類型').selectOption('監測');
+		await f.getByRole('button', { name: '新增邊' }).click();
+		await expect(graphEdges(page)).toHaveCount(TOTAL_EDGES + 1);
+	});
+
+	test('情境 10：違反連接限制時擋下', async ({ page }) => {
+		await addEdge(page, '機櫃 A-01', 'UPS-1', '供電');
+		await expect(status(page)).toHaveText('「供電」只能由電力設備連出');
+		await addEdge(page, '偵測器 SD-01', '客戶甲', '監測');
+		await expect(status(page)).toHaveText('「監測」只能連到空間或通用節點');
+		await expect(graphEdges(page)).toHaveCount(TOTAL_EDGES);
+	});
+
+	test('情境 11：修改節點與邊', async ({ page }) => {
+		await pick(page, '機櫃 PDU A-01-B');
+		await detail(page).getByLabel('額定電流').fill('16A');
+		await detail(page).getByLabel('屬性名稱').fill('品牌');
+		await detail(page).getByLabel('屬性值').fill('示意');
+		await detail(page).getByRole('button', { name: '新增屬性' }).click();
+		await expect(detail(page).getByLabel('額定電流')).toHaveValue('16A');
+		await expect(detail(page).getByLabel('品牌')).toHaveValue('示意');
+
+		await pick(page, 'Core Switch-1');
+		await pickEdge(page, '連線：匯聚 Switch AGG-A');
+		await detail(page).getByLabel('方向').selectOption('雙向');
+		await expect(detail(page).getByLabel('方向')).toHaveValue('雙向');
+		const edge = page
+			.locator('.svelte-flow__edge[data-id="連線:Core Switch-1>匯聚 Switch AGG-A"] path')
+			.first();
+		await expect(edge).toHaveAttribute('marker-start', /.+/);
+
+		await pick(page, '空調箱 AHU-2F-1');
+		await detail(page).getByLabel('名稱', { exact: true }).fill('空調箱 AHU-2F-01');
+		await expect(node(page, '空調箱 AHU-2F-01')).toBeVisible();
+		await expect(detail(page).getByLabel('名稱', { exact: true })).toHaveValue('空調箱 AHU-2F-01');
+	});
+
+	test('情境 12：刪除節點與邊', async ({ page }) => {
+		await pick(page, '偵測器 SD-02');
+		await detail(page).getByRole('button', { name: '刪除節點' }).click();
+		await expect(node(page, '偵測器 SD-02')).toHaveCount(0);
+		await pick(page, G);
+		await expect(detail(page)).toContainText('連入（2）');
+
+		await pick(page, '空調箱 AHU-2F-1');
+		await pickEdge(page, '冷卻：2F A 區');
+		await detail(page).getByRole('button', { name: '刪除邊' }).click();
+		await expect(node(page, '空調箱 AHU-2F-1')).not.toContainText('未處理');
+		await expect(node(page, '2F A 區')).toBeVisible();
+
+		await pick(page, 'Core Switch-2');
+		await pickEdge(page, '包含：2F A 區');
+		await detail(page).getByRole('button', { name: '刪除邊' }).click();
+		await pick(page, 'Core Switch-2');
+		await pickEdge(page, '連線：匯聚 Switch AGG-A');
+		await detail(page).getByRole('button', { name: '刪除邊' }).click();
+		await expect(unprocessedList(page).getByRole('listitem')).toHaveText(['Core Switch-2']);
+		await expect(node(page, '匯聚 Switch AGG-A')).not.toContainText('未處理');
+
+		await pick(page, '機櫃 A-01');
+		await detail(page).getByRole('button', { name: '刪除節點' }).click();
+		await expect(status(page)).toHaveText('機櫃底下有 IDC 資料，請先在 IDC機櫃配置管理移除機框');
+		await expect(node(page, '機櫃 A-01')).toBeVisible();
+		await expect(graphEdges(page)).toHaveCount(TOTAL_EDGES - 4);
+	});
+
+	test('情境 13：IDC 維護的資料不能改', async ({ page }) => {
+		await pick(page, '機框 A-01-F1');
+		await pickEdge(page, '服務：客戶甲');
+		await expect(detail(page).getByLabel('確認狀態')).toBeDisabled();
+		await expect(detail(page).getByLabel('方向')).toBeDisabled();
+		await expect(detail(page).getByRole('button', { name: '刪除邊' })).toBeDisabled();
+		await expect(detail(page)).toContainText('由 IDC機櫃配置管理維護');
+		await pick(page, '機櫃 A-01');
+		await pickEdge(page, '包含：機框 A-01-F1');
+		await expect(detail(page).getByRole('button', { name: '刪除邊' })).toBeDisabled();
+		await expect(detail(page)).toContainText('由 IDC機櫃配置管理維護');
+
+		for (const n of ['客戶甲', '主機 H-01']) {
+			await pick(page, n);
+			await expect(detail(page).getByLabel('名稱', { exact: true })).toBeDisabled();
+			await expect(detail(page).getByRole('button', { name: '刪除節點' })).toBeDisabled();
+			await expect(detail(page)).toContainText('由 IDC機櫃配置管理維護');
+		}
+		const types = page.getByRole('form', { name: '新增節點' }).getByLabel('類型');
+		for (const t of ['機框', '主機', '客戶'])
+			await expect(types.locator(`option[value="${t}"]`)).toHaveCount(0);
+
+		await pick(page, 'ToR Switch A-04');
+		await pickEdge(page, '連線：主機 H-05');
+		await detail(page).getByRole('button', { name: '刪除邊' }).click();
+		await pick(page, 'ToR Switch A-04');
+		await expect(detail(page).getByRole('button', { name: '連線：主機 H-05' })).toHaveCount(0);
+		await addEdge(page, 'ToR Switch A-04', '主機 H-05', '連線');
+		await expect(detail(page)).toContainText(field('終點', '主機 H-05'));
+	});
+
+	test('情境 14：不存檔', async ({ page }) => {
+		await addNode(page, '攝影機', '攝影機 CAM-04');
+		await expect(graphNodes(page)).toHaveCount(45);
+		await page.reload();
+		await expect(graphNodes(page)).toHaveCount(44);
+		await expect(node(page, '攝影機 CAM-04')).toHaveCount(0);
+	});
+});
+
+test.describe('找客戶', () => {
+	test('情境 15：從源頭找客戶', async ({ page }) => {
+		expect((await findCustomers(page, '台電市電')).sort()).toEqual(['客戶丙', '客戶乙', '客戶甲']);
+		for (const n of [
+			'UPS-1',
+			'樓層 PDU 2F-A',
+			'機櫃 PDU A-04-B',
+			'機櫃 A-04',
+			'機框 A-04-F1',
+			'空調箱 AHU-2F-1',
+			'2F A 區',
+			'A 排'
+		])
+			await expect(node(page, n).locator('.opacity-20')).toHaveCount(0);
+		await expect(node(page, '偵測器 SD-01').locator('.opacity-20')).toHaveCount(1);
+	});
+
+	test('情境 16：找到的客戶是精確的', async ({ page }) => {
+		expect(await findCustomers(page, '機櫃 PDU A-02-A')).toEqual(['客戶乙']);
+		expect((await findCustomers(page, '偵測器 SD-01')).sort()).toEqual(['客戶乙', '客戶甲']);
+		expect(await findCustomers(page, '主機 H-02')).toEqual(['客戶乙']);
+		expect((await findCustomers(page, 'Core Switch-1')).sort()).toEqual([
+			'客戶丙',
+			'客戶乙',
+			'客戶甲'
+		]);
+		expect(await findCustomers(page, 'ToR Switch A-02')).toEqual(['客戶乙']);
+	});
+
+	test('情境 17：標出到不了客戶的節點', async ({ page }) => {
+		await expect(page.getByText('到不了客戶', { exact: true })).toHaveCount(0);
+		await addNode(page, 'Switch', 'Switch B');
+		await addEdge(page, '匯聚 Switch AGG-A', 'Switch B', '連線');
+		await expect(node(page, 'Switch B')).not.toContainText('未處理');
+		await expect(node(page, 'Switch B')).toContainText('到不了客戶');
+		await addEdge(page, 'Switch B', '主機 H-03', '連線');
+		await expect(node(page, 'Switch B')).not.toContainText('到不了客戶');
+		expect(await findCustomers(page, 'Switch B')).toEqual(['客戶乙']);
+	});
+
+	test('情境 18：編輯後結果跟著變', async ({ page }) => {
+		await pick(page, '機櫃 PDU A-04-A');
+		await pickEdge(page, '供電：機櫃 A-04');
+		await detail(page).getByRole('button', { name: '刪除邊' }).click();
+		await expect(node(page, '機櫃 PDU A-04-A')).toContainText('到不了客戶');
+		await addNode(page, '攝影機', '攝影機 CAM-04');
+		await addEdge(page, '攝影機 CAM-04', G, '監測');
+		expect((await findCustomers(page, '攝影機 CAM-04')).sort()).toEqual(['客戶乙', '客戶甲']);
+	});
+});
