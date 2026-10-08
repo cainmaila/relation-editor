@@ -2,7 +2,7 @@
 	// 左欄大綱：搜尋、問題篩選、依系統分組的節點清單。點列＝選取並置中，滑過＝畫布亮起
 	import { tick, untrack } from 'svelte';
 	import type { Editor } from '#lib/editor.svelte.js';
-	import { SYSTEMS, nodeType } from '#lib/model/config.js';
+	import { SYSTEMS, UNREACHABLE_LABEL, nodeType } from '#lib/model/config.js';
 	import { SYSTEM_COLORS } from './Canvas.svelte';
 	import Icon from './Icon.svelte';
 
@@ -20,7 +20,7 @@
 		},
 		{
 			key: 'unreachable',
-			label: '無客戶路徑',
+			label: UNREACHABLE_LABEL,
 			icon: 'broken',
 			tone: 'text-rose-300',
 			on: 'border-rose-300/40 bg-rose-300/10 text-rose-100',

@@ -88,3 +88,6 @@ export const CONFIRM_STATES = ['已確認', '推定'];
 export const ROOT_ID = 'TPKC 大樓';
 export const CUSTOMER_TYPE = '客戶';
 export const IDC_MESSAGE = '由 IDC機櫃配置管理維護';
+
+/** 「沿方向走不到任何客戶」的顯示名稱；尚未與 PM 對齊，之後改這裡即可 */
+export const UNREACHABLE_LABEL = '無客戶路徑';

@@ -428,15 +428,16 @@ test.describe('編輯器操作', () => {
 		await expect(dimmed(page)).toHaveCount(0);
 	});
 
-	test('承載邊預設不畫，選到主機才畫，且由左往右不折回', async ({ page }) => {
-		const paths = page.locator('.svelte-flow__edge[data-id^="承載:"] path.svelte-flow__edge-path');
-		await expect(paths).toHaveCount(0);
+	test('主機與機框的包含、承載合併成一條雙向線', async ({ page }) => {
+		await expect(page.locator('.svelte-flow__edge[data-id^="承載:"]')).toHaveCount(0);
 		await pick(page, '主機 H-01');
-		await expect(paths).toHaveCount(1);
-		for (const d of await paths.evaluateAll((ps) => ps.map((p) => p.getAttribute('d')!))) {
-			const xs = [...d.matchAll(/(-?[\d.]+)[ ,](-?[\d.]+)/g)].map((m) => +m[1]);
-			expect(xs[0]).toBeLessThan(xs.at(-1)!);
-		}
+		await expect(page.locator('.svelte-flow__edge[data-id^="承載:"]')).toHaveCount(0);
+		const line = page.locator('.svelte-flow__edge[data-id^="包含:"] path.svelte-flow__edge-path');
+		const both = await line.evaluateAll(
+			(ps) =>
+				ps.filter((p) => p.getAttribute('marker-start') && p.getAttribute('marker-end')).length
+		);
+		expect(both).toBe(5);
 	});
 
 	test('⌘K 搜尋節點並選取', async ({ page }) => {
