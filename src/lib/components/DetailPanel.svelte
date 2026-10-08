@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Editor } from '#lib/editor.svelte.js';
-	import { IDC_MESSAGE, nodeType } from '#lib/model/config.js';
+	import { CONFIRM_STATES, IDC_MESSAGE, nodeType } from '#lib/model/config.js';
 	import type { Props } from '#lib/model/types.js';
 	import { EDGE_COLORS, SYSTEM_COLORS } from './Canvas.svelte';
 	import Icon from './Icon.svelte';
@@ -29,6 +29,7 @@
 
 	function addProp(props: Props) {
 		if (!propKey.trim()) return;
+		if (propKey.trim() === '確認狀態' && !CONFIRM_STATES.includes(propValue)) return;
 		props[propKey.trim()] = propValue;
 		propKey = propValue = '';
 	}
@@ -81,7 +82,13 @@
 			{#each Object.keys(props) as k (k)}
 				<dt class="text-xs text-slate-400">{k}</dt>
 				<dd>
-					<input aria-label={k} bind:value={props[k]} disabled={ro} class="field py-1" />
+					{#if k === '確認狀態'}
+						<select aria-label={k} bind:value={props[k]} disabled={ro} class="field py-1">
+							{#each CONFIRM_STATES as v (v)}<option>{v}</option>{/each}
+						</select>
+					{:else}
+						<input aria-label={k} bind:value={props[k]} disabled={ro} class="field py-1" />
+					{/if}
 				</dd>
 			{:else}
 				<p class="col-span-2 text-xs text-slate-500">尚無屬性</p>

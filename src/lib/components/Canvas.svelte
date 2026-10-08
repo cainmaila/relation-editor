@@ -37,7 +37,7 @@
 	import '@xyflow/svelte/dist/style.css';
 	import type { Editor } from '#lib/editor.svelte.js';
 	import { nodeType } from '#lib/model/config.js';
-	import { NODE_H, NODE_W, layout } from '#lib/model/graph.js';
+	import { NODE_H, NODE_W, layout, pin } from '#lib/model/graph.js';
 	import GraphNode from './GraphNode.svelte';
 	import Icon from './Icon.svelte';
 	import ViewSync from './ViewSync.svelte';
@@ -48,6 +48,16 @@
 
 	const view = $derived(editor.canvas);
 	const lay = $derived(layout(view));
+	/** 檢視操作（系統、收疊、重新排版）才整張重排；編輯圖時既有節點留在原位，免得畫面跳動 */
+	const viewKey = $derived(
+		[editor.systems.join(), editor.expanded.join(), editor.stacking, editor.relayout].join('/')
+	);
+	let last: { key: string; pos: ReturnType<typeof layout>['pos'] } | undefined;
+	const pos = $derived.by(() => {
+		const p = last?.key === viewKey ? pin(last.pos, lay.pos) : lay.pos;
+		last = { key: viewKey, pos: p };
+		return p;
+	});
 	/** 堆疊卡代表的節點；一般節點就是自己 */
 	const members = (id: string) => editor.stacks.get(id) ?? [id];
 
@@ -87,7 +97,7 @@
 				id: n.id,
 				connectable: !stack,
 				type: 'graph',
-				position: lay.pos.get(n.id)!,
+				position: pos.get(n.id)!,
 				width: NODE_W,
 				height: NODE_H,
 				data: {
@@ -101,8 +111,8 @@
 					unreachable: any(editor.unreachable),
 					dim: !!focus && !any(focus.nodes),
 					soft: !editor.selected && !editor.result && !editor.matched,
-					active: editor.selected?.id === n.id,
-					origin: editor.result !== null && editor.selected?.id === n.id,
+					active: !!editor.selected && ids.includes(editor.selected.id),
+					origin: editor.result !== null && !!editor.selected && ids.includes(editor.selected.id),
 					fresh: editor.fresh === n.id
 				}
 			};
@@ -117,9 +127,12 @@
 				e.members.some((id) => focus?.edges.has(id) || editor.hoverEdge === id) ||
 				editor.hoverEdge === e.id;
 			// 反向邊（例：承載 主機→機框）改由左畫到右、箭頭放起點，走卡片下方的 back 把手，不和同對節點的邊疊在一起
-			const back = lay.pos.get(e.from)!.x > lay.pos.get(e.to)!.x;
+			const back = pos.get(e.from)!.x > pos.get(e.to)!.x;
+			const animated = e.members.some((id) => editor.result?.edges.has(id));
 			return {
 				id: e.id,
+				// 承載與包含同一對節點反向，一直畫會像重複；只在相關時畫出
+				hidden: e.type === '承載' && !lit && !animated,
 				...(back
 					? {
 							source: e.to,
@@ -136,7 +149,7 @@
 							markerStart: e.bidirectional ? marker : undefined
 						}),
 				interactionWidth: 24,
-				animated: e.members.some((id) => editor.result?.edges.has(id)),
+				animated,
 				style: [
 					`stroke: ${color}`,
 					`stroke-width: ${lit ? 2.75 : 1.25}`,
@@ -212,7 +225,7 @@
 		linking || editor.menu
 			? null
 			: [editor.hoverNode, editor.selected?.kind === 'node' && editor.selected.id].find(
-					(id) => id && editor.node(id)
+					(id) => id && editor.node(id) && pos.has(id)
 				) || null
 	);
 </script>

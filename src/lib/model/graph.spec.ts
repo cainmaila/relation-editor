@@ -4,6 +4,7 @@ import {
 	collapse,
 	findCustomers,
 	layout,
+	pin,
 	NODE_W,
 	NODE_H,
 	stacks,
@@ -265,4 +266,25 @@ it('收疊：重複上游不影響分組，成員互連不收疊（避免自環�
 	expect([...stacks(g).values()]).toEqual([['a', 'b', 'c', 'd']]);
 	const v = collapse(g, stacks(g));
 	expect(v.edges.every((x) => x.from !== x.to)).toBe(true);
+});
+
+it('pin：既有節點沿用舊位置，新節點重疊時排到該欄最下方', () => {
+	const prev = new Map([
+		['a', { x: 0, y: 0 }],
+		['b', { x: 0, y: 100 }]
+	]);
+	const next = new Map([
+		['a', { x: 256, y: 50 }],
+		['b', { x: 0, y: 0 }],
+		['c', { x: 0, y: 0 }], // 和 a 重疊
+		['d', { x: 512, y: 0 }]
+	]);
+	expect(pin(prev, next)).toEqual(
+		new Map([
+			['a', { x: 0, y: 0 }],
+			['b', { x: 0, y: 100 }],
+			['c', { x: 0, y: 100 + NODE_H + 12 }],
+			['d', { x: 512, y: 0 }]
+		])
+	);
 });

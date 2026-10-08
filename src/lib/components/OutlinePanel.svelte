@@ -195,6 +195,12 @@
 				{#if issue && !editor.query.trim()}
 					<Icon name="check" class="size-3.5 text-emerald-400" />
 					<span class="text-emerald-300/90">{issue.ok}</span>
+				{:else if issue}
+					<span>「{editor.query.trim()}」裡沒有{issue.label}的節點</span>
+					<button
+						class="ml-auto text-sky-300 hover:text-sky-200"
+						onclick={() => (editor.issue = null)}>清除{issue.label}篩選</button
+					>
 				{:else}
 					沒有符合的節點
 				{/if}

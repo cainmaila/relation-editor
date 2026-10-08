@@ -174,7 +174,8 @@
 				keys: '⌘K',
 				run: done(() => (editor.dialog = 'search'))
 			},
-			{ label: '全部顯示', icon: 'fit', keys: '⇧1', run: done(() => editor.fit()) }
+			{ label: '全部顯示', icon: 'fit', keys: '⇧1', run: done(() => editor.fit()) },
+			{ label: '重新排版', icon: 'fit', run: done(() => editor.relayout++) }
 		];
 	});
 

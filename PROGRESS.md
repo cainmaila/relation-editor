@@ -1,5 +1,18 @@
 # PROGRESS
 
+## 手測 6 項修正（分支 fix/manual-test-6）
+
+- **Goal:** 修使用者手測 6 項；計畫 `~/.claude/plans/pasted-content-id-cc19-1-parallel-liskov.md`
+- **Done（已驗證，e2e 38 項、unit 24 項、check／lint／build 全綠）:**
+  - #1 `select()` 清 `hoverEdge`（詳情欄邊列卸載收不到 mouseleave）
+  - #2 選取不再改排版：拿掉「選取中不收疊」、`reveal()` 不自動展開，收起的成員改亮疊卡；編輯圖時既有節點沿用位置（`graph.ts` `pin`），系統／收疊／展開變動或空白右鍵「重新排版」（`editor.relayout`）才整張重排
+  - #3 `ViewSync` 一律走 `fitView`（排隊只留最後一次），系統 effect 有選取時不整圖入鏡
+  - #4 大綱文字＋問題篩選無結果時說明並給「清除○○篩選」鈕
+  - #5 承載邊預設 `hidden`，選取／滑過端點或在找客戶路徑上才畫；圖例補說明
+  - #6 確認狀態改下拉（`config.ts` `CONFIRM_STATES`），新邊預設「推定」
+- **Todo:** 使用者手測；開 PR
+- **Notes:** 建邊後可能有往左折的邊，要「重新排版」才整齊；編輯導致疊卡 key 消失時，`expanded` 清除會觸發一次整張重排
+
 ## 節點編輯器 POC（PRD v0.2）
 
 - **Goal:** PRD §6 情境 1–18 全部通過。計畫：`~/.claude/plans/users-cain-01-fet-tpkc-tpkc-pd-docs-doc-fizzy-honey.md`
@@ -22,7 +35,6 @@
   - 大綱是平清單，未依包含關係縮排
   - 邊 hover 顯示「推定」
   - 瀏覽器手測：通用節點任意連線；圖例卡限寬（PR #3）後在小視窗是否仍與 Controls／MiniMap 重疊（只依 CSS 推算，未目視）
-  - 疊卡修正（PR #1、#2）只有 unit／e2e 覆蓋，「選取成員時整疊展開、取消選取收回」的手感待手測
   - `expanded` 過期 key 清除（PR #2）沒有專屬測試
 - **Next:** 使用者討論
 - **Notes:**

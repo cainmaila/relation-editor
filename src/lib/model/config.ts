@@ -82,6 +82,9 @@ export const EDGE_TYPES: EdgeType[] = [
 
 export const edgeType = (name: string) => EDGE_TYPES.find((t) => t.name === name)!;
 
+/** 邊屬性「確認狀態」的可選值 */
+export const CONFIRM_STATES = ['已確認', '推定'];
+
 export const ROOT_ID = 'TPKC 大樓';
 export const CUSTOMER_TYPE = '客戶';
 export const IDC_MESSAGE = '由 IDC機櫃配置管理維護';

@@ -67,6 +67,8 @@ export class Editor {
 	stacking = $state(true);
 	/** 手動展開的堆疊 key */
 	expanded = $state<string[]>([]);
+	/** 每加一就整張重新排版（編輯圖時既有節點不動） */
+	relayout = $state(0);
 
 	unprocessed = $derived(unprocessed(this.graph));
 	unreachable = $derived(unreachable(this.graph));
@@ -101,16 +103,7 @@ export class Editor {
 		collapse(
 			this.visible,
 			// eslint-disable-next-line svelte/prefer-svelte-reactivity -- derived 每次重建，不需響應
-			new Map(
-				this.stacking
-					? [...this.stacks].filter(
-							([k, ids]) =>
-								!this.expanded.includes(k) &&
-								// 選取中的節點不可被收進疊卡
-								!(this.selected?.kind === 'node' && ids.includes(this.selected.id))
-						)
-					: []
-			)
+			new Map(this.stacking ? [...this.stacks].filter(([k]) => !this.expanded.includes(k)) : [])
 		)
 	);
 
@@ -148,6 +141,8 @@ export class Editor {
 		this.message = '';
 		this.connecting = null;
 		this.armDelete = null;
+		// 詳情欄的邊列會在選取改變時卸載，收不到 mouseleave
+		this.hoverEdge = null;
 	}
 
 	/** 縮放到指定節點；空陣列＝全部 */
@@ -155,12 +150,10 @@ export class Editor {
 		this.view = { ids, seq: this.view.seq + 1 };
 	}
 
-	/** 選取並置中；節點所屬系統沒勾就順手勾上 */
+	/** 選取並置中；節點所屬系統沒勾就順手勾上。收起的成員不展開（免得整張重排），改亮它的疊卡 */
 	reveal(id: string) {
 		const s = nodeType(this.node(id)!.type).system;
 		if (s && !this.systems.includes(s)) this.systems.push(s);
-		const k = this.stackOf(id);
-		if (k && !this.expanded.includes(k)) this.expanded.push(k);
 		this.select({ kind: 'node', id });
 		this.fit([id]);
 	}
@@ -209,7 +202,15 @@ export class Editor {
 		const err = validateEdge(this.graph, from, to, type);
 		if (err) return this.fail(err);
 		const id = uid('e');
-		this.graph.edges.push({ id, type, from, to, bidirectional: false, props: {} });
+		// 編輯器手拉的邊沒有資料來源，依 PRD 定義為推定
+		this.graph.edges.push({
+			id,
+			type,
+			from,
+			to,
+			bidirectional: false,
+			props: { 確認狀態: '推定' }
+		});
 		this.draft = { from: '', to: '', type: '' };
 		this.dialog = null;
 		this.select({ kind: 'edge', id });
