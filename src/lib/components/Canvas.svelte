@@ -80,15 +80,15 @@
 				m && {
 					nodes: m,
 					edges: new Set(
-						editor.visible.edges.filter((e) => m.has(e.from) && m.has(e.to)).map((e) => e.id)
+						editor.editVisible.edges.filter((e) => m.has(e.from) && m.has(e.to)).map((e) => e.id)
 					)
 				}
 			);
 		const ids = members(s.id);
 		const edges =
 			s.kind === 'node'
-				? editor.visible.edges.filter((e) => ids.includes(e.from) || ids.includes(e.to))
-				: editor.visible.edges.filter((e) => e.id === s.id);
+				? editor.editVisible.edges.filter((e) => ids.includes(e.from) || ids.includes(e.to))
+				: editor.editVisible.edges.filter((e) => e.id === s.id);
 		return {
 			nodes: new Set([...(s.kind === 'node' ? ids : []), ...edges.flatMap((e) => [e.from, e.to])]),
 			edges: new Set(edges.map((e) => e.id))
@@ -348,6 +348,13 @@
 			nodeBorderRadius={4}
 		/>
 		<ViewSync {editor} />
+		{#if editor.working.length === 0}
+			<p
+				class="pointer-events-none absolute inset-0 z-10 grid place-items-center px-6 text-center text-sm text-slate-400"
+			>
+				編輯頁是空的：用 ⌘K 搜尋節點加入，或到全圖選取節點加入
+			</p>
+		{/if}
 		{#if toolbarNode}
 			{@const n = editor.node(toolbarNode)}
 			<NodeToolbar nodeId={toolbarNode} isVisible position={Position.Top} offset={6}>
@@ -357,7 +364,6 @@
 					onpointerenter={() => hover(toolbarNode)}
 					onpointerleave={() => hover(null)}
 				>
-					{@render tool('找客戶（F）', 'target', () => editor.findCustomers(toolbarNode))}
 					{@render tool('連到…（或直接拖曳卡片到目標）', 'link', () => {
 						editor.select({ kind: 'node', id: toolbarNode });
 						editor.connecting = toolbarNode;

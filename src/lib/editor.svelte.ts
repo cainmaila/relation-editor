@@ -110,11 +110,6 @@ export class Editor {
 		return { nodes, edges: this.graph.edges.filter((e) => ids.has(e.from) && ids.has(e.to)) };
 	});
 
-	/** 暫時別名，T3–T5 決定各使用處歸屬後移除 */
-	get visible() {
-		return this.graphVisible;
-	}
-
 	/** 編輯頁的圖：working 內的節點，邊兩端都在才留 */
 	editVisible = $derived.by(() => {
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- 只在 derived 內查詢用，不需響應

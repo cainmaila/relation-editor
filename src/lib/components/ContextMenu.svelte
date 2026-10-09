@@ -67,12 +67,10 @@
 	const items = $derived.by((): Item[] => {
 		if (m.kind === 'node') {
 			const n = editor.node(m.id)!;
-			const s = nodeType(n.type).system;
 			const count = editor.graph.edges.filter((e) => e.from === n.id || e.to === n.id).length;
 			const block = editor.deleteBlock(n.id);
 			const k = editor.stacking ? editor.stackOf(n.id) : undefined;
 			return [
-				{ label: '找客戶', icon: 'target', keys: 'F', run: done(() => editor.findCustomers(n.id)) },
 				{
 					label: '連到…',
 					icon: 'link',
@@ -87,13 +85,12 @@
 					icon: 'focus',
 					run: done(() => {
 						editor.select({ kind: 'node', id: n.id });
-						const near = editor.visible.edges
+						const near = editor.editVisible.edges
 							.filter((e) => e.from === n.id || e.to === n.id)
 							.flatMap((e) => [e.from, e.to]);
 						editor.fit([n.id, ...near]);
 					})
 				},
-				...(s ? [{ label: `只看${s}`, icon: 'solo', run: done(() => editor.solo(s)) }] : []),
 				...(k
 					? [
 							{

@@ -14,8 +14,8 @@
 		editor.selected?.kind === 'edge' ? editor.edge(editor.selected.id) : undefined
 	);
 	const ro = $derived(!!(node ?? edge)?.readonly);
-	const incoming = $derived(node ? editor.visible.edges.filter((e) => e.to === node.id) : []);
-	const outgoing = $derived(node ? editor.visible.edges.filter((e) => e.from === node.id) : []);
+	const incoming = $derived(node ? editor.graph.edges.filter((e) => e.to === node.id) : []);
+	const outgoing = $derived(node ? editor.graph.edges.filter((e) => e.from === node.id) : []);
 	const nodeEdges = $derived(
 		node ? editor.graph.edges.filter((e) => e.from === node.id || e.to === node.id).length : 0
 	);
@@ -43,13 +43,12 @@
 	const TIPS = [
 		['drag', '拖曳建立關聯', '把一張卡片拖到另一張；拖到空白處可順手新增節點'],
 		['mouse', '右鍵', '節點、邊、空白處都有就地選單'],
-		['target', '滑過節點', '浮出工具列：找客戶、連到、聚焦、刪除']
+		['target', '滑過節點', '浮出工具列：連到、聚焦、刪除']
 	];
 	const SHORTCUTS = [
 		['⌘K', '搜尋節點'],
 		['N', '新增節點'],
 		['E', '新增邊'],
-		['F', '對選取節點找客戶'],
 		['Delete', '刪除選取'],
 		['Esc', '取消選取／關閉'],
 		['⇧1', '全部顯示'],
@@ -127,10 +126,10 @@
 		<h3 class="mb-2 eyebrow">{title}（{list.length}）</h3>
 		<ul class="flex flex-col gap-1">
 			{#each list as e (e.id)}
-				<li>
+				<li class="flex items-center gap-1">
 					<button
 						aria-label="{e.type}：{nameOf(e[other])}"
-						class="group flex w-full items-center gap-2 rounded-md border border-white/6 bg-white/2 px-2.5 py-1.5 text-left text-xs transition-colors hover:border-white/15 hover:bg-white/5"
+						class="group flex min-w-0 flex-1 items-center gap-2 rounded-md border border-white/6 bg-white/2 px-2.5 py-1.5 text-left text-xs transition-colors hover:border-white/15 hover:bg-white/5"
 						onclick={() => editor.select({ kind: 'edge', id: e.id })}
 						onmouseenter={() => (editor.hoverEdge = e.id)}
 						onmouseleave={() => (editor.hoverEdge = null)}
@@ -146,6 +145,15 @@
 								><Icon name="swap" class="size-3" /></span
 							>{/if}
 					</button>
+					{#if editor.working.includes(e[other])}
+						<span class="shrink-0 text-[11px] text-slate-500">已在編輯頁</span>
+					{:else}
+						<button
+							class="btn-ghost shrink-0 px-2 py-1 text-[11px]"
+							aria-label="加入編輯頁：{nameOf(e[other])}"
+							onclick={() => editor.addToWork([e[other]])}>加入編輯頁</button
+						>
+					{/if}
 				</li>
 			{:else}
 				<li class="text-xs text-slate-500">無</li>
@@ -245,14 +253,6 @@
 		{/if}
 
 		<div class="flex items-center gap-1 px-5 py-3">
-			<button
-				class="btn-primary px-2.5"
-				aria-label="找客戶"
-				title="找客戶：它壞了影響哪些客戶（F）"
-				onclick={() => editor.findCustomers(node.id)}
-			>
-				<Icon name="target" />找客戶
-			</button>
 			{@render act(
 				'連到…',
 				'連到…：再點目標節點（或直接拖曳卡片）',
@@ -261,9 +261,12 @@
 				editor.connecting === node.id
 			)}
 			{@render act('聚焦鄰居', '聚焦鄰居（雙擊節點）', 'focus', () =>
-				editor.fit([node.id, ...incoming.map((e) => e.from), ...outgoing.map((e) => e.to)])
+				editor.fit(
+					[node.id, ...incoming.map((e) => e.from), ...outgoing.map((e) => e.to)].filter((id) =>
+						editor.working.includes(id)
+					)
+				)
 			)}
-			{#if sys}{@render act('只看此系統', `只看${sys}`, 'solo', () => editor.solo(sys))}{/if}
 			{#if editor.armDelete !== node.id}
 				<button
 					class="ml-auto grid size-8 place-items-center rounded-md text-rose-300 transition-colors hover:bg-rose-500/15 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent"

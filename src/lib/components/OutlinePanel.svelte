@@ -36,13 +36,13 @@
 	const issue = $derived(ISSUES.find((i) => i.key === editor.issue));
 	const filtering = $derived(!!editor.matched);
 	/** 只看文字有沒有命中（判斷空結果是不是問題篩選造成的） */
-	const textHits = $derived(editor.graph.nodes.some((n) => editor.byText(n.name)));
+	const textHits = $derived(editor.editVisible.nodes.some((n) => editor.byText(n.name)));
 	const groups = $derived(
 		[...SYSTEMS, null]
 			.map((s) => ({
 				s,
 				name: s ?? '通用',
-				nodes: editor.graph.nodes.filter(
+				nodes: editor.editVisible.nodes.filter(
 					(n) => nodeType(n.type).system === s && (!editor.matched || editor.matched.has(n.id))
 				)
 			}))
@@ -107,7 +107,6 @@
 	<div bind:this={list} class="min-h-0 flex-1 overflow-y-auto py-1">
 		{#each groups as g (g.name)}
 			{@const open = filtering || !closed.includes(g.name)}
-			{@const shown = !g.s || editor.systems.includes(g.s)}
 			<section aria-label={g.name}>
 				<div
 					class="group/h sticky top-0 z-10 flex items-center bg-ink-900/95 pr-2 backdrop-blur"
@@ -125,33 +124,10 @@
 							name="chevron"
 							class={['size-3 text-slate-600 transition-transform', open && 'rotate-90']}
 						/>
-						<span class={shown ? 'text-(--c)' : 'text-slate-600'}
-							><Icon name={g.name} class="size-3.5" /></span
-						>
-						<span class={shown ? '' : 'text-slate-500'}>{g.name}</span>
+						<span class="text-(--c)"><Icon name={g.name} class="size-3.5" /></span>
+						<span>{g.name}</span>
 						<span class="font-mono text-[10px] text-slate-600">{g.nodes.length}</span>
 					</button>
-					{#if g.s}
-						{@const s = g.s}
-						<button
-							class={[
-								'grid size-6 place-items-center rounded transition-opacity hover:bg-white/8',
-								shown
-									? 'text-slate-400 opacity-0 group-hover/h:opacity-100 focus:opacity-100'
-									: 'text-slate-600'
-							]}
-							aria-label="顯示{s}"
-							aria-pressed={shown}
-							title="{shown ? '隱藏' : '顯示'}{s}（⌥＋點：只看{s}）"
-							onclick={(e) => {
-								if (e.altKey) editor.solo(s);
-								else if (shown) editor.systems = editor.systems.filter((x) => x !== s);
-								else editor.systems.push(s);
-							}}
-						>
-							<Icon name={shown ? 'solo' : 'eye-off'} class="size-3.5" />
-						</button>
-					{/if}
 				</div>
 				{#if open}
 					<ul>
@@ -164,13 +140,11 @@
 										'relative flex w-full items-center gap-2 py-1 pr-3 pl-8 text-left text-xs transition-colors',
 										sel
 											? 'bg-sky-400/12 text-slate-50 before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:bg-sky-400'
-											: shown
-												? 'text-slate-300 hover:bg-white/4 hover:text-slate-50'
-												: 'text-slate-500 hover:bg-white/4'
+											: 'text-slate-300 hover:bg-white/4 hover:text-slate-50'
 									]}
 									title={n.type}
 									onclick={() => editor.reveal(n.id)}
-									onpointerenter={() => shown && (editor.hoverNode = n.id)}
+									onpointerenter={() => (editor.hoverNode = n.id)}
 									onpointerleave={() => (editor.hoverNode = null)}
 								>
 									<span class="truncate">{n.name}</span>

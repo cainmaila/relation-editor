@@ -16,7 +16,8 @@
 
 	function go(id: string) {
 		editor.dialog = null;
-		editor.reveal(id);
+		// 超過上限時 addToWork 已設 message；不 reveal（會清掉提示）
+		if (editor.addToWork([id])) editor.reveal(id);
 	}
 
 	function key(e: KeyboardEvent) {
