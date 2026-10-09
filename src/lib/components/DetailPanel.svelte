@@ -13,7 +13,10 @@
 	const edge = $derived(
 		editor.selected?.kind === 'edge' ? editor.edge(editor.selected.id) : undefined
 	);
-	const ro = $derived(!!(node ?? edge)?.readonly);
+	/** 全圖只讀 */
+	const graph = $derived(editor.page === 'graph');
+	const idc = $derived(!!(node ?? edge)?.readonly);
+	const ro = $derived(idc || graph);
 	const incoming = $derived(node ? editor.graph.edges.filter((e) => e.to === node.id) : []);
 	const outgoing = $derived(node ? editor.graph.edges.filter((e) => e.from === node.id) : []);
 	const nodeEdges = $derived(
@@ -35,27 +38,42 @@
 		propKey = propValue = '';
 	}
 
+	function addWork(ids: string[]) {
+		if (editor.addToWork(ids)) editor.message = '已加入編輯頁';
+	}
+
 	function removeNode(id: string) {
 		if (nodeEdges && editor.armDelete !== id) editor.armDelete = id;
 		else editor.deleteNode(id);
 	}
 
-	const TIPS = [
-		['drag', '拖曳建立關聯', '把一張卡片拖到另一張；拖到空白處可順手新增節點'],
-		['mouse', '右鍵', '節點、邊、空白處都有就地選單'],
-		['target', '滑過節點', '浮出工具列：連到、聚焦、刪除']
-	];
-	const SHORTCUTS = [
+	const TIPS = $derived(
+		graph
+			? [
+					['mouse', '點節點', '看詳情與鄰居；找客戶、加入編輯頁都從詳情欄操作'],
+					['solo', '系統開關', '頂列切換要看的系統（⌥＋點：只看該系統）']
+				]
+			: [
+					['drag', '拖曳建立關聯', '把一張卡片拖到另一張；拖到空白處可順手新增節點'],
+					['mouse', '右鍵', '節點、邊、空白處都有就地選單'],
+					['target', '滑過節點', '浮出工具列：連到、聚焦、刪除']
+				]
+	);
+	const SHORTCUTS = $derived([
 		['⌘K', '搜尋節點'],
-		['N', '新增節點'],
-		['E', '新增邊'],
-		['Delete', '刪除選取'],
+		...(graph
+			? [['F', '對選取節點找客戶']]
+			: [
+					['N', '新增節點'],
+					['E', '新增邊'],
+					['Delete', '刪除選取']
+				]),
 		['Esc', '取消選取／關閉'],
 		['⇧1', '全部顯示'],
 		['⌘B / ⌘I', '收合左／右欄'],
 		['⌘.', '專注模式'],
-		['?', '圖例']
-	];
+		...(graph ? [] : [['?', '圖例']])
+	]);
 </script>
 
 {#snippet act(label: string, tip: string, icon: string, run: () => void, on = false)}
@@ -151,7 +169,7 @@
 						<button
 							class="btn-ghost shrink-0 px-2 py-1 text-[11px]"
 							aria-label="加入編輯頁：{nameOf(e[other])}"
-							onclick={() => editor.addToWork([e[other]])}>加入編輯頁</button
+							onclick={() => addWork([e[other]])}>加入編輯頁</button
 						>
 					{/if}
 				</li>
@@ -235,49 +253,81 @@
 			/>
 		</header>
 
-		{#if ro}{@render idcBanner()}{/if}
+		{#if idc}{@render idcBanner()}{/if}
 		{#if editor.unprocessed.has(node.id)}
 			<p
 				class="mx-5 mb-1 flex gap-2 rounded-md border border-yellow-400/25 bg-yellow-400/5 px-3 py-2 text-xs leading-relaxed text-yellow-200"
 			>
 				<Icon name="warn" class="mt-0.5 size-3.5" />
-				<span>未處理：把這張卡片拖到主圖上的節點，就能接上「TPKC 大樓」。</span>
+				<span
+					>未處理：{graph
+						? '沒連到「TPKC 大樓」，加入編輯頁後補邊。'
+						: '把這張卡片拖到主圖上的節點，就能接上「TPKC 大樓」。'}</span
+				>
 			</p>
 		{:else if editor.unreachable.has(node.id)}
 			<p
 				class="mx-5 mb-1 flex gap-2 rounded-md border border-rose-500/25 bg-rose-500/5 px-3 py-2 text-xs leading-relaxed text-rose-200"
 			>
 				<Icon name="broken" class="mt-0.5 size-3.5" />
-				<span>{UNREACHABLE_LABEL}：拖到下游節點補一條邊即可接上。</span>
+				<span
+					>{UNREACHABLE_LABEL}：{graph
+						? '沿方向走不到客戶，加入編輯頁後補邊。'
+						: '拖到下游節點補一條邊即可接上。'}</span
+				>
 			</p>
 		{/if}
 
 		<div class="flex items-center gap-1 px-5 py-3">
-			{@render act(
-				'連到…',
-				'連到…：再點目標節點（或直接拖曳卡片）',
-				'link',
-				() => (editor.connecting = editor.connecting === node.id ? null : node.id),
-				editor.connecting === node.id
-			)}
+			{#if graph}
+				<button
+					class="btn-primary px-2.5"
+					aria-label="找客戶"
+					title="找客戶：它壞了影響哪些客戶（F）"
+					onclick={() => editor.findCustomers(node.id)}
+				>
+					<Icon name="target" />找客戶
+				</button>
+			{:else}
+				{@render act(
+					'連到…',
+					'連到…：再點目標節點（或直接拖曳卡片）',
+					'link',
+					() => (editor.connecting = editor.connecting === node.id ? null : node.id),
+					editor.connecting === node.id
+				)}
+			{/if}
 			{@render act('聚焦鄰居', '聚焦鄰居（雙擊節點）', 'focus', () =>
 				editor.fit(
-					[node.id, ...incoming.map((e) => e.from), ...outgoing.map((e) => e.to)].filter((id) =>
-						editor.working.includes(id)
+					[node.id, ...incoming.map((e) => e.from), ...outgoing.map((e) => e.to)].filter(
+						(id) => graph || editor.working.includes(id)
 					)
 				)
 			)}
-			{#if editor.armDelete !== node.id}
-				<button
-					class="ml-auto grid size-8 place-items-center rounded-md text-rose-300 transition-colors hover:bg-rose-500/15 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent"
-					aria-label="刪除節點"
-					title={block ? `無法刪除：${block}` : '刪除節點（⌫）'}
-					disabled={!!block}
-					onclick={() => removeNode(node.id)}><Icon name="trash" /></button
-				>
+			{#if graph}
+				{#if sys}{@render act('只看此系統', `只看${sys}`, 'solo', () => editor.solo(sys))}{/if}
+				{#if editor.working.includes(node.id)}
+					<span class="ml-auto text-[11px] text-slate-500">已在編輯頁</span>
+				{:else}
+					<button
+						class="ml-auto btn-ghost px-2 py-1 text-xs"
+						aria-label="加入編輯頁"
+						onclick={() => addWork([node.id])}>加入編輯頁</button
+					>
+				{/if}
+			{:else}
+				{#if editor.armDelete !== node.id}
+					<button
+						class="ml-auto grid size-8 place-items-center rounded-md text-rose-300 transition-colors hover:bg-rose-500/15 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent"
+						aria-label="刪除節點"
+						title={block ? `無法刪除：${block}` : '刪除節點（⌫）'}
+						disabled={!!block}
+						onclick={() => removeNode(node.id)}><Icon name="trash" /></button
+					>
+				{/if}
 			{/if}
 		</div>
-		{#if editor.armDelete === node.id}
+		{#if editor.armDelete === node.id && !graph}
 			<div
 				role="alertdialog"
 				aria-label="確認刪除"
@@ -342,16 +392,18 @@
 				</dd>
 			</dl>
 		</header>
-		{#if ro}{@render idcBanner()}{/if}
-		<div class="flex px-5 py-3">
-			<button
-				class="ml-auto grid size-8 place-items-center rounded-md text-rose-300 transition-colors hover:bg-rose-500/15 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent"
-				aria-label="刪除邊"
-				title={ro ? IDC_MESSAGE : '刪除邊（⌫）'}
-				disabled={ro}
-				onclick={() => editor.deleteEdge(edge.id)}><Icon name="trash" /></button
-			>
-		</div>
+		{#if idc}{@render idcBanner()}{/if}
+		{#if !graph}
+			<div class="flex px-5 py-3">
+				<button
+					class="ml-auto grid size-8 place-items-center rounded-md text-rose-300 transition-colors hover:bg-rose-500/15 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent"
+					aria-label="刪除邊"
+					title={ro ? IDC_MESSAGE : '刪除邊（⌫）'}
+					disabled={ro}
+					onclick={() => editor.deleteEdge(edge.id)}><Icon name="trash" /></button
+				>
+			</div>
+		{/if}
 		{@render propsEditor('edge', edge.id, edge.props)}
 	{:else}
 		<div class="flex flex-1 flex-col px-5 py-6">

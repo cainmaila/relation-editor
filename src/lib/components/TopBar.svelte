@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { Editor } from '#lib/editor.svelte.js';
+	import { WORK_LIMIT, type Editor } from '#lib/editor.svelte.js';
 	import { SYSTEMS, UNREACHABLE_LABEL, nodeType } from '#lib/model/config.js';
 	import { SYSTEM_COLORS } from './Canvas.svelte';
 	import Icon from './Icon.svelte';
@@ -15,6 +15,7 @@
 	const count = (s: string) =>
 		editor.graph.nodes.filter((n) => nodeType(n.type).system === s).length;
 	const all = $derived(editor.systems.length === SYSTEMS.length);
+	const graph = $derived(editor.page === 'graph');
 	const focusMode = $derived(!editor.panels.left && !editor.panels.right);
 </script>
 
@@ -59,101 +60,128 @@
 		>
 	</div>
 
-	<fieldset class="flex items-center gap-1 border-l border-white/8 pl-3">
-		<legend class="sr-only">系統</legend>
-		<button
-			class={[
-				'mr-0.5 rounded-md px-2 py-1.5 text-xs transition-colors',
-				all ? 'text-slate-500' : 'bg-sky-400/15 text-sky-200 hover:bg-sky-400/25'
-			]}
-			title="顯示全部系統"
-			onclick={() => (editor.systems = [...SYSTEMS])}>全部</button
-		>
-		{#each SYSTEMS as s (s)}
-			{@const on = editor.systems.includes(s)}
-			<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
-			<label
-				style:--c={SYSTEM_COLORS[s]}
-				title="{s} · {count(s)} 節點（⌥＋點：只看{s}）"
+	<div
+		class="flex items-center gap-0.5 border-l border-white/8 pl-3"
+		role="group"
+		aria-label="畫面"
+	>
+		{#each [['graph', '全圖'], ['edit', `編輯頁 ${editor.working.length}/${WORK_LIMIT}`]] as const as [p, label] (p)}
+			<button
 				class={[
-					'relative grid size-8 cursor-pointer place-items-center rounded-md border transition-colors select-none',
-					on
-						? 'border-(--c)/35 bg-(--c)/12 text-(--c)'
-						: 'border-transparent text-slate-600 hover:bg-white/5 hover:text-slate-400'
+					'rounded-md px-2.5 py-1.5 text-xs transition-colors',
+					editor.page === p
+						? 'bg-sky-400/15 text-sky-200'
+						: 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
 				]}
-				onclick={(e) => {
-					if (!e.altKey) return;
-					e.preventDefault();
-					editor.solo(s);
-				}}
+				aria-pressed={editor.page === p}
+				onclick={() => editor.setPage(p)}>{label}</button
 			>
-				<input
-					type="checkbox"
-					value={s}
-					bind:group={editor.systems}
-					class="absolute inset-0 size-full cursor-pointer appearance-none rounded-md border-0 bg-transparent opacity-0 focus:ring-0"
-				/>
-				<span class="sr-only">{s}</span>
-				<Icon name={s} />
-				<span
-					class={[
-						'absolute -right-1 -bottom-1 rounded-sm px-0.5 font-mono text-[9px] leading-3',
-						on ? 'bg-ink-900 text-slate-300' : 'text-slate-600'
-					]}>{count(s)}</span
-				>
-			</label>
 		{/each}
-	</fieldset>
+	</div>
+
+	{#if graph}
+		<fieldset class="flex items-center gap-1 border-l border-white/8 pl-3">
+			<legend class="sr-only">系統</legend>
+			<button
+				class={[
+					'mr-0.5 rounded-md px-2 py-1.5 text-xs transition-colors',
+					all ? 'text-slate-500' : 'bg-sky-400/15 text-sky-200 hover:bg-sky-400/25'
+				]}
+				title="顯示全部系統"
+				onclick={() => (editor.systems = [...SYSTEMS])}>全部</button
+			>
+			{#each SYSTEMS as s (s)}
+				{@const on = editor.systems.includes(s)}
+				<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+				<label
+					style:--c={SYSTEM_COLORS[s]}
+					title="{s} · {count(s)} 節點（⌥＋點：只看{s}）"
+					class={[
+						'relative grid size-8 cursor-pointer place-items-center rounded-md border transition-colors select-none',
+						on
+							? 'border-(--c)/35 bg-(--c)/12 text-(--c)'
+							: 'border-transparent text-slate-600 hover:bg-white/5 hover:text-slate-400'
+					]}
+					onclick={(e) => {
+						if (!e.altKey) return;
+						e.preventDefault();
+						editor.solo(s);
+					}}
+				>
+					<input
+						type="checkbox"
+						value={s}
+						bind:group={editor.systems}
+						class="absolute inset-0 size-full cursor-pointer appearance-none rounded-md border-0 bg-transparent opacity-0 focus:ring-0"
+					/>
+					<span class="sr-only">{s}</span>
+					<Icon name={s} />
+					<span
+						class={[
+							'absolute -right-1 -bottom-1 rounded-sm px-0.5 font-mono text-[9px] leading-3',
+							on ? 'bg-ink-900 text-slate-300' : 'text-slate-600'
+						]}>{count(s)}</span
+					>
+				</label>
+			{/each}
+		</fieldset>
+	{/if}
 
 	<div class="ml-auto flex items-center gap-1 font-mono text-xs">
-		<button
-			class="flex items-center gap-1.5 rounded-md px-2 py-1.5 hover:bg-white/5"
-			aria-label="未處理 {editor.unprocessed.size}"
-			title="未處理節點：沒連到 TPKC 大樓"
-			onclick={() => show('unprocessed')}
-		>
-			<Icon
-				name="warn"
-				class={['size-4', editor.unprocessed.size ? 'text-yellow-300' : 'text-slate-600']}
-			/>
-			<b class={editor.unprocessed.size ? 'text-yellow-200' : 'text-slate-500'}
-				>{editor.unprocessed.size}</b
+		{#if graph}
+			<button
+				class="flex items-center gap-1.5 rounded-md px-2 py-1.5 hover:bg-white/5"
+				aria-label="未處理 {editor.unprocessed.size}"
+				title="未處理節點：沒連到 TPKC 大樓"
+				onclick={() => show('unprocessed')}
 			>
-		</button>
-		<button
-			class="flex items-center gap-1.5 rounded-md px-2 py-1.5 hover:bg-white/5"
-			aria-label="{UNREACHABLE_LABEL} {editor.unreachable.size}"
-			title="{UNREACHABLE_LABEL}：沿方向走不到任何客戶"
-			onclick={() => show('unreachable')}
-		>
-			<Icon
-				name="broken"
-				class={['size-4', editor.unreachable.size ? 'text-rose-300' : 'text-slate-600']}
-			/>
-			<b class={editor.unreachable.size ? 'text-rose-200' : 'text-slate-500'}
-				>{editor.unreachable.size}</b
+				<Icon
+					name="warn"
+					class={['size-4', editor.unprocessed.size ? 'text-yellow-300' : 'text-slate-600']}
+				/>
+				<b class={editor.unprocessed.size ? 'text-yellow-200' : 'text-slate-500'}
+					>{editor.unprocessed.size}</b
+				>
+			</button>
+			<button
+				class="flex items-center gap-1.5 rounded-md px-2 py-1.5 hover:bg-white/5"
+				aria-label="{UNREACHABLE_LABEL} {editor.unreachable.size}"
+				title="{UNREACHABLE_LABEL}：沿方向走不到任何客戶"
+				onclick={() => show('unreachable')}
 			>
-		</button>
+				<Icon
+					name="broken"
+					class={['size-4', editor.unreachable.size ? 'text-rose-300' : 'text-slate-600']}
+				/>
+				<b class={editor.unreachable.size ? 'text-rose-200' : 'text-slate-500'}
+					>{editor.unreachable.size}</b
+				>
+			</button>
+		{/if}
 	</div>
 
 	<div class="flex items-center gap-0.5 border-l border-white/8 pl-3">
 		{@render iconBtn('搜尋節點', '⌘K', 'search', () => (editor.dialog = 'search'))}
-		{@render iconBtn('新增節點', 'N 或右鍵畫布', 'node-plus', () => (editor.dialog = 'node'))}
-		{@render iconBtn('新增邊', 'E 或拖曳卡片', 'edge-plus', () => (editor.dialog = 'edge'))}
+		{#if !graph}
+			{@render iconBtn('新增節點', 'N 或右鍵畫布', 'node-plus', () => (editor.dialog = 'node'))}
+			{@render iconBtn('新增邊', 'E 或拖曳卡片', 'edge-plus', () => (editor.dialog = 'edge'))}
+		{/if}
 	</div>
 
-	<div class="flex items-center gap-0.5 border-l border-white/8 pl-3">
-		{@render toggle(
-			editor.stacking,
-			'收疊同類',
-			'同類型、上游相同的兄弟節點收成一疊，點開才展開',
-			() => {
-				editor.stacking = !editor.stacking;
-				editor.expanded = [];
-			},
-			'stack'
-		)}
-	</div>
+	{#if !graph}
+		<div class="flex items-center gap-0.5 border-l border-white/8 pl-3">
+			{@render toggle(
+				editor.stacking,
+				'收疊同類',
+				'同類型、上游相同的兄弟節點收成一疊，點開才展開',
+				() => {
+					editor.stacking = !editor.stacking;
+					editor.expanded = [];
+				},
+				'stack'
+			)}
+		</div>
+	{/if}
 
 	<div class="flex items-center gap-0.5 border-l border-white/8 pl-3">
 		{@render toggle(

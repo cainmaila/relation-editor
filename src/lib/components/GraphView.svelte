@@ -13,7 +13,7 @@
 
 	const DIM = '#1e293b';
 	const LINK_HL = '#e2e8f0';
-	const PATH = '#fbbf24';
+	const PATH = '#22d3ee';
 	const SEL = '#ffffff';
 	const WARN = '#facc15';
 	const BROKEN = '#fb7185';
@@ -360,6 +360,12 @@
 			<span class="mr-1.5 inline-block size-2 rounded-full" style:background={BROKEN}
 			></span>{UNREACHABLE_LABEL}
 		</li>
+		{#if editor.result}
+			<li>
+				<span class="mr-1.5 inline-block size-2 rounded-full" style:background={PATH}
+				></span>找客戶路徑
+			</li>
+		{/if}
 	</ul>
 	{#if loading}
 		<div

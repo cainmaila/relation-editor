@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { Editor } from '#lib/editor.svelte.js';
 	import Canvas from '#lib/components/Canvas.svelte';
+	import GraphView from '#lib/components/GraphView.svelte';
 	import Legend from '#lib/components/Legend.svelte';
 	import ContextMenu from '#lib/components/ContextMenu.svelte';
 	import DetailPanel from '#lib/components/DetailPanel.svelte';
@@ -13,6 +14,7 @@
 
 	const editor = new Editor();
 
+	const graph = $derived(editor.page === 'graph');
 	const origin = $derived(
 		editor.result && editor.selected ? editor.node(editor.selected.id)?.name : null
 	);
@@ -45,14 +47,15 @@
 			if (mod || e.altKey || editor.dialog || editor.menu || t.closest('input, select, textarea'))
 				return;
 			const s = editor.selected;
-			if (k === 'n') editor.dialog = 'node';
-			else if (e.key === '?') editor.legend = !editor.legend;
-			else if (k === 'e') {
+			// 全圖只讀：編輯快捷鍵無效
+			if (k === 'n' && !graph) editor.dialog = 'node';
+			else if (e.key === '?' && !graph) editor.legend = !editor.legend;
+			else if (k === 'e' && !graph) {
 				if (s?.kind === 'node') editor.draft = { from: s.id, to: '', type: '' };
 				editor.dialog = 'edge';
-			} else if (k === 'f' && s?.kind === 'node') editor.findCustomers(s.id);
+			} else if (k === 'f' && graph && s?.kind === 'node') editor.findCustomers(s.id);
 			else if (e.code === 'Digit1' && e.shiftKey) editor.fit();
-			else if ((e.key === 'Delete' || e.key === 'Backspace') && s) {
+			else if ((e.key === 'Delete' || e.key === 'Backspace') && s && !graph) {
 				if (s.kind === 'edge') editor.deleteEdge(s.id);
 				else if (editor.deleteBlock(s.id)) editor.deleteNode(s.id);
 				else {
@@ -78,13 +81,17 @@
 			width={260}
 			min={220}
 			max={420}
-			attention={editor.unprocessed.size + editor.unreachable.size > 0}
+			attention={graph && editor.unprocessed.size + editor.unreachable.size > 0}
 		>
 			<OutlinePanel {editor} />
 		</Pane>
 		<main class="relative min-w-0 flex-1">
-			<Canvas {editor} />
-			<Legend {editor} />
+			{#if graph}
+				<GraphView {editor} />
+			{:else}
+				<Canvas {editor} />
+				<Legend {editor} />
+			{/if}
 			{#if editor.connecting}
 				<div
 					class="pointer-events-none absolute top-4 left-1/2 flex -translate-x-1/2 animate-rise items-center gap-2 rounded-full border border-sky-400/40 bg-ink-850/90 px-4 py-2 text-xs text-sky-100 shadow-xl backdrop-blur"
@@ -93,12 +100,13 @@
 					從「{editor.node(editor.connecting)?.name}」連線：點選終點節點
 					<span class="kbd">Esc</span>
 				</div>
-			{:else if origin}
+			{:else if graph && origin}
 				<div
 					class="absolute top-4 left-1/2 flex -translate-x-1/2 animate-rise items-center gap-3 rounded-full border border-sky-400/40 bg-ink-850/90 py-1.5 pr-1.5 pl-4 text-xs text-slate-200 shadow-xl backdrop-blur"
 				>
-					<span class="size-1.5 rounded-full bg-sky-400 shadow-[0_0_8px] shadow-sky-400"></span>
-					影響分析：<b class="text-slate-50">{origin}</b> → {editor.result!.customers.length} 位客戶
+					<span class="size-1.5 rounded-full bg-cyan-400 shadow-[0_0_8px] shadow-cyan-400"></span>
+					影響分析（青色路徑）：<b class="text-slate-50">{origin}</b> → {editor.result!.customers
+						.length} 位客戶
 					<button
 						class="btn-ghost rounded-full px-2.5 py-0.5 text-xs"
 						onclick={() => (editor.result = null)}>清除 <span class="kbd">Esc</span></button
@@ -123,7 +131,10 @@
 <p
 	role="status"
 	class={[
-		'fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-lg border border-rose-500/40 bg-ink-850/95 px-4 py-2.5 text-sm text-rose-100 shadow-2xl shadow-black/50 backdrop-blur transition-all duration-200',
+		'fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-lg border bg-ink-850/95 px-4 py-2.5 text-sm shadow-2xl shadow-black/50 backdrop-blur transition-all duration-200',
+		editor.message === '已加入編輯頁'
+			? 'border-emerald-400/40 text-emerald-100'
+			: 'border-rose-500/40 text-rose-100',
 		editor.message ? 'translate-y-0 opacity-100' : 'pointer-events-none translate-y-2 opacity-0'
 	]}
 >

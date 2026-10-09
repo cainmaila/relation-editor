@@ -104,3 +104,27 @@ describe('編輯頁 working', () => {
 		expect(e.message).toContain(String(WORK_LIMIT));
 	});
 });
+
+describe('Editor.setPage', () => {
+	it('切頁保留仍存在的選取，清掉 result／connecting', () => {
+		const e = new Editor();
+		const id = e.graph.nodes[0].id;
+		e.select({ kind: 'node', id });
+		e.findCustomers(id);
+		e.connecting = id;
+		e.setPage('graph');
+		expect(e.result).not.toBeNull();
+		e.addToWork([id]);
+		e.setPage('edit');
+		expect(e.selected).toEqual({ kind: 'node', id });
+		expect(e.result).toBeNull();
+		expect(e.connecting).toBeNull();
+	});
+
+	it('編輯頁看不到的選取在切頁時清掉', () => {
+		const e = new Editor();
+		e.select({ kind: 'node', id: e.graph.nodes[0].id });
+		e.setPage('edit');
+		expect(e.selected).toBeNull();
+	});
+});

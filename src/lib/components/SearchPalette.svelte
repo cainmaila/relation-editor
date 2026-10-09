@@ -16,8 +16,8 @@
 
 	function go(id: string) {
 		editor.dialog = null;
-		// 超過上限時 addToWork 已設 message；不 reveal（會清掉提示）
-		if (editor.addToWork([id])) editor.reveal(id);
+		// 全圖只選取＋飛過去；編輯頁加入後置中。超過上限時 addToWork 已設 message，不 reveal（會清掉提示）
+		if (editor.page === 'graph' || editor.addToWork([id])) editor.reveal(id);
 	}
 
 	function key(e: KeyboardEvent) {

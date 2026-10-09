@@ -124,13 +124,36 @@ export class Editor {
 	addToWork(ids: string[]): boolean {
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- 每次呼叫重算，不需響應
 		const exist = new Set(this.graph.nodes.map((n) => n.id));
-		const add = ids.filter(
-			(id, i) => exist.has(id) && !this.working.includes(id) && ids.indexOf(id) === i
-		);
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- 每次呼叫重算，不需響應
+		const have = new Set(this.working);
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- 只用來去重
+		const add = [...new Set(ids)].filter((id) => exist.has(id) && !have.has(id));
 		if (this.working.length + add.length > WORK_LIMIT)
 			return this.fail(`編輯頁最多 ${WORK_LIMIT} 個節點，無法再加入 ${add.length} 個`);
 		this.working = [...this.working, ...add];
 		return true;
+	}
+
+	/** 切換畫面：保留仍看得到的選取，清掉只屬於上一個畫面的暫態 */
+	setPage(page: 'graph' | 'edit') {
+		if (page === this.page) return;
+		const s = this.selected;
+		const e = s?.kind === 'edge' ? this.edge(s.id) : undefined;
+		const ids = s?.kind === 'edge' ? (e ? [e.from, e.to] : []) : s && this.node(s.id) ? [s.id] : [];
+		// 編輯頁只留畫面上看得到的選取
+		const keep =
+			ids.length > 0 && (page === 'graph' || ids.every((id) => this.working.includes(id)));
+		this.page = page;
+		this.result = null;
+		this.connecting = null;
+		this.armDelete = null;
+		this.menu = null;
+		this.dialog = null;
+		this.hoverEdge = this.hoverNode = null;
+		// 問題篩選只在全圖
+		if (page === 'edit') this.issue = null;
+		if (!keep) this.selected = null;
+		this.fit(keep && s?.kind === 'node' ? [s.id] : []);
 	}
 
 	removeFromWork(ids: string[]) {
