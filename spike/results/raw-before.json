@@ -1,0 +1,36 @@
+{
+ "real": {
+  "runs": [
+   {
+    "ms": 14515,
+    "count": 1398
+   },
+   {
+    "ms": 12041,
+    "count": 1398
+   },
+   {
+    "ms": 12074,
+    "count": 1398
+   }
+  ],
+  "median": 12074
+ },
+ "big": {
+  "runs": [
+   {
+    "ms": "timeout",
+    "count": null
+   },
+   {
+    "ms": "timeout",
+    "count": null
+   },
+   {
+    "ms": "timeout",
+    "count": null
+   }
+  ],
+  "median": "timeout(3)"
+ }
+}

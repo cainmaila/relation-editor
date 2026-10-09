@@ -20,7 +20,7 @@ import {
 } from './model/graph';
 import { graphMock, idcMock } from './model/mock';
 import { bigMock } from './model/bigMock';
-import type { Graph } from './model/types';
+import type { GEdge, GNode, Graph, Props } from './model/types';
 
 export type Selection = { kind: 'node' | 'edge'; id: string } | null;
 /** 游標處的浮動選單：右鍵物件／空白，或拖曳連線放開處 */
@@ -40,7 +40,7 @@ let seq = 0;
 const uid = (p: string) => `${p}-${++seq}`;
 
 export class Editor {
-	graph = $state<Graph>(Editor.initial());
+	graph = $state.raw<Graph>(Editor.initial());
 	systems = $state<System[]>([...SYSTEMS]);
 	selected = $state<Selection>(null);
 	result = $state<CustomerResult | null>(null);
@@ -219,13 +219,37 @@ export class Editor {
 		let n = 1;
 		while (!name.trim() && this.graph.nodes.some((x) => x.name === `${type} ${n}`)) n++;
 		const id = uid('n');
-		this.#keepOut(() =>
-			this.graph.nodes.push({ id, type, name: name.trim() || `${type} ${n}`, props: {} })
+		this.#keepOut(
+			() =>
+				(this.graph = {
+					...this.graph,
+					nodes: [...this.graph.nodes, { id, type, name: name.trim() || `${type} ${n}`, props: {} }]
+				})
 		);
 		this.fresh = id;
 		this.dialog = null;
 		this.reveal(id);
 		return id;
+	}
+
+	/** 改節點／邊的欄位（graph 是 $state.raw，要換新物件才會通知） */
+	patch(kind: 'node' | 'edge', id: string, fields: Partial<GNode> & Partial<GEdge>) {
+		const upd = <T extends { id: string }>(xs: T[]) =>
+			xs.map((x) => (x.id === id ? { ...x, ...fields } : x));
+		this.graph =
+			kind === 'node'
+				? { ...this.graph, nodes: upd(this.graph.nodes) }
+				: { ...this.graph, edges: upd(this.graph.edges) };
+	}
+
+	/** 改節點／邊的一個屬性（graph 是 $state.raw，要換新物件才會通知） */
+	setProp(kind: 'node' | 'edge', id: string, key: string, value: string) {
+		const patch = <T extends { id: string; props: Props }>(xs: T[]) =>
+			xs.map((x) => (x.id === id ? { ...x, props: { ...x.props, [key]: value } } : x));
+		this.graph =
+			kind === 'node'
+				? { ...this.graph, nodes: patch(this.graph.nodes) }
+				: { ...this.graph, edges: patch(this.graph.edges) };
 	}
 
 	startEdge(from: string, to: string) {
@@ -241,15 +265,15 @@ export class Editor {
 		if (err) return this.fail(err);
 		const id = uid('e');
 		// 編輯器手拉的邊沒有資料來源，依 PRD 定義為推定
-		this.#keepOut(() =>
-			this.graph.edges.push({
-				id,
-				type,
-				from,
-				to,
-				bidirectional: false,
-				props: { 確認狀態: '推定' }
-			})
+		this.#keepOut(
+			() =>
+				(this.graph = {
+					...this.graph,
+					edges: [
+						...this.graph.edges,
+						{ id, type, from, to, bidirectional: false, props: { 確認狀態: '推定' } }
+					]
+				})
 		);
 		this.draft = { from: '', to: '', type: '' };
 		this.dialog = null;
@@ -261,15 +285,19 @@ export class Editor {
 		const err = checkDeleteNode(this.graph, id);
 		if (err) return this.fail(err);
 		this.#keepOut(() => {
-			this.graph.edges = this.graph.edges.filter((e) => e.from !== id && e.to !== id);
-			this.graph.nodes = this.graph.nodes.filter((n) => n.id !== id);
+			this.graph = {
+				nodes: this.graph.nodes.filter((n) => n.id !== id),
+				edges: this.graph.edges.filter((e) => e.from !== id && e.to !== id)
+			};
 		});
 		this.select(null);
 	}
 
 	deleteEdge(id: string) {
 		if (this.edge(id)?.readonly) return this.fail(IDC_MESSAGE);
-		this.#keepOut(() => (this.graph.edges = this.graph.edges.filter((e) => e.id !== id)));
+		this.#keepOut(
+			() => (this.graph = { ...this.graph, edges: this.graph.edges.filter((e) => e.id !== id) })
+		);
 		this.select(null);
 	}
 

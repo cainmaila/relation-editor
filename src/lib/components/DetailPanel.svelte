@@ -27,11 +27,11 @@
 	let propKey = $state('');
 	let propValue = $state('');
 
-	function addProp(props: Props) {
+	function addProp(kind: 'node' | 'edge', id: string) {
 		if (!propKey.trim()) return;
 		if (propKey.trim() === '確認狀態' && !CONFIRM_STATES.includes(propValue))
 			return void (editor.message = `確認狀態只能是：${CONFIRM_STATES.join('、')}`);
-		props[propKey.trim()] = propValue;
+		editor.setProp(kind, id, propKey.trim(), propValue);
 		propKey = propValue = '';
 	}
 
@@ -76,7 +76,7 @@
 	<h3 class="mb-2 eyebrow">{title}</h3>
 {/snippet}
 
-{#snippet propsEditor(props: Props)}
+{#snippet propsEditor(kind: 'node' | 'edge', id: string, props: Props)}
 	<section class="border-t border-white/6 px-5 py-4">
 		{@render section('屬性')}
 		<dl class="grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-1.5 text-sm">
@@ -84,11 +84,23 @@
 				<dt class="text-xs text-slate-400">{k}</dt>
 				<dd>
 					{#if k === '確認狀態'}
-						<select aria-label={k} bind:value={props[k]} disabled={ro} class="field py-1">
+						<select
+							aria-label={k}
+							value={props[k]}
+							onchange={(e) => editor.setProp(kind, id, k, e.currentTarget.value)}
+							disabled={ro}
+							class="field py-1"
+						>
 							{#each CONFIRM_STATES as v (v)}<option>{v}</option>{/each}
 						</select>
 					{:else}
-						<input aria-label={k} bind:value={props[k]} disabled={ro} class="field py-1" />
+						<input
+							aria-label={k}
+							value={props[k]}
+							oninput={(e) => editor.setProp(kind, id, k, e.currentTarget.value)}
+							disabled={ro}
+							class="field py-1"
+						/>
 					{/if}
 				</dd>
 			{:else}
@@ -103,7 +115,7 @@
 					class="btn-ghost shrink-0 px-2"
 					aria-label="新增屬性"
 					title="新增屬性"
-					onclick={() => addProp(props)}><Icon name="node-plus" /></button
+					onclick={() => addProp(kind, id)}><Icon name="node-plus" /></button
 				>
 			</div>
 		{/if}
@@ -208,7 +220,8 @@
 			</p>
 			<input
 				aria-label="名稱"
-				bind:value={node.name}
+				value={node.name}
+				oninput={(e) => editor.patch('node', node.id, { name: e.currentTarget.value })}
 				disabled={ro}
 				class="-mx-1.5 mt-1.5 field border-transparent bg-transparent px-1.5 text-lg font-semibold hover:border-white/10 disabled:mx-0 disabled:px-0"
 			/>
@@ -281,7 +294,7 @@
 			<p class="mx-5 mb-3 text-[11px] leading-relaxed text-slate-400">無法刪除：{block}</p>
 		{/if}
 
-		{@render propsEditor(node.props)}
+		{@render propsEditor('node', node.id, node.props)}
 		{@render edgeList('連入', incoming, 'from')}
 		{@render edgeList('連出', outgoing, 'to')}
 	{:else if edge}
@@ -315,7 +328,8 @@
 					<select
 						aria-label="方向"
 						value={edge.bidirectional ? '雙向' : '單向'}
-						onchange={(e) => (edge.bidirectional = e.currentTarget.value === '雙向')}
+						onchange={(e) =>
+							editor.patch('edge', edge.id, { bidirectional: e.currentTarget.value === '雙向' })}
 						disabled={ro}
 						class="field w-28 py-1"
 					>
@@ -335,7 +349,7 @@
 				onclick={() => editor.deleteEdge(edge.id)}><Icon name="trash" /></button
 			>
 		</div>
-		{@render propsEditor(edge.props)}
+		{@render propsEditor('edge', edge.id, edge.props)}
 	{:else}
 		<div class="flex flex-1 flex-col px-5 py-6">
 			<p class="eyebrow">檢視器</p>
