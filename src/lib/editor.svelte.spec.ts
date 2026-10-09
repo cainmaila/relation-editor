@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Editor } from './editor.svelte';
+import { Editor, WORK_LIMIT } from './editor.svelte';
 
 describe('Editor.addNode', () => {
 	it('名稱留空時用「類型 N」且不重複', () => {
@@ -19,11 +19,14 @@ describe('Editor.addNode', () => {
 });
 
 describe('編輯後的收疊', () => {
+	// 編輯頁只畫 working，這裡讓整張圖都在編輯頁（直接指定，繞過 500 上限）
+	const full = (e: Editor) => (e.working = e.graph.nodes.map((n) => n.id));
 	const cards = (e: Editor) => e.canvas.nodes.map((n) => n.id);
 
 	it('編輯湊成新的一疊時，畫面上的卡片不收起；重新排版後才收', () => {
 		const e = new Editor();
 		const ids = [e.addNode('列')!, e.addNode('列')!, e.addNode('列')!];
+		full(e);
 		for (const id of ids) e.addEdge('A 排', id, '包含');
 		expect(cards(e)).toEqual(expect.arrayContaining(ids));
 		e.rearrange();
@@ -33,10 +36,71 @@ describe('編輯後的收疊', () => {
 	it('新節點加入已收起的疊卡時留在外面', () => {
 		const e = new Editor();
 		const key = 'stack:機櫃 PDU:樓層 PDU 2F-A';
+		full(e);
 		const id = e.addNode('機櫃 PDU')!;
+		e.working = [...e.working, id];
 		e.addEdge('樓層 PDU 2F-A', id, '供電');
 		expect(e.stackOf(id)).toBe(key);
 		expect(cards(e)).toContain(id);
 		expect(e.closed.get(key)).toHaveLength(44);
+	});
+});
+
+describe('編輯頁 working', () => {
+	const ids = (e: Editor, n: number) => e.graph.nodes.slice(0, n).map((x) => x.id);
+
+	it('加入、去重、忽略不存在的節點', () => {
+		const e = new Editor();
+		const [a, b] = ids(e, 2);
+		expect(e.addToWork([a, a, 'nope'])).toBe(true);
+		expect(e.addToWork([a, b])).toBe(true);
+		expect(e.working).toEqual([a, b]);
+	});
+
+	it('剛好 500 可，501 整批擋下且 working 不變', () => {
+		const e = new Editor();
+		const all = ids(e, WORK_LIMIT + 1);
+		expect(e.addToWork(all.slice(0, WORK_LIMIT))).toBe(true);
+		expect(e.working).toHaveLength(WORK_LIMIT);
+		expect(e.addToWork(all.slice(WORK_LIMIT))).toBe(false);
+		expect(e.working).toHaveLength(WORK_LIMIT);
+		expect(e.message).toContain(String(WORK_LIMIT));
+	});
+
+	it('已在畫面的節點重複加入不佔上限', () => {
+		const e = new Editor();
+		const all = ids(e, WORK_LIMIT);
+		e.addToWork(all);
+		expect(e.addToWork(all)).toBe(true);
+	});
+
+	it('editVisible 的邊只留兩端都在 working 的', () => {
+		const e = new Editor();
+		const edge = e.graph.edges[0];
+		e.addToWork([edge.from]);
+		expect(e.editVisible.edges).toHaveLength(0);
+		e.addToWork([edge.to]);
+		expect(e.editVisible.nodes.map((n) => n.id).sort()).toEqual([edge.from, edge.to].sort());
+		expect(e.editVisible.edges.map((x) => x.id)).toContain(edge.id);
+		expect(
+			e.editVisible.edges.every((x) => e.working.includes(x.from) && e.working.includes(x.to))
+		).toBe(true);
+	});
+
+	it('addNode 自動加入 working；deleteNode 同步移出', () => {
+		const e = new Editor();
+		const id = e.addNode('攝影機')!;
+		expect(e.working).toEqual([id]);
+		e.deleteNode(id);
+		expect(e.working).toEqual([]);
+	});
+
+	it('working 已滿時 addNode 仍建立節點，但不自動加入', () => {
+		const e = new Editor();
+		e.addToWork(ids(e, WORK_LIMIT));
+		const id = e.addNode('攝影機')!;
+		expect(e.node(id)).toBeTruthy();
+		expect(e.working).not.toContain(id);
+		expect(e.message).toContain(String(WORK_LIMIT));
 	});
 });

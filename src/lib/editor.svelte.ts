@@ -34,10 +34,17 @@ export type Menu = { x: number; y: number } & (
 let seq = 0;
 const uid = (p: string) => `${p}-${++seq}`;
 
+/** 編輯頁節點上限 */
+export const WORK_LIMIT = 500;
+
 export class Editor {
 	// raw：10k 節點時深層 proxy 太貴；要改就換新物件，不可原地改
 	graph = $state.raw<Graph>(Editor.initial());
 	systems = $state<System[]>([...SYSTEMS]);
+	/** 目前畫面：全圖（只讀）或編輯頁 */
+	page = $state<'graph' | 'edit'>('graph');
+	/** 編輯頁的節點 id */
+	working = $state<string[]>([]);
 	selected = $state<Selection>(null);
 	result = $state<CustomerResult | null>(null);
 	message = $state('');
@@ -93,7 +100,7 @@ export class Editor {
 	});
 
 	/** 勾選系統的節點＋通用節點；邊兩端都在畫面上才顯示 */
-	visible = $derived.by(() => {
+	graphVisible = $derived.by(() => {
 		const nodes = this.graph.nodes.filter((n) => {
 			const s = nodeType(n.type).system;
 			return s === null || this.systems.includes(s);
@@ -103,7 +110,39 @@ export class Editor {
 		return { nodes, edges: this.graph.edges.filter((e) => ids.has(e.from) && ids.has(e.to)) };
 	});
 
-	stacks = $derived(stacks(this.visible));
+	/** 暫時別名，T3–T5 決定各使用處歸屬後移除 */
+	get visible() {
+		return this.graphVisible;
+	}
+
+	/** 編輯頁的圖：working 內的節點，邊兩端都在才留 */
+	editVisible = $derived.by(() => {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- 只在 derived 內查詢用，不需響應
+		const ids = new Set(this.working);
+		return {
+			nodes: this.graph.nodes.filter((n) => ids.has(n.id)),
+			edges: this.graph.edges.filter((e) => ids.has(e.from) && ids.has(e.to))
+		};
+	});
+
+	/** 加入編輯頁：只收存在的節點、去重；加完超過上限則整批擋下 */
+	addToWork(ids: string[]): boolean {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- 每次呼叫重算，不需響應
+		const exist = new Set(this.graph.nodes.map((n) => n.id));
+		const add = ids.filter(
+			(id, i) => exist.has(id) && !this.working.includes(id) && ids.indexOf(id) === i
+		);
+		if (this.working.length + add.length > WORK_LIMIT)
+			return this.fail(`編輯頁最多 ${WORK_LIMIT} 個節點，無法再加入 ${add.length} 個`);
+		this.working = [...this.working, ...add];
+		return true;
+	}
+
+	removeFromWork(ids: string[]) {
+		this.working = this.working.filter((id) => !ids.includes(id));
+	}
+
+	stacks = $derived(stacks(this.editVisible));
 	/** 收起的堆疊（扣掉 loose 後仍 ≥3 個才收）：key → 收進去的成員 */
 	closed = $derived(
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- derived 每次重建，不需響應
@@ -117,7 +156,7 @@ export class Editor {
 		)
 	);
 	/** 畫布實際畫的圖：收起的堆疊換成代表卡 */
-	canvas = $derived(collapse(this.visible, this.closed));
+	canvas = $derived(collapse(this.editVisible, this.closed));
 
 	#stackKey = $derived(
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- derived 每次重建，不需響應
@@ -222,6 +261,8 @@ export class Editor {
 		this.fresh = id;
 		this.dialog = null;
 		this.reveal(id);
+		// 超過上限時節點照建（資料不丟），只是不自動進編輯頁；放在 reveal 後才不會被清掉提示
+		this.addToWork([id]);
 		return id;
 	}
 
@@ -264,6 +305,7 @@ export class Editor {
 					edges: this.graph.edges.filter((e) => e.from !== id && e.to !== id)
 				})
 		);
+		this.removeFromWork([id]);
 		this.select(null);
 	}
 
