@@ -19,7 +19,7 @@ import {
 	type CustomerResult
 } from './model/graph';
 import { graphMock, idcMock } from './model/mock';
-import type { Graph } from './model/types';
+import type { GEdge, GNode, Graph } from './model/types';
 
 export type Selection = { kind: 'node' | 'edge'; id: string } | null;
 /** 游標處的浮動選單：右鍵物件／空白，或拖曳連線放開處 */
@@ -35,7 +35,8 @@ let seq = 0;
 const uid = (p: string) => `${p}-${++seq}`;
 
 export class Editor {
-	graph = $state<Graph>(Editor.initial());
+	// raw：10k 節點時深層 proxy 太貴；要改就換新物件，不可原地改
+	graph = $state.raw<Graph>(Editor.initial());
 	systems = $state<System[]>([...SYSTEMS]);
 	selected = $state<Selection>(null);
 	result = $state<CustomerResult | null>(null);
@@ -211,8 +212,12 @@ export class Editor {
 		let n = 1;
 		while (!name.trim() && this.graph.nodes.some((x) => x.name === `${type} ${n}`)) n++;
 		const id = uid('n');
-		this.#keepOut(() =>
-			this.graph.nodes.push({ id, type, name: name.trim() || `${type} ${n}`, props: {} })
+		this.#keepOut(
+			() =>
+				(this.graph = {
+					...this.graph,
+					nodes: [...this.graph.nodes, { id, type, name: name.trim() || `${type} ${n}`, props: {} }]
+				})
 		);
 		this.fresh = id;
 		this.dialog = null;
@@ -233,15 +238,15 @@ export class Editor {
 		if (err) return this.fail(err);
 		const id = uid('e');
 		// 編輯器手拉的邊沒有資料來源，依 PRD 定義為推定
-		this.#keepOut(() =>
-			this.graph.edges.push({
-				id,
-				type,
-				from,
-				to,
-				bidirectional: false,
-				props: { 確認狀態: '推定' }
-			})
+		this.#keepOut(
+			() =>
+				(this.graph = {
+					...this.graph,
+					edges: [
+						...this.graph.edges,
+						{ id, type, from, to, bidirectional: false, props: { 確認狀態: '推定' } }
+					]
+				})
 		);
 		this.draft = { from: '', to: '', type: '' };
 		this.dialog = null;
@@ -252,17 +257,36 @@ export class Editor {
 	deleteNode(id: string) {
 		const err = checkDeleteNode(this.graph, id);
 		if (err) return this.fail(err);
-		this.#keepOut(() => {
-			this.graph.edges = this.graph.edges.filter((e) => e.from !== id && e.to !== id);
-			this.graph.nodes = this.graph.nodes.filter((n) => n.id !== id);
-		});
+		this.#keepOut(
+			() =>
+				(this.graph = {
+					nodes: this.graph.nodes.filter((n) => n.id !== id),
+					edges: this.graph.edges.filter((e) => e.from !== id && e.to !== id)
+				})
+		);
 		this.select(null);
 	}
 
 	deleteEdge(id: string) {
 		if (this.edge(id)?.readonly) return this.fail(IDC_MESSAGE);
-		this.#keepOut(() => (this.graph.edges = this.graph.edges.filter((e) => e.id !== id)));
+		this.#keepOut(
+			() => (this.graph = { ...this.graph, edges: this.graph.edges.filter((e) => e.id !== id) })
+		);
 		this.select(null);
+	}
+
+	/** 改節點／邊的欄位：graph 是 $state.raw，要換新物件詳情欄和畫布才會更新 */
+	edit(kind: 'node' | 'edge', id: string, change: Partial<GNode & GEdge>) {
+		const apply = <T extends { id: string }>(x: T): T => (x.id === id ? { ...x, ...change } : x);
+		this.graph =
+			kind === 'node'
+				? { ...this.graph, nodes: this.graph.nodes.map(apply) }
+				: { ...this.graph, edges: this.graph.edges.map(apply) };
+	}
+
+	setProp(kind: 'node' | 'edge', id: string, key: string, value: string) {
+		const cur = (kind === 'node' ? this.node(id) : this.edge(id))!.props;
+		this.edit(kind, id, { props: { ...cur, [key]: value } });
 	}
 
 	findCustomers(id: string) {

@@ -5,7 +5,12 @@
 - **Goal:** 實測 10k 節點下 Svelte Flow 優化／`force-graph`／Sigma.js，決定渲染方向；計畫 `~/.claude/plans/dom-fluttering-kazoo.md`
 - **Done:** `bigMock.ts`（`bigMock()` 5 層 × 2,066 = 10,330 節點，spec 通過）
 - **Todo（3 個 subagent 平行，各在 worktree）:** A `spike/svelteflow-opt`（量瓶頸＋優化）、B `spike/force-graph`、C `spike/sigma`；各回報同一組數字（載入、平移縮放 fps、點選回應、記憶體）
-- **Next:** 逐一驗證 subagent 結果，整理比較表給使用者
+- **Done（三個 spike 已回報，已驗證 A、C 的 diff 與測試）:** 演算法 O(N·E)→鄰接表（`stacks` 10k 841→13.5ms、`layout` 3.5s→42ms，輸出一致）；Svelte Flow 10k 首次渲染仍 ~181s（響應式，dev profile 推測）；Sigma 渲染 <1ms/次；force-graph 整張縮小僅 8–9 fps
+- **Done（已驗證）:** `$state.raw` 假設成立：同機對照，真實資料 5.56s→0.73s，10k 145s→3.6s（中位數 3.56s，3 次）；unit 28、e2e 39 全過、check 0 錯。分支 `spike/state-raw-local`（worktree `spike-state-raw`，commit b639cb6，未推送），結果 `spike/RESULTS-raw.md`
+- **雲端 routine** `trig_01Uv1PtYQswZfjJpkDgpwvGt`：基準有出但「改後」量測卡住，判斷雲端除錯效率差，改本機做；該 run 無法從這邊中止，可能還會推 `spike/state-raw` 或 `claude/state-raw` 到公開 repo
+- **Todo:** 量 10k 編輯操作與平移縮放 fps（subagent `aa6bdc880eccf7d31` 進行中，結果在 spike-state-raw 的 `spike/RESULTS-interact.md`）
+- **Next:** 使用者決定：①把鄰接表＋`$state.raw` 帶回 main-3-2 ②是否加派 Pixi spike（使用者說先照規劃：雲端結果後再派）
+- **待決:** `spike/svelteflow-opt` 已推到公開 repo（可事後刪遠端分支）；鄰接表修正是否帶回 main-3-2
 - **Notes:** 懷疑 `graph.ts` `layout()` 的 `into`／`out` 每次掃全部邊（O(N·E)）才是 11 秒主因
 
 ## mock 改 2F 全棟機櫃（PRD v0.3）
