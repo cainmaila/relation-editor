@@ -1,10 +1,11 @@
 <script lang="ts">
-	// 左欄大綱：搜尋、問題篩選、依系統分組的節點清單。點列＝選取並置中，滑過＝畫布亮起
-	import { tick, untrack } from 'svelte';
+	// 左欄大綱：全量搜尋、問題篩選、分頁結果（不常駐全部節點的 DOM）。點列＝定位，滑過＝畫布亮起；全圖可勾選後加入編輯頁
+	import { untrack } from 'svelte';
 	import type { Editor } from '#lib/editor.svelte.js';
-	import { SYSTEMS, UNREACHABLE_LABEL, nodeType } from '#lib/model/config.js';
-	import { SYSTEM_COLORS } from './Canvas.svelte';
+	import { UNREACHABLE_LABEL, nodeType } from '#lib/model/config.js';
+	import { SearchController } from '#lib/search/search-client.svelte.js';
 	import Icon from './Icon.svelte';
+	import SearchResults from './SearchResults.svelte';
 
 	let { editor }: { editor: Editor } = $props();
 
@@ -29,39 +30,30 @@
 		}
 	] as const;
 
-	/** 收合的分組 */
-	let closed = $state<string[]>([]);
-	let list = $state<HTMLElement>();
-
+	const c = $derived(editor.outline);
 	const graph = $derived(editor.page === 'graph');
-	// 全圖列整張圖（隱藏的系統變淡，仍可從這裡重新打開）
-	const vis = $derived(graph ? editor.graph : editor.editVisible);
 	const issue = $derived(ISSUES.find((i) => i.key === editor.issue));
-	const filtering = $derived(!!editor.matched);
-	/** 只看文字有沒有命中（判斷空結果是不是問題篩選造成的） */
-	const textHits = $derived(vis.nodes.some((n) => editor.byText(n.name)));
-	const groups = $derived(
-		[...SYSTEMS, null]
-			.map((s) => ({
-				s,
-				name: s ?? '通用',
-				nodes: vis.nodes.filter(
-					(n) => nodeType(n.type).system === s && (!editor.matched || editor.matched.has(n.id))
-				)
-			}))
-			.filter((g) => g.nodes.length)
-	);
+	let added = $state(false);
 
-	// 選取時，大綱展開所屬分組並捲到該列
+	// 全圖查全部節點（隱藏系統變淡，仍可從這裡定位）；編輯頁只查工作區
 	$effect(() => {
-		const id = editor.selected?.kind === 'node' && editor.selected.id;
-		if (!id) return;
-		const name = nodeType(editor.node(id)!.type).system ?? '通用';
-		untrack(() => (closed = closed.filter((x) => x !== name)));
-		tick().then(() =>
-			list?.querySelector(`[data-id="${CSS.escape(id)}"]`)?.scrollIntoView({ block: 'nearest' })
-		);
+		editor.outline.set({
+			within: graph ? null : [...editor.working],
+			issues: editor.issue ? [editor.issue] : []
+		});
 	});
+
+	/** 文字＋問題篩選沒結果時，另查「只看文字」有沒有命中，才知道該不該怪問題篩選 */
+	const textOnly = new SearchController(
+		untrack(() => editor.search),
+		{ limit: 0 }
+	);
+	const empty = $derived(!!issue && !!c.text.trim() && c.status === 'ready' && c.total === 0);
+	$effect(() => {
+		if (empty) textOnly.set({ text: c.text, within: c.within });
+	});
+	$effect(() => () => textOnly.dispose());
+	const textHits = $derived(empty && textOnly.status === 'ready' && textOnly.total > 0);
 </script>
 
 <nav aria-label="大綱" class="flex h-full flex-col">
@@ -75,10 +67,11 @@
 				type="search"
 				aria-label="篩選節點"
 				placeholder="篩選節點"
-				bind:value={editor.query}
+				value={c.text}
+				oninput={(e) => c.set({ text: e.currentTarget.value })}
 				onkeydown={(e) => {
-					if (e.key === 'Escape' && editor.query) {
-						editor.query = '';
+					if (e.key === 'Escape' && c.text) {
+						c.set({ text: '' });
 						e.stopPropagation();
 					}
 				}}
@@ -109,109 +102,58 @@
 		{/if}
 	</div>
 
-	<div bind:this={list} class="min-h-0 flex-1 overflow-y-auto py-1">
-		{#each groups as g (g.name)}
-			{@const open = filtering || !closed.includes(g.name)}
-			{@const shown = !graph || !g.s || editor.systems.includes(g.s)}
-			<section aria-label={g.name}>
-				<div
-					class="group/h sticky top-0 z-10 flex items-center bg-ink-900/95 pr-2 backdrop-blur"
-					style:--c={SYSTEM_COLORS[g.name]}
-				>
-					<button
-						class="flex min-w-0 flex-1 items-center gap-2 py-1.5 pl-2 text-left text-xs font-medium text-slate-300 hover:text-slate-50"
-						aria-expanded={open}
-						onclick={() =>
-							(closed = closed.includes(g.name)
-								? closed.filter((x) => x !== g.name)
-								: [...closed, g.name])}
-					>
-						<Icon
-							name="chevron"
-							class={['size-3 text-slate-600 transition-transform', open && 'rotate-90']}
-						/>
-						<span class={shown ? 'text-(--c)' : 'text-slate-600'}
-							><Icon name={g.name} class="size-3.5" /></span
-						>
-						<span class={shown ? '' : 'text-slate-500'}>{g.name}</span>
-						<span class="font-mono text-[10px] text-slate-600">{g.nodes.length}</span>
-					</button>
-					{#if graph && g.s}
-						{@const s = g.s}
-						<button
-							class={[
-								'grid size-6 place-items-center rounded transition-opacity hover:bg-white/8',
-								shown
-									? 'text-slate-400 opacity-0 group-hover/h:opacity-100 focus:opacity-100'
-									: 'text-slate-600'
-							]}
-							aria-label="顯示{s}"
-							aria-pressed={shown}
-							title="{shown ? '隱藏' : '顯示'}{s}（⌥＋點：只看{s}）"
-							onclick={(e) => {
-								if (e.altKey) editor.solo(s);
-								else if (shown) editor.systems = editor.systems.filter((x) => x !== s);
-								else editor.systems.push(s);
-							}}
-						>
-							<Icon name={shown ? 'solo' : 'eye-off'} class="size-3.5" />
-						</button>
+	<p class="px-3 pt-2 text-[10px] text-slate-500">
+		{graph ? '全圖所有節點' : '編輯頁內的節點'}{issue ? `・只列${issue.label}` : ''}
+	</p>
+	<SearchResults
+		controller={c}
+		node={editor.node}
+		label="節點"
+		selectable={graph}
+		current={editor.selected?.kind === 'node' ? editor.selected.id : null}
+		muted={(n) => {
+			const s = nodeType(n.type)?.system;
+			return graph && !!s && !editor.systems.includes(s);
+		}}
+		onpick={(id) => editor.locate(id)}
+		onhover={(id) => {
+			const s = id && nodeType(editor.node(id)!.type)?.system;
+			editor.hoverNode = id && (!graph || !s || editor.systems.includes(s)) ? id : null;
+		}}
+	>
+		{#snippet row(n)}
+			<span class="ml-auto flex items-center gap-1">
+				{#each ISSUES as i (i.key)}
+					{#if graph && editor[i.key].has(n.id)}
+						<Icon name={i.icon} label={i.label} class={['size-3', i.tone]} />
 					{/if}
-				</div>
-				{#if open}
-					<ul>
-						{#each g.nodes as n (n.id)}
-							{@const sel = editor.selected?.kind === 'node' && editor.selected.id === n.id}
-							<li>
-								<button
-									data-id={n.id}
-									class={[
-										'relative flex w-full items-center gap-2 py-1 pr-3 pl-8 text-left text-xs transition-colors',
-										sel
-											? 'bg-sky-400/12 text-slate-50 before:absolute before:inset-y-0 before:left-0 before:w-0.5 before:bg-sky-400'
-											: shown
-												? 'text-slate-300 hover:bg-white/4 hover:text-slate-50'
-												: 'text-slate-500 hover:bg-white/4'
-									]}
-									title={n.type}
-									onclick={() => editor.reveal(n.id)}
-									onpointerenter={() => shown && (editor.hoverNode = n.id)}
-									onpointerleave={() => (editor.hoverNode = null)}
-								>
-									<span class="truncate">{n.name}</span>
-									<span class="ml-auto flex items-center gap-1">
-										{#each ISSUES as i (i.key)}
-											{#if graph && editor[i.key].has(n.id)}
-												<Icon name={i.icon} label={i.label} class={['size-3', i.tone]} />
-											{/if}
-										{/each}
-										{#if n.readonly}<Icon
-												name="lock"
-												label="IDC 維護"
-												class="size-3 text-slate-600"
-											/>{/if}
-									</span>
-								</button>
-							</li>
-						{/each}
-					</ul>
-				{/if}
-			</section>
-		{:else}
-			<p class="flex items-center gap-2 px-4 py-6 text-xs text-slate-500">
-				{#if issue && !editor.query.trim()}
-					<Icon name="check" class="size-3.5 text-emerald-400" />
-					<span class="text-emerald-300/90">{issue.ok}</span>
-				{:else if issue && textHits}
-					<span>「{editor.query.trim()}」裡沒有{issue.label}的節點</span>
-					<button
-						class="ml-auto text-sky-300 hover:text-sky-200"
-						onclick={() => (editor.issue = null)}>清除{issue.label}篩選</button
-					>
-				{:else}
-					沒有符合的節點
-				{/if}
-			</p>
-		{/each}
-	</div>
+				{/each}
+				{#if n.readonly}<Icon name="lock" label="IDC 維護" class="size-3 text-slate-600" />{/if}
+			</span>
+		{/snippet}
+		{#snippet actions(ids)}
+			{#if added}
+				<button class="text-sky-300 hover:text-sky-200" onclick={() => editor.setPage('edit')}
+					>前往編輯頁</button
+				>
+			{/if}
+			<button
+				class="btn-primary px-2 py-0.5 text-[11px]"
+				onclick={() => (added = editor.addToWorkspace(ids))}>加入編輯頁（{ids.length}）</button
+			>
+		{/snippet}
+		{#snippet empty()}
+			{#if issue && !c.text.trim()}
+				<Icon name="check" class="size-3.5 text-emerald-400" />
+				<span class="text-emerald-300/90">{issue.ok}</span>
+			{:else if issue && textHits}
+				<span>「{c.text.trim()}」裡沒有{issue.label}的節點</span>
+				<button class="text-sky-300 hover:text-sky-200" onclick={() => (editor.issue = null)}
+					>清除{issue.label}篩選</button
+				>
+			{:else}
+				沒有符合的節點
+			{/if}
+		{/snippet}
+	</SearchResults>
 </nav>

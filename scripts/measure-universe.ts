@@ -227,7 +227,9 @@ const INIT = () => {
 	const w = window as unknown as W;
 	const optionAt = (text: string, timeoutMs: number) =>
 		new Promise<number>((done, fail) => {
+			// P3：結果由 Worker 分頁回傳；更新中（aria-busy）的舊結果不算，避免空查詢首頁剛好含該文字
 			const hit = () =>
+				!!document.querySelector('[role=listbox][aria-busy="false"]') &&
 				[...document.querySelectorAll('[role=option]')].some((o) => o.textContent?.includes(text));
 			const mo = new MutationObserver(() => {
 				if (hit()) {
@@ -309,7 +311,7 @@ async function wheel(page: Page, cx: number, cy: number) {
 
 /**
  * 開搜尋框、真的輸入（input 事件），回傳頁內時間：輸入前 → 含該文字的結果列出現。
- * 用 CSS 選擇器而非 getByRole：大綱有約 4 萬個 DOM 節點，Playwright 角色查詢本身要數秒，會污染數據。
+ * 用 CSS 選擇器而非 getByRole：P1 基線時大綱有約 4 萬個 DOM 節點（P3 起只畫當頁），沿用以便前後比較。
  */
 async function search(page: Page, text: string, timeout: number) {
 	await page.click('button[aria-label="搜尋節點"]', { timeout });

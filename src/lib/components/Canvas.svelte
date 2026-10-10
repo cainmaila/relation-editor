@@ -98,7 +98,7 @@
 	const nodes = $derived<Node[]>([
 		...view.nodes.map((n) => {
 			const ids = members(n.id);
-			const any = (set: Set<string>) => ids.some((id) => set.has(id));
+			const any = (set: ReadonlySet<string>) => ids.some((id) => set.has(id));
 			const stack = ids.length > 1;
 			const active = !!editor.selected && ids.includes(editor.selected.id);
 			return {

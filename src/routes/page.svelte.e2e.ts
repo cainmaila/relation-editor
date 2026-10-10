@@ -47,7 +47,7 @@ const chip = (page: Page, name: string) => outline(page).getByRole('button', { n
 async function issueList(page: Page, name: '只列未處理' | '只列無客戶路徑') {
 	const c = chip(page, name);
 	if ((await c.getAttribute('aria-pressed')) !== 'true') await c.click();
-	return outline(page).getByRole('listitem');
+	return rows(page).getByRole('listitem');
 }
 /** 頂列的問題計數按鈕：未處理 N／無客戶路徑 N */
 const issueCount = (page: Page, label: '未處理' | '無客戶路徑', n: number) =>
@@ -84,12 +84,23 @@ async function only(page: Page, systems: string[]) {
 	for (const s of SYSTEMS)
 		await page.getByRole('checkbox', { name: s }).setChecked(systems.includes(s));
 }
-/** 從大綱點節點：選取並置中（全圖與編輯頁都用得到） */
+/** 大綱的分頁結果列（只畫當頁） */
+const rows = (page: Page) => outline(page).getByRole('list', { name: '節點' });
+/**
+ * 從大綱點節點：選取並置中（全圖與編輯頁都用得到）。
+ * 大綱只畫當頁結果，先用篩選框搜尋名稱，點完再還原原本的篩選文字。
+ */
 async function pick(page: Page, name: string) {
-	await outline(page)
+	const box = outline(page).getByRole('searchbox', { name: '篩選節點' });
+	const before = await box.inputValue();
+	await box.fill(name);
+	await rows(page)
 		.locator('button[data-id]')
 		.filter({ has: page.getByText(name, { exact: true }) })
 		.click();
+	await box.fill(before);
+	// 原本點完焦點在列上；還原篩選後離開輸入框，單鍵快捷鍵（F 等）才不會打進框裡
+	await box.blur();
 }
 /** 點 3D 畫面左上角的空白處 */
 const clickBlank = (page: Page) => page.locator('main canvas').click({ position: { x: 3, y: 3 } });
@@ -149,10 +160,23 @@ async function addNode(page: Page, type: string, name: string) {
 	await f.getByLabel('名稱').fill(name);
 	await f.getByRole('button', { name: '新增節點' }).click();
 }
+/** 新增邊對話框的端點：搜尋名稱，從候選清單點選 */
+async function endpoint(f: Locator, label: '起點' | '終點', name: string) {
+	const box = f.getByRole('searchbox', { name: label });
+	if (!(await box.isVisible())) await f.getByRole('button', { name: `${label}：` }).click();
+	await box.fill(name);
+	await f
+		.getByRole('listbox', { name: `${label}候選` })
+		.locator('button[data-id]')
+		.filter({ has: f.page().getByText(name, { exact: true }) })
+		.click();
+	await expect(f.getByRole('button', { name: `${label}：${name}（點擊更換）` })).toBeVisible();
+}
 async function edgeForm(page: Page, from: string, to: string) {
 	const f = await open(page, '新增邊', '新增邊');
-	await f.getByLabel('起點').selectOption({ label: from });
-	await f.getByLabel('終點').selectOption({ label: to });
+	await expect(f).toBeVisible();
+	await endpoint(f, '起點', from);
+	await endpoint(f, '終點', to);
 	return f;
 }
 async function addEdge(page: Page, from: string, to: string, type: string) {
@@ -205,7 +229,8 @@ test.describe('看圖（全圖）', () => {
 		expect(await page.evaluate(() => window.__graphView!.search('機櫃 A-01'))).toBe('機櫃 A-01');
 		await expect(detail(page).getByLabel('名稱', { exact: true })).toHaveValue('機櫃 A-01');
 		await expect(detail(page)).toContainText(field('類型', '機櫃'));
-		await expect(outline(page).locator('button[data-id="機櫃 A-01"]')).toHaveAttribute(
+		await outline(page).getByRole('searchbox', { name: '篩選節點' }).fill('機櫃 A-01');
+		await expect(rows(page).locator('button[data-id="機櫃 A-01"]')).toHaveAttribute(
 			'title',
 			'機櫃'
 		);
@@ -637,6 +662,8 @@ test.describe('加入編輯頁', () => {
 		await page.keyboard.press('ControlOrMeta+k');
 		await page.getByRole('textbox', { name: '搜尋節點' }).fill(name);
 		await page.keyboard.press('Enter');
+		// 結果由 Worker 回傳；Enter 在更新中會等新結果才執行，執行後關閉
+		await expect(page.getByRole('dialog', { name: '搜尋節點' })).toHaveCount(0);
 	}
 
 	test('情境 19：把節點加入編輯頁', async ({ page }) => {
@@ -668,10 +695,19 @@ test.describe('加入編輯頁', () => {
 
 	test('情境 20：編輯頁超過 500 個節點', async ({ page }) => {
 		test.setTimeout(300_000);
-		// 全圖大綱的前 501 個節點，從編輯頁 ⌘K 逐一加入
-		const names = await outline(page)
-			.locator('button[data-id]')
-			.evaluateAll((bs) => bs.slice(0, 501).map((b) => (b as HTMLElement).dataset.id!));
+		// 全圖大綱翻頁取前 501 個節點（每頁 50），從編輯頁 ⌘K 逐一加入
+		const names: string[] = [];
+		for (let p = 1; names.length < 501; p++) {
+			await expect(outline(page)).toContainText(`第 ${p} / `);
+			await expect(rows(page).getByRole('listitem')).toHaveCount(50);
+			names.push(
+				...(await rows(page)
+					.locator('button[data-id]')
+					.evaluateAll((bs) => bs.map((b) => (b as HTMLElement).dataset.id!)))
+			);
+			await outline(page).getByRole('button', { name: '下一頁' }).click();
+		}
+		names.length = 501;
 		expect(new Set(names).size).toBe(501);
 		await tab(page, 'edit').click();
 		const box = page.getByRole('textbox', { name: '搜尋節點' });
@@ -679,6 +715,7 @@ test.describe('加入編輯頁', () => {
 			await page.keyboard.press('ControlOrMeta+k');
 			await box.fill(n);
 			await page.keyboard.press('Enter');
+			await expect(box).toHaveCount(0);
 		}
 		await expect(tab(page, 'edit')).toHaveText('編輯頁 500/500');
 		// 第 501 個擋下並提示，已在畫面上的不變
@@ -709,14 +746,14 @@ test.describe('編輯器操作', () => {
 		// 原測試的全圖斷言：全部節點中 A-02 命中 5 個（3D 畫布無 DOM，只驗大綱）
 		const search = outline(page).getByRole('searchbox', { name: '篩選節點' });
 		await search.fill('A-02');
-		await expect(outline(page).getByRole('listitem')).toHaveCount(5);
+		await expect(rows(page).getByRole('listitem')).toHaveCount(5);
 		await search.fill('');
 		await toEdit(page, ['機櫃 A-01', '機櫃 A-02', '機櫃 PDU A-02-A', 'ToR Switch A-02']);
 		// 加入時選了最後一個節點；先取消選取，只看篩選造成的淡化（原測試無選取）
 		await clickPane(page);
 		await expect(detail(page).getByLabel('名稱', { exact: true })).toHaveCount(0);
 		await outline(page).getByRole('searchbox', { name: '篩選節點' }).fill('A-02');
-		await expect(outline(page).getByRole('listitem')).toHaveCount(3);
+		await expect(rows(page).getByRole('listitem')).toHaveCount(3);
 		await expect(dimmed(page)).toHaveCount(1);
 		await page.keyboard.press('ControlOrMeta+b');
 		await expect(dimmed(page)).toHaveCount(0);
@@ -743,7 +780,8 @@ test.describe('編輯器操作', () => {
 	test('⌘K 搜尋節點並選取（全圖）', async ({ page }) => {
 		await only(page, ['電力']);
 		await page.keyboard.press('ControlOrMeta+k');
-		await page.getByRole('textbox', { name: '搜尋節點' }).fill('A-03');
+		// P3 排序：完全符合優先（只打 A-03 時同組依 ID 排，ToR Switch A-03 在前）
+		await page.getByRole('textbox', { name: '搜尋節點' }).fill('機櫃 A-03');
 		await page.keyboard.press('Enter');
 		// 機櫃 A-03 屬空間，沒勾也會自動勾上
 		await expect(page.getByRole('checkbox', { name: '空間' })).toBeChecked();
@@ -849,14 +887,23 @@ test.describe('編輯器操作', () => {
 		await expect(detail(page).getByLabel('名稱', { exact: true })).toHaveCount(0);
 	});
 
-	test('畫布選取收合分組內的節點，大綱自動展開該分組（全圖）', async ({ page }) => {
-		const power = outline(page).getByRole('region', { name: '電力' });
-		await power.getByRole('button').first().click();
-		await expect(power.getByRole('button').first()).toHaveAttribute('aria-expanded', 'false');
+	// P3：原「依系統分組全列、收合分組」改為分頁結果；選取的節點在當頁時標示並捲到該列
+	test('全圖大綱分頁列出全部節點，選取的節點在結果中標示（全圖）', async ({ page }) => {
+		await expect(outline(page)).toContainText(`共 ${TOTAL} 筆`);
+		await expect(outline(page)).toContainText(`第 1 / ${Math.ceil(TOTAL / 50)} 頁`);
+		await expect(rows(page).getByRole('listitem')).toHaveCount(50);
+		const first = await rows(page).locator('button[data-id]').first().getAttribute('data-id');
+		await outline(page).getByRole('button', { name: '下一頁' }).click();
+		await expect(outline(page)).toContainText(`第 2 / ${Math.ceil(TOTAL / 50)} 頁`);
+		await expect(rows(page).locator(`button[data-id="${first}"]`)).toHaveCount(0);
 		await page.keyboard.press('ControlOrMeta+k');
 		await page.getByRole('textbox', { name: '搜尋節點' }).fill('PDU A-01-A');
 		await page.keyboard.press('Enter');
-		await expect(power.getByRole('button').first()).toHaveAttribute('aria-expanded', 'true');
+		await outline(page).getByRole('searchbox', { name: '篩選節點' }).fill('PDU A-01-A');
+		await expect(rows(page).locator('button[data-id="機櫃 PDU A-01-A"]')).toHaveAttribute(
+			'aria-current',
+			'true'
+		);
 	});
 
 	test('編輯頁右鍵節點刪除需二次確認', async ({ page }) => {
@@ -913,6 +960,7 @@ test.describe('手測回報', () => {
 	test('系統隱藏時從大綱點節點，自動勾回該系統並選取（全圖）', async ({ page }) => {
 		await page.getByRole('checkbox', { name: '消防' }).setChecked(false);
 		await expectCounts(page, TOTAL - 2, TOTAL_EDGES - 2);
+		await outline(page).getByRole('searchbox', { name: '篩選節點' }).fill('SD-02');
 		await outline(page).getByRole('button', { name: '偵測器 SD-02' }).click();
 		await expect(page.getByRole('checkbox', { name: '消防' })).toBeChecked();
 		await expectCounts(page, TOTAL, TOTAL_EDGES);
@@ -981,5 +1029,73 @@ test.describe('手測回報', () => {
 		await save.click();
 		await expect(page.getByText('名稱不可空白')).toBeVisible();
 		await expect(node(page, '空調箱 已存')).toBeVisible();
+	});
+});
+
+test.describe('全量搜尋與分頁（P3）', () => {
+	const palette = (page: Page) => page.getByRole('dialog', { name: '搜尋節點' });
+	async function openPalette(page: Page, text: string) {
+		await page.keyboard.press('Escape');
+		await page.keyboard.press('ControlOrMeta+k');
+		await page.getByRole('textbox', { name: '搜尋節點' }).fill(text);
+	}
+
+	test('⌘K 結果完整分頁，跨頁勾選後加入編輯頁不換畫面', async ({ page }) => {
+		await openPalette(page, '機櫃 PDU');
+		const p = palette(page);
+		const list = p.getByRole('listbox', { name: '搜尋結果' });
+		await expect(p).toContainText(/共 \d{3,} 筆/);
+		await expect(list.getByRole('option')).toHaveCount(50);
+		await p.getByRole('checkbox', { name: '勾選 機櫃 PDU A-01-A' }).check();
+		await p.getByRole('button', { name: '下一頁' }).click();
+		await expect(p).toContainText('第 2 / ');
+		await expect(p.getByRole('checkbox', { name: '勾選 機櫃 PDU A-01-A' })).toHaveCount(0);
+		await list.getByRole('checkbox').first().check();
+		await expect(p).toContainText('已選 2');
+		// 換關鍵字仍保留勾選
+		await p.getByRole('textbox', { name: '搜尋節點' }).fill('UPS-1');
+		await expect(p).toContainText('已選 2');
+		await p.getByRole('button', { name: '加入編輯頁（2）' }).click();
+		await expect(status(page)).toHaveText('已加入編輯頁');
+		await expect(tab(page, 'edit')).toHaveText('編輯頁 2/500');
+		// 不切畫面：仍在全圖，對話框還開著，可選擇前往
+		await expect(tab(page, 'graph')).toHaveAttribute('aria-pressed', 'true');
+		await expect(p.getByRole('button', { name: '前往編輯頁' })).toBeVisible();
+		await p.getByRole('button', { name: '清除已選' }).click();
+		await expect(p).not.toContainText('已選');
+	});
+
+	test('多字 AND、全形與大小寫正規化', async ({ page }) => {
+		await openPalette(page, 'ｐｄｕ　a-01');
+		const list = palette(page).getByRole('listbox', { name: '搜尋結果' });
+		await expect(list.locator('button[data-id="機櫃 PDU A-01-A"]')).toBeVisible();
+		await expect(list.locator('button[data-id="機櫃 A-01"]')).toHaveCount(0);
+		await openPalette(page, 'zzz-沒有');
+		await expect(palette(page)).toContainText('找不到「zzz-沒有」');
+	});
+
+	test('大綱勾選跨查詢保留，加入不換畫面；編輯頁大綱只查工作區', async ({ page }) => {
+		const box = outline(page).getByRole('searchbox', { name: '篩選節點' });
+		await box.fill('A-01');
+		await outline(page).getByRole('checkbox', { name: '勾選 機櫃 A-01' }).check();
+		await box.fill('SD-02');
+		await outline(page).getByRole('checkbox', { name: '勾選 偵測器 SD-02' }).check();
+		await expect(outline(page)).toContainText('已選 2');
+		await outline(page).getByRole('button', { name: '加入編輯頁（2）' }).click();
+		await expect(tab(page, 'edit')).toHaveText('編輯頁 2/500');
+		await expect(tab(page, 'graph')).toHaveAttribute('aria-pressed', 'true');
+		// 編輯頁大綱只查工作區
+		await tab(page, 'edit').click();
+		await box.fill('');
+		await expect(outline(page)).toContainText('共 2 筆');
+		await expect(rows(page).getByRole('listitem')).toHaveCount(2);
+	});
+
+	test('新增邊端點可搜尋到工作區外的節點', async ({ page }) => {
+		await toEdit(page, ['偵測器 SD-01']);
+		const f = await edgeForm(page, '偵測器 SD-01', '機櫃 A-03');
+		await f.getByRole('radio', { name: '監測' }).check();
+		await f.getByRole('button', { name: '新增邊' }).click();
+		await expect(detail(page)).toContainText(field('終點', '機櫃 A-03'));
 	});
 });

@@ -1,21 +1,36 @@
 # PROGRESS
 
+## P3 全量搜尋與分頁入口（分支 cainmaila/main-3-3）
+
+- **Goal:** 單一搜尋 Worker／服務取代各處自掃 `graph.nodes`；快捷搜尋、大綱、新增邊端點共用分頁結果，不常駐全部節點 DOM。計畫 `.superpowers/sdd/plan/task-3-brief.md`
+- **Done（agent-tested，待 parent QA）:**
+  - `src/lib/search/`：`search-index.ts`（NFKC＋大小寫＋空白正規化、多詞 AND、中文包含；排序 完全符合 > 名稱前綴 > 名稱包含 > 類型／屬性，同組穩定 ID 序；每頁 50、無隱藏上限）、`protocol.ts`（init／patch／query；ack／page／error）、`search.worker.ts`、`search-client.svelte.ts`（`SearchService` 依每次成功 `execute()` 發 patch、revision 斷號自動 init 重同步、Worker 錯誤可重試；各 UI 各自 `SearchController`，requestId＋revision 丟棄過期回覆）
+  - 只送純資料（props 字串化）；拓撲變更才附 issue 集合，改名／屬性不重算 topology
+  - `SearchResults.svelte` 共用清單：總數、更新中、錯誤＋重試、上一頁／下一頁、跨頁勾選（保留到清除或節點刪除）
+  - ⌘K：Enter／點列＝定位（編輯頁：加入並定位）；勾選→「加入編輯頁（N）」不切畫面，另給「前往編輯頁」
+  - 大綱：全圖查全部節點（隱藏系統變淡、可定位、可勾選加入）；編輯頁只查工作區；畫布淡化用完整命中集合（Worker 回 `matches`，非僅當頁）
+  - 新增邊：起終點各自搜尋挑選（取代列出全部節點的 select）
+  - 量測：首頁 DOM 44,763 → 189；首搜 30 ms、熱搜 p50 12 ms（`/tmp` 試跑，P1 基線檔未動）
+  - check 0、lint 綠、unit 140、e2e 61（全套跑一次，2 個 e2e 時序修正後重跑通過）
+- **Todo:** P4 才做 200／1000 加入預算（目前沿用 `addToWork` 500 上限）
+- **Notes:** 舊「依系統分組／收合」大綱 e2e 改為分頁斷言；只打 `A-03` 時同組依 ID 排序（`ToR Switch A-03` 在 `機櫃 A-03` 前）；報告 `.superpowers/sdd/plan/task-3-report.md`
+
 ## P2 共用索引、命令與 revision（分支 cainmaila/main-3-3）
 
 - **Goal:** 兩個視圖共用的圖核心：`GraphIndex`、typed commands／`GraphChange`、`revision`／`topologyRevision`；詳情欄改本地草稿＋儲存／取消。計畫 `.superpowers/sdd/plan/task-2-brief.md`
-- **Done（agent-tested，待 parent QA）:**
+- **Done（parent QA：check 0 錯、核心 unit 54／54、草稿與刪除 e2e 4／4；已檢視命令／索引／UI diff）:**
   - `graph-index.ts`：`buildGraphIndex()` 一次 O(V+E) 建 `nodeById／edgeById／incoming／outgoing／incident`（只記 EdgeId）；`graph.ts` 的 `unprocessed／unreachable／findCustomers／validateEdge／checkDeleteNode` 改吃選用的預建索引（舊呼叫照舊）；`findCustomers` 多回 `customerIds`
   - `graph-change.ts`：`applyCommand()` 先驗完所有欄位才產生新狀態；IDC 唯讀、根節點、連接限制、不存在／過期（`base`）實體明確拒絕；改名／屬性只增 `revision`，增刪與方向改變才增 `topologyRevision`；回傳變更 ID 集合
   - `Editor.execute()` 是唯一寫入口；`updateNode／updateEdge` 取代 `edit／setProp`；`node()／edge()` 走索引；`unprocessed／unreachable` 只看 `topologyRevision`；新 `layoutGraph` 供 3D 版面（改名不重建，spy 驗證）
   - `DetailPanel` 本地草稿（名稱、方向、屬性、新增屬性）＋「儲存」「取消變更」，不 bind 標準圖；`ContextMenu` 方向切換走命令；`GraphView` 改吃 `layoutGraph`
   - check 0、lint 綠、unit 104、e2e 57 全過（含新增「詳情草稿」）
-- **Todo:** P3 起依 `revision`／`lastChange` 接搜尋；P4 起 2D `editVisible`／`stacks` 仍隨任何 graph 變更重算
+- **Todo:** ~~P3 起依 `revision`／`lastChange` 接搜尋~~（P3 完成）；P4 起 2D `editVisible`／`stacks` 仍隨任何 graph 變更重算
 - **Notes:** 切換選取會丟棄未儲存草稿（無提示）；報告 `.superpowers/sdd/plan/task-2-report.md`
 
 ## P1 代表性 10k 資料與量測基線（分支 cainmaila/main-3-3）
 
 - **Goal:** 建立唯一 root、domain-valid、可重現的 10k 規模資料（20k／100k 邊）與 production 量測入口，記錄現況基線（不修效能、不改門檻）。計畫 `.superpowers/sdd/plan/task-1-brief.md`
-- **Done（controller 已檢視 diff，独立通過 fixture/layout 46 tests、量測入口 13 e2e；基線效能未達標）:**
+- **Done（controller 已檢視 diff，獨立通過 fixture/layout 46 tests、量測入口 13 e2e；基線效能未達標）:**
   - `scaleFixture()`（`src/lib/model/scale-fixture.ts`）：seed 化；10,000 節點，hub 度 1001、ToR 環（有向 cycle）、20 個孤立節點、同名不同 id、8 系統、雙向邊、props 各自獨立；`graphStats()` 算 N／E／最大度／連通塊
   - `/measure?edges=&seed=&init=` opt-in 量測頁：僅此路由掛 `window.__measure`（卸載即刪）；預設首頁仍是 mock（e2e 驗證）
   - `GraphView` 加選用 `probe`：`graph:init`、`layout:start`、`layout:worker-done`、`layout:ready`、`camera:interactive`；worker 改用共用 `runLayout`（init 預設仍 zero）

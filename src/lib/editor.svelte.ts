@@ -30,6 +30,12 @@ import {
 import { buildGraphIndex, edgesOf, type GraphIndex } from './model/graph-index';
 import { graphMock, idcMock } from './model/mock';
 import type { GEdge, GNode, Graph } from './model/types';
+import {
+	SearchController,
+	SearchService,
+	createSearchWorker,
+	type WorkerLike
+} from './search/search-client.svelte';
 
 /** 勾選系統的節點＋通用節點；邊兩端都在才留 */
 function visibleIn(g: Graph, systems: readonly System[]): Graph {
@@ -98,8 +104,6 @@ export class Editor {
 	issue = $state<'unprocessed' | 'unreachable' | null>(null);
 	/** 畫布角落的圖例卡 */
 	legend = $state(false);
-	/** 大綱篩選文字 */
-	query = $state('');
 	/** 同類兄弟節點收成一疊（關掉＝全部展開） */
 	stacking = $state(true);
 	/** 手動展開的堆疊 key */
@@ -109,11 +113,28 @@ export class Editor {
 	/** 編輯後才成為疊卡成員的節點：不收進疊卡，免得畫面上的卡片消失；重新排版時清掉 */
 	loose = $state<string[]>([]);
 
-	/** 預設＝正式 mock；只有量測入口會傳入其他圖 */
-	constructor(graph: Graph = Editor.initial()) {
+	/** 全量搜尋：Worker 持有正規化快取；每筆成功命令都由 execute() 送進去 */
+	readonly search: SearchService;
+	/** 大綱的查詢（全圖＝全部節點；編輯頁＝只查工作區，另回全部命中給畫布淡化） */
+	readonly outline: SearchController;
+	/** ⌘K 快捷搜尋（永遠查全部節點）；跨頁勾選保留到主動清除 */
+	readonly palette: SearchController;
+
+	/** 預設＝正式 mock；只有量測入口會傳入其他圖。searchWorker 只給測試替換 */
+	constructor(graph: Graph = Editor.initial(), opts: { searchWorker?: () => WorkerLike } = {}) {
 		const s = initialGraphState(graph);
 		this.graph = s.graph;
 		this.index = s.index;
+		this.search = new SearchService(
+			{
+				revision: () => this.revision,
+				nodes: () => this.graph.nodes,
+				issues: () => ({ unprocessed: [...this.unprocessed], unreachable: [...this.unreachable] })
+			},
+			opts.searchWorker ?? createSearchWorker
+		);
+		this.outline = new SearchController(this.search, { matches: true });
+		this.palette = new SearchController(this.search);
 	}
 
 	// 拓撲分析只隨 topologyRevision 重算；改名／屬性不觸發
@@ -126,19 +147,14 @@ export class Editor {
 		return untrack(() => unreachable(this.graph, this.index));
 	});
 
-	/** 大綱篩選命中的節點；沒在篩選或左欄收合時為 null（收合時看不到篩選，不淡化畫布） */
-	/** 名稱是否符合搜尋文字（沒輸入＝符合） */
-	byText = (name: string) => name.toLowerCase().includes(this.query.trim().toLowerCase());
+	/**
+	 * 大綱篩選的全部命中（編輯頁工作區內，不只當頁）；沒在篩選、左欄收合或還沒有結果時為 null。
+	 * 更新中沿用上一版命中，畫布不閃爍。
+	 */
 	matched = $derived.by(() => {
-		const k = this.query.trim().toLowerCase();
-		const i = this.issue;
-		if ((!k && !i) || !this.panels.left) return null;
-		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- derived 每次重建，不需響應
-		return new Set(
-			this.graph.nodes
-				.filter((n) => (!k || this.byText(n.name)) && (!i || this[i].has(n.id)))
-				.map((n) => n.id)
-		);
+		const o = this.outline;
+		if ((!o.text.trim() && !o.issues.length) || !this.panels.left) return null;
+		return o.matches;
 	});
 
 	/** 勾選系統的節點＋通用節點；邊兩端都在畫面上才顯示（含最新名稱／屬性） */
@@ -196,6 +212,25 @@ export class Editor {
 		if (page === 'edit') this.issue = null;
 		if (!keep) this.selected = null;
 		this.fit(keep && s?.kind === 'node' ? [s.id] : []);
+	}
+
+	/** 搜尋結果「加入編輯頁」：不換畫面、不改系統篩選與選取 */
+	addToWorkspace(ids: string[]): boolean {
+		if (!this.addToWork(ids)) return false;
+		this.message = '已加入編輯頁';
+		return true;
+	}
+
+	/**
+	 * 搜尋結果「定位」：全圖選取並飛過去（系統隱藏也會勾回）；
+	 * 編輯頁只定位工作區內的節點（不改系統篩選）
+	 */
+	locate(id: string) {
+		if (!this.node(id)) return;
+		if (this.page === 'graph') return this.reveal(id);
+		if (!this.working.includes(id)) return;
+		this.select({ kind: 'node', id });
+		this.fit([id]);
 	}
 
 	removeFromWork(ids: string[]) {
@@ -328,6 +363,8 @@ export class Editor {
 			this.topologyRevision = state.topologyRevision;
 			this.lastChange = change;
 		});
+		// 逐筆送出：同一 tick 多筆命令時 lastChange 只看得到最後一筆
+		this.search.publish(change);
 		return true;
 	}
 

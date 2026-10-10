@@ -1,6 +1,9 @@
 import { flushSync } from 'svelte';
 import { describe, expect, it, vi } from 'vitest';
 import { Editor, WORK_LIMIT } from './editor.svelte';
+import { handleSearchMessage, type SearchRequest } from './search/protocol';
+import type { SearchController, WorkerLike } from './search/search-client.svelte';
+import { SearchStore } from './search/search-index';
 
 describe('Editor.addNode', () => {
 	it('名稱留空時用「類型 N」且不重複', () => {
@@ -213,5 +216,227 @@ describe('Editor 命令與 revision', () => {
 		flushSync();
 		expect(spy).toHaveBeenCalledTimes(3);
 		stop();
+	});
+});
+
+describe('Editor 搜尋服務（Worker 協定）', () => {
+	const AHU = '空調箱 AHU-2F-1';
+	type Reply = () => void;
+	/** 同協定的假 Worker：訊息 structuredClone（驗證純資料），回覆可暫扣以模擬亂序 */
+	function fakeWorker() {
+		const store = new SearchStore();
+		const f = {
+			posted: [] as SearchRequest[],
+			hold: false,
+			held: [] as Reply[],
+			crash: false,
+			instances: 0
+		};
+		const create = (): WorkerLike => {
+			f.instances++;
+			const w: WorkerLike = {
+				onmessage: null,
+				onerror: null,
+				postMessage(m) {
+					const msg = structuredClone(m);
+					f.posted.push(msg);
+					// 真 Worker 依序處理：回覆內容在送出時就決定，只是延後送達
+					const data = handleSearchMessage(store, msg);
+					const reply = () => {
+						if (f.crash) return w.onerror?.(new ErrorEvent('error', { message: 'boom' }));
+						w.onmessage?.(new MessageEvent('message', { data }));
+					};
+					if (f.hold) f.held.push(reply);
+					else setTimeout(reply);
+				},
+				terminate() {}
+			};
+			return w;
+		};
+		return { f, create };
+	}
+	const ready = (c: SearchController) => expect.poll(() => c.status).toBe('ready');
+
+	it('同一 tick 兩筆命令都送進 Worker；結果反映兩筆', async () => {
+		const { f, create } = fakeWorker();
+		const e = new Editor(undefined, { searchWorker: create });
+		const PDU = '機櫃 PDU A-01-A';
+		const victim = '機櫃 PDU A-01-B';
+		e.palette.set({ text: '機櫃 PDU' });
+		await ready(e.palette);
+		const before = e.palette.total;
+		expect(e.palette.ids).toContain(victim);
+		// 兩筆同步命令：lastChange 只剩最後一筆，服務仍須收到兩筆
+		e.updateNode(PDU, { name: '改名冷氣' });
+		e.execute({ kind: 'deleteNode', id: victim });
+		expect(e.lastChange?.removeNodeIds).toEqual([victim]);
+		expect(e.palette.status).toBe('pending');
+		await ready(e.palette);
+		expect(e.palette.revision).toBe(e.revision);
+		// 改名後仍以類型命中；刪掉的不再出現
+		expect(e.palette.total).toBe(before - 1);
+		expect(e.palette.ids).not.toContain(victim);
+		e.palette.set({ text: '改名冷氣' });
+		await ready(e.palette);
+		expect(e.palette.ids).toEqual([PDU]);
+		const patches = f.posted.filter((m) => m.kind === 'patch');
+		expect(patches).toHaveLength(1);
+		expect(patches[0]).toMatchObject({ revision: 2, remove: [victim] });
+		// 刪節點是拓撲變更：同一 patch 帶新的問題 ID sets
+		expect(patches[0].kind === 'patch' && patches[0].issues).toBeTruthy();
+	});
+
+	it('改名只送 metadata，不帶問題 ID sets（不重算拓撲分析）', async () => {
+		const { f, create } = fakeWorker();
+		const e = new Editor(undefined, { searchWorker: create });
+		e.palette.set({ text: AHU });
+		await ready(e.palette);
+		e.updateNode(AHU, { name: 'X', props: { 型號: 'Y' } });
+		await ready(e.palette);
+		const p = f.posted.find((m) => m.kind === 'patch')!;
+		expect(p).toMatchObject({ kind: 'patch', revision: 1, remove: [] });
+		expect('issues' in p).toBe(false);
+	});
+
+	it('過期回覆不覆蓋最新結果；各 UI 區塊的查詢互不覆蓋', async () => {
+		const { f, create } = fakeWorker();
+		const e = new Editor(undefined, { searchWorker: create });
+		f.hold = true;
+		e.palette.set({ text: 'UPS' });
+		e.palette.set({ text: '攝影機' });
+		e.outline.set({ text: 'Switch' });
+		// 倒序放行：最舊的回覆最後到
+		for (const r of f.held.reverse()) r();
+		f.hold = false;
+		await ready(e.palette);
+		await ready(e.outline);
+		expect(e.palette.text).toBe('攝影機');
+		const hit = (id: string, re: RegExp) => re.test(`${e.node(id)!.name} ${e.node(id)!.type}`);
+		expect(e.palette.ids.length).toBeGreaterThan(0);
+		expect(e.palette.ids.every((id) => hit(id, /攝影機/))).toBe(true);
+		expect(e.outline.ids.length).toBeGreaterThan(0);
+		expect(e.outline.ids.every((id) => hit(id, /switch/i))).toBe(true);
+	});
+
+	it('資料版本變更後，舊版本的回覆不標成最新', async () => {
+		const { f, create } = fakeWorker();
+		const e = new Editor(undefined, { searchWorker: create });
+		e.palette.set({ text: AHU });
+		await ready(e.palette);
+		f.hold = true;
+		e.palette.goto(0);
+		const old = f.held.splice(0);
+		e.updateNode(AHU, { name: '新名稱' });
+		old.forEach((r) => r());
+		expect(e.palette.status).toBe('pending');
+		f.hold = false;
+		await Promise.resolve();
+		f.held.splice(0).forEach((r) => r());
+		await ready(e.palette);
+		expect(e.palette.revision).toBe(1);
+		e.palette.set({ text: '新名稱' });
+		await ready(e.palette);
+		expect(e.palette.ids).toEqual([AHU]);
+	});
+
+	it('版本不連續時整份重建', async () => {
+		const { f, create } = fakeWorker();
+		const e = new Editor(undefined, { searchWorker: create });
+		e.palette.set({ text: '' });
+		await ready(e.palette);
+		e.search.publish({
+			revision: e.revision + 5,
+			topologyRevision: 0,
+			topology: false,
+			upsertNodes: [],
+			removeNodeIds: [],
+			upsertEdges: [],
+			removeEdgeIds: []
+		});
+		await ready(e.palette);
+		expect(f.posted.filter((m) => m.kind === 'init')).toHaveLength(2);
+	});
+
+	it('Worker 錯誤時顯示錯誤，重試後重建並恢復', async () => {
+		const { f, create } = fakeWorker();
+		const e = new Editor(undefined, { searchWorker: create });
+		f.crash = true;
+		e.palette.set({ text: 'UPS' });
+		await expect.poll(() => e.palette.status).toBe('error');
+		expect(e.search.error).toBe('boom');
+		f.crash = false;
+		e.palette.retry();
+		await ready(e.palette);
+		expect(e.palette.total).toBeGreaterThan(0);
+		expect(f.instances).toBe(2);
+	});
+
+	it('跨頁勾選保留到主動清除；刪除節點時移出', async () => {
+		const { create } = fakeWorker();
+		const e = new Editor(undefined, { searchWorker: create });
+		e.palette.set({ text: '' });
+		await ready(e.palette);
+		const a = e.palette.ids[0];
+		e.palette.toggle(a);
+		e.palette.goto(50);
+		await ready(e.palette);
+		const b = e.palette.ids[0];
+		e.palette.toggle(b);
+		e.palette.set({ text: 'zzz' });
+		expect(e.palette.picked).toEqual([a, b]);
+		const c = e.addNode('攝影機')!;
+		e.palette.toggle(c);
+		e.deleteNode(c);
+		expect(e.palette.picked).toEqual([a, b]);
+		e.palette.clearPicked();
+		expect(e.palette.picked).toEqual([]);
+	});
+
+	it('加入工作區不改系統篩選、不換畫面', () => {
+		const e = new Editor(undefined, { searchWorker: fakeWorker().create });
+		e.systems = ['電力'];
+		expect(e.addToWorkspace([AHU, '機櫃 A-01'])).toBe(true);
+		expect(e.working).toEqual([AHU, '機櫃 A-01']);
+		expect(e.systems).toEqual(['電力']);
+		expect(e.page).toBe('graph');
+		expect(e.selected).toBeNull();
+	});
+
+	it('定位可穿越系統隱藏', () => {
+		const e = new Editor(undefined, { searchWorker: fakeWorker().create });
+		e.systems = ['電力'];
+		e.locate(AHU);
+		expect(e.systems).toContain('空調');
+		expect(e.selected).toEqual({ kind: 'node', id: AHU });
+	});
+
+	it('編輯頁大綱只查工作區，畫布淡化用全部命中（不只當頁）', async () => {
+		const e = new Editor(undefined, { searchWorker: fakeWorker().create });
+		const many = e.graph.nodes
+			.filter((n) => n.type === '機櫃 PDU')
+			.slice(0, 120)
+			.map((n) => n.id);
+		expect(e.addToWork([...many, AHU])).toBe(true);
+		e.setPage('edit');
+		e.outline.set({ text: 'PDU', within: e.working });
+		await ready(e.outline);
+		expect(many.length).toBeGreaterThan(50);
+		expect(e.outline.ids).toHaveLength(50);
+		expect(e.matched?.size).toBe(many.length);
+		expect(e.matched?.has(AHU)).toBe(false);
+	});
+
+	it('真的 Worker：草稿 proxy 屬性也能送出，查得到改後內容', async () => {
+		const e = new Editor();
+		e.palette.set({ text: '機櫃 A-01' });
+		await ready(e.palette);
+		expect(e.palette.ids[0]).toBe('機櫃 A-01');
+		const draft = $state({ 型號: '特殊型號 Q9' });
+		e.updateNode('機櫃 A-01', { props: draft });
+		e.palette.set({ text: '特殊型號' });
+		await ready(e.palette);
+		expect(e.palette.ids).toEqual(['機櫃 A-01']);
+		expect(e.search.error).toBe('');
+		e.search.dispose();
 	});
 });
