@@ -4,8 +4,20 @@
 
 - P0–P4 已分階段審核，至 `3186ce4`；P4 獨立 check、工作區相關 unit 64／64、外部端點 e2e 通過，並已檢視修正 diff。
 - P3 QA 已修正：只改邊屬性造成搜尋永久 pending、Worker 同步失敗無錯誤 UI、排序與規格不符、缺少系統／類型搜尋篩選。
-- Next: P5 穩定座標與非阻塞宇宙；P5–P8 未交付。正式 10k 效能驗收尚未通過。
+- P5 至 `eb98d52` 已分階段審核：先顯示種子座標、背景整理、停止／重試、跨頁保存鏡頭。QA 修正 Worker 清理與壞回覆卡住；相機 race 測試改成真實輸入＋受控 Worker 時序，不放寬容差。
+- Next: P6 真正 LOD 與點選已由 agent 交付、待 parent QA；P7–P8 未交付。正式 10k 效能驗收尚未通過。
 - P7 必須收尾：詳情既有完整關係清單仍需分頁；鄰居資料縮減後的頁碼須重設或限制，避免空白末頁。
+
+## P6 分層批次繪製、LOD 與可靠點選（分支 cainmaila/main-3-3）
+
+- **Goal:** 遠景所有可見節點畫 Points；逐點投影半徑升級細節（進 6px／出 4px）；細節、局部邊、高亮邊、標籤都有硬上限並誠實計數；點選靠格網＋投影＋深度。計畫 `.superpowers/sdd/plan/task-6-brief.md`，報告 `task-6-report.md`
+- **Done（agent-tested，待 parent QA）:**
+  - `src/lib/universe/lod.ts`：集中 `LOD` 設定（detail ≤1000、局部邊 ≤2000 且兩端皆細節、高亮邊 ≤2000、標籤 ≤80、點選容差 8px…）；`buildGrid`（只在座標變動重建）、`computeFrame`（視錐候選、穩定排序＋遲滯、選取／hover／高亮佔同一預算、標籤避碰、旋轉中只重投影）、`pick`（射線格網候選、相機背後／視錐外／隱藏系統排除、重疊取最近正深度）
+  - `src/lib/universe/renderer.ts`：Points（ShaderMaterial，升級節點 size=0 不重畫）、細節 InstancedMesh、局部／高亮 LineSegments 與有限箭頭 InstancedMesh（固定容量、drawRange），DOM 標籤池 80；相機變動只做 LOD 查詢、不重建 mesh
+  - GraphView 改為薄生命週期轉接：初始化失敗逐項釋放已建資源（undo 堆疊）、`fits` 紀錄上限 20、點擊判斷（拖曳 >5px 不算）、hover rAF 節流、resize／DPR 重新投影；圖例顯示各系統節點數與 LOD 已畫／上限／省略（中文）
+  - `scripts/measure-universe.ts --p6`：真滾輪拉近、真滑鼠點選、LOD／繪製計數與截圖
+- **驗證:** unit＋client 240／240（lod 23、GraphView 整合 2）、check／lint 通過、production e2e 82／82（新增 P6 7 項，真滑鼠遠／近／重疊點選、拖曳不選、隱藏系統不可點）；真 GPU（M2 Metal）10k smoke 1 樣本：遠景 10,000 點、拉近 244 細節／275 局部邊／70 標籤、真點選命中、drag／wheel／zoom 幀間隔 p95 16.8ms、draw calls 4–5，產物 `artifacts/p6`
+- **Todo:** 正式 5 冷啟動／30 樣本矩陣（P8）；P7 完整關係分頁 UI
 
 ## P5 穩定座標與非阻塞宇宙（分支 cainmaila/main-3-3）
 

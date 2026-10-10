@@ -1,0 +1,588 @@
+// 3D 宇宙的分層繪製（three.js）：遠景 Points、近景 detail InstancedMesh、局部邊、高亮邊＋方向箭頭、標籤池。
+// 每一層都是固定容量的 GPU buffer，相機改變只改寫有上限的內容；Points 只在拓撲改變時重配、
+// 座標改變時就地寫入。LOD 與點選的決策在 lod.ts（純計算），這裡只負責把結果寫進 buffer／DOM。
+import type * as THREE_NS from 'three';
+import type { Graph } from '#lib/model/types.js';
+import type { UniverseRuntime } from './runtime';
+import {
+	LOD,
+	buildAdjacency,
+	buildGrid,
+	computeFrame,
+	labelWidth,
+	makeView,
+	pick,
+	pickRay,
+	project,
+	type Adjacency,
+	type Frame,
+	type Grid,
+	type LodState,
+	type LodStats,
+	type View
+} from './lod';
+
+export const PALETTE = {
+	DIM: '#1e293b',
+	LINK_HL: '#e2e8f0',
+	PATH: '#22d3ee',
+	SEL: '#ffffff',
+	WARN: '#facc15',
+	BROKEN: '#fb7185'
+} as const;
+
+/** 選取／找客戶的高亮輸入（ID 層級；renderer 自己轉成索引） */
+export type Focus = {
+	selected: string | null;
+	/** 亮起的節點；null＝沒有聚焦 */
+	nodes: ReadonlySet<string> | null;
+	/** 亮起的邊（edge id） */
+	edges: ReadonlySet<string> | null;
+	path: boolean;
+	/** 高亮邊的完整數量（含系統篩選隱藏的） */
+	highlightTotal: number;
+	warn: ReadonlySet<string>;
+	broken: ReadonlySet<string>;
+};
+
+export type ScreenPoint = { id: string; x: number; y: number; depth: number; px: number };
+
+type Three = typeof THREE_NS;
+
+export type UniverseLayersOptions = {
+	THREE: Three;
+	scene: THREE_NS.Scene;
+	camera: () => THREE_NS.PerspectiveCamera;
+	/** 畫布 CSS 尺寸 */
+	size: () => { width: number; height: number };
+	pixelRatio: () => number;
+	labelHost: HTMLElement;
+	runtime: UniverseRuntime;
+	/** 目前名稱（metadata 可能比 scene 新） */
+	name: (id: string) => string;
+	nodeColor: (type: string) => string;
+	onStats: (s: LodStats) => void;
+};
+
+const STATS_MS = 250;
+
+export function createUniverseLayers(o: UniverseLayersOptions) {
+	const { THREE, scene, runtime: rt } = o;
+	const R = LOD.nodeRadius;
+	const disposables: { dispose(): void }[] = [];
+	const own = <T extends { dispose(): void }>(x: T) => (disposables.push(x), x);
+
+	// ---- 狀態（非 Svelte） ----
+	let ids: readonly string[] = [];
+	let grid: Grid = buildGrid(new Float32Array(0));
+	let visible = new Uint8Array(0);
+	let base = new Float32Array(0); // 每個節點的 Points 尺寸倍率（0＝隱藏）
+	let graph: Graph = { nodes: [], edges: [] };
+	let colors: Float32Array = new Float32Array(0); // 每個節點目前顏色（含高亮）
+	let typeColor: string[] = [];
+	let edgeIds: string[] = [];
+	let edgeIndex = new Map<string, number>();
+	let from = new Uint32Array(0);
+	let to = new Uint32Array(0);
+	let bidi = new Uint8Array(0);
+	let adjacency: Adjacency = buildAdjacency(0, from, to);
+	let focus: Focus | null = null;
+	let focusIdx = { selected: -1, nodes: [] as number[], edges: [] as number[] };
+	let hover = -1;
+	let state: LodState | undefined;
+	let frame: Frame | null = null;
+	let view: View | null = null;
+	let dirty = true;
+	let labelsDirty = true;
+	let lastFull = 0;
+	let lastStats = 0;
+	let statsPending = false;
+	let prevDetail: number[] = [];
+	let lastCam = new Float64Array(20);
+	let lodMs = 0;
+	let lodMaxMs = 0;
+	let frames = 0;
+
+	// ---- 遠景 Points ----
+	const pointMat = own(
+		new THREE.ShaderMaterial({
+			uniforms: { focal: { value: 1 }, dpr: { value: 1 }, radius: { value: R } },
+			vertexShader: /* glsl */ `
+				attribute vec3 tint;
+				attribute float size;
+				uniform float focal;
+				uniform float dpr;
+				uniform float radius;
+				varying vec3 vTint;
+				void main() {
+					vTint = tint;
+					vec4 mv = modelViewMatrix * vec4(position, 1.0);
+					if (size <= 0.0 || -mv.z <= 0.0) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); gl_PointSize = 0.0; return; }
+					gl_Position = projectionMatrix * mv;
+					float px = size * radius * focal / -mv.z;
+					gl_PointSize = clamp(2.0 * px, 2.0, 2.0 * ${LOD.detailEnterPx.toFixed(1)} * size) * dpr;
+				}`,
+			fragmentShader: /* glsl */ `
+				varying vec3 vTint;
+				void main() {
+					float d = length(gl_PointCoord - 0.5);
+					if (d > 0.5) discard;
+					gl_FragColor = vec4(vTint * (d > 0.36 ? 0.7 : 1.0), 1.0);
+				}`
+		})
+	);
+	let pointGeom = new THREE.BufferGeometry();
+	const points = new THREE.Points(pointGeom, pointMat);
+	points.frustumCulled = false;
+	scene.add(points);
+
+	// ---- 近景 detail（固定容量） ----
+	const sphere = own(new THREE.SphereGeometry(R, 12, 10));
+	const detailMat = own(new THREE.MeshLambertMaterial());
+	const detailMesh = new THREE.InstancedMesh(sphere, detailMat, LOD.maxDetail);
+	detailMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+	detailMesh.setColorAt(0, new THREE.Color());
+	detailMesh.count = 0;
+	detailMesh.frustumCulled = false;
+	scene.add(detailMesh);
+
+	// ---- 邊（固定容量的 LineSegments） ----
+	const lines = (cap: number, mat: THREE_NS.LineBasicMaterial) => {
+		const g = own(new THREE.BufferGeometry());
+		g.setAttribute(
+			'position',
+			new THREE.BufferAttribute(new Float32Array(cap * 6), 3).setUsage(THREE.DynamicDrawUsage)
+		);
+		g.setAttribute(
+			'color',
+			new THREE.BufferAttribute(new Float32Array(cap * 6), 3).setUsage(THREE.DynamicDrawUsage)
+		);
+		g.setDrawRange(0, 0);
+		const l = new THREE.LineSegments(g, mat);
+		l.frustumCulled = false;
+		scene.add(l);
+		return l;
+	};
+	const localMat = own(
+		new THREE.LineBasicMaterial({
+			vertexColors: true,
+			transparent: true,
+			opacity: 0.45,
+			depthWrite: false
+		})
+	);
+	const hiMat = own(new THREE.LineBasicMaterial({ vertexColors: true, depthWrite: false }));
+	const localLines = lines(LOD.maxLocalEdges, localMat);
+	const hiLines = lines(LOD.maxHighlightEdges, hiMat);
+
+	// ---- 方向箭頭（只有選取／找客戶的高亮邊；固定容量） ----
+	const cone = own(new THREE.ConeGeometry(1.8, 6, 6));
+	const arrowMat = own(new THREE.MeshBasicMaterial());
+	const arrows = new THREE.InstancedMesh(cone, arrowMat, LOD.maxHighlightEdges * 2);
+	arrows.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+	arrows.setColorAt(0, new THREE.Color());
+	arrows.count = 0;
+	arrows.frustumCulled = false;
+	scene.add(arrows);
+
+	// ---- 標籤池（DOM，最多 maxLabels 個，建立一次） ----
+	const pool = Array.from({ length: LOD.maxLabels }, () => {
+		const el = document.createElement('div');
+		el.className = 'universe-label';
+		el.style.cssText =
+			'position:absolute;left:0;top:0;display:none;box-sizing:border-box;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;' +
+			`height:${LOD.labelHeightPx}px;line-height:${LOD.labelHeightPx}px;font-size:${LOD.labelFontPx}px;padding:0 4px;` +
+			'border-radius:4px;color:#e2e8f0;background:rgba(11,16,32,.72);pointer-events:none;will-change:transform';
+		o.labelHost.appendChild(el);
+		return { el, node: -1 };
+	});
+	const widths = new Map<number, number>();
+	const widthOf = (i: number) => {
+		let w = widths.get(i);
+		if (w === undefined) widths.set(i, (w = labelWidth(o.name(ids[i]))));
+		return w;
+	};
+
+	const c = new THREE.Color();
+	const m4 = new THREE.Matrix4();
+	const v3 = new THREE.Vector3();
+	const q = new THREE.Quaternion();
+	const UP = new THREE.Vector3(0, 1, 0);
+	const S1 = new THREE.Vector3(1, 1, 1);
+
+	/** 拓撲改變（runtime 的 ids 換了）才重配 Points buffer */
+	function syncIds() {
+		const s = rt.snapshot();
+		if (s.ids === ids) return;
+		ids = s.ids;
+		const n = ids.length;
+		pointGeom.dispose();
+		pointGeom = new THREE.BufferGeometry();
+		pointGeom.setAttribute(
+			'position',
+			new THREE.BufferAttribute(new Float32Array(n * 3), 3).setUsage(THREE.DynamicDrawUsage)
+		);
+		pointGeom.setAttribute('tint', new THREE.BufferAttribute(new Float32Array(n * 3), 3));
+		pointGeom.setAttribute('size', new THREE.BufferAttribute(new Float32Array(n), 1));
+		points.geometry = pointGeom;
+		colors = (pointGeom.getAttribute('tint') as THREE_NS.BufferAttribute).array as Float32Array;
+		base = new Float32Array(n);
+		prevDetail = [];
+		state = undefined;
+		widths.clear();
+		writePositions();
+		applyScene();
+	}
+
+	/** runtime 座標 → Points buffer＋空間格網（只在座標改變時） */
+	function writePositions() {
+		const s = rt.snapshot();
+		if (s.ids !== ids) return syncIds();
+		const a = pointGeom.getAttribute('position') as THREE_NS.BufferAttribute;
+		(a.array as Float32Array).set(s.positions);
+		a.needsUpdate = true;
+		grid = buildGrid(s.positions);
+		dirty = true;
+	}
+
+	/** 可見子圖 → 可見遮罩、邊索引、基本顏色 */
+	function applyScene() {
+		const index = rt.snapshot().index;
+		const n = ids.length;
+		visible = new Uint8Array(n);
+		typeColor = new Array(n).fill(PALETTE.DIM);
+		for (const node of graph.nodes) {
+			const i = index.get(node.id);
+			if (i === undefined) continue;
+			visible[i] = 1;
+			typeColor[i] = o.nodeColor(node.type);
+		}
+		const es = graph.edges.filter((e) => index.has(e.from) && index.has(e.to));
+		edgeIds = es.map((e) => e.id);
+		edgeIndex = new Map(edgeIds.map((id, k) => [id, k]));
+		from = Uint32Array.from(es, (e) => index.get(e.from)!);
+		to = Uint32Array.from(es, (e) => index.get(e.to)!);
+		bidi = Uint8Array.from(es, (e) => (e.bidirectional ? 1 : 0));
+		adjacency = buildAdjacency(n, from, to);
+		applyFocus();
+	}
+
+	/** 高亮／狀態 → 每個節點的顏色與 Points 尺寸（選取改變時，不是每次相機改變） */
+	function applyFocus() {
+		const f = focus;
+		const index = rt.snapshot().index;
+		const fn = f?.nodes ?? null;
+		focusIdx = {
+			selected: f?.selected ? (index.get(f.selected) ?? -1) : -1,
+			nodes: fn ? [...fn].flatMap((id) => index.get(id) ?? []) : [],
+			edges: f?.edges ? [...f.edges].flatMap((id) => edgeIndex.get(id) ?? []) : []
+		};
+		for (let i = 0; i < ids.length; i++) {
+			const id = ids[i];
+			let col = typeColor[i];
+			const issue = !!f && (f.warn.has(id) || f.broken.has(id));
+			if (f?.warn.has(id)) col = PALETTE.WARN;
+			else if (f?.broken.has(id)) col = PALETTE.BROKEN;
+			if (fn && !fn.has(id)) col = PALETTE.DIM;
+			else if (i === focusIdx.selected) col = PALETTE.SEL;
+			else if (f?.path && fn) col = PALETTE.PATH;
+			c.set(col);
+			colors[i * 3] = c.r;
+			colors[i * 3 + 1] = c.g;
+			colors[i * 3 + 2] = c.b;
+			base[i] = visible[i] ? (issue ? 1.6 : 1) : 0;
+		}
+		(pointGeom.getAttribute('tint') as THREE_NS.BufferAttribute).needsUpdate = true;
+		writeSizes([], true);
+		dirty = labelsDirty = true;
+	}
+
+	/** Points 尺寸：升級為 detail 的節點設 0（不重複繪製） */
+	function writeSizes(detail: readonly number[], reset = false) {
+		const a = pointGeom.getAttribute('size') as THREE_NS.BufferAttribute | undefined;
+		if (!a) return;
+		const arr = a.array as Float32Array;
+		if (reset) arr.set(base);
+		else for (const i of prevDetail) arr[i] = base[i];
+		for (const i of detail) arr[i] = 0;
+		prevDetail = [...detail];
+		a.needsUpdate = true;
+	}
+
+	const camKey = (cam: THREE_NS.PerspectiveCamera, w: number, h: number) => {
+		const k = new Float64Array(20);
+		k.set(cam.matrixWorldInverse.elements);
+		k[16] = w;
+		k[17] = h;
+		k[18] = cam.projectionMatrix.elements[0];
+		k[19] = cam.projectionMatrix.elements[5];
+		return k;
+	};
+	const same = (a: Float64Array, b: Float64Array) => a.every((x, k) => x === b[k]);
+
+	function currentView() {
+		const cam = o.camera();
+		const { width, height } = o.size();
+		const p = cam.position;
+		return makeView(
+			cam.projectionMatrix.elements,
+			cam.matrixWorldInverse.elements,
+			[p.x, p.y, p.z],
+			width,
+			height
+		);
+	}
+
+	/** 每次 render 前：相機或資料有變才重算 LOD 並寫入有上限的 buffer */
+	function update(now = performance.now()) {
+		const cam = o.camera();
+		const { width, height } = o.size();
+		if (!width || !height) return;
+		const key = camKey(cam, width, height);
+		const moved = !same(key, lastCam);
+		if (moved) lastCam = key;
+		if (statsPending && now - lastStats >= STATS_MS) emitStats(now);
+		if (!moved && !dirty && !labelsDirty) return;
+		const t0 = performance.now();
+		view = currentView();
+		pointMat.uniforms.focal.value = view.focal;
+		pointMat.uniforms.dpr.value = o.pixelRatio();
+		// 轉動中只重新投影既有標籤；停下（或間隔到了）才重新挑選與避碰
+		const full = !state || !moved || now - lastFull >= LOD.labelThrottleMs;
+		const f = computeFrame(
+			{
+				ids,
+				positions: rt.snapshot().positions,
+				grid,
+				visible,
+				view,
+				edges: { ids: edgeIds, from, to, adjacency },
+				selected: focusIdx.selected,
+				hover,
+				focus: focusIdx.nodes,
+				highlight: focusIdx.edges,
+				highlightTotal: focus?.highlightTotal ?? 0,
+				labelWidth: widthOf,
+				labels: full ? 'full' : 'reproject'
+			},
+			state
+		);
+		state = f.state;
+		frame = f;
+		if (full) {
+			lastFull = now;
+			labelsDirty = false;
+		} else labelsDirty = true;
+		dirty = false;
+		writeDetail(f);
+		writeLocal(f);
+		writeHighlight(f);
+		writeLabels(f);
+		frames++;
+		lodMs = performance.now() - t0;
+		lodMaxMs = Math.max(lodMaxMs, lodMs);
+		statsPending = true;
+		if (now - lastStats >= STATS_MS) emitStats(now);
+	}
+
+	function emitStats(now: number) {
+		if (!frame) return;
+		lastStats = now;
+		statsPending = false;
+		o.onStats(frame.stats);
+	}
+
+	const P = () => rt.snapshot().positions;
+
+	function writeDetail(f: Frame) {
+		const pos = P();
+		f.detail.forEach((i, k) => {
+			const s = base[i] > 1 ? 1.6 : 1;
+			m4.makeScale(s, s, s).setPosition(pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2]);
+			detailMesh.setMatrixAt(k, m4);
+			detailMesh.setColorAt(k, c.setRGB(colors[i * 3], colors[i * 3 + 1], colors[i * 3 + 2]));
+		});
+		detailMesh.count = f.detail.length;
+		detailMesh.instanceMatrix.needsUpdate = true;
+		detailMesh.instanceColor!.needsUpdate = true;
+		writeSizes(f.detail);
+	}
+
+	function seg(l: THREE_NS.LineSegments, k: number, a: number, b: number, col: THREE_NS.Color) {
+		const pos = P();
+		const pa = l.geometry.getAttribute('position') as THREE_NS.BufferAttribute;
+		const ca = l.geometry.getAttribute('color') as THREE_NS.BufferAttribute;
+		pa.setXYZ(k * 2, pos[a * 3], pos[a * 3 + 1], pos[a * 3 + 2]);
+		pa.setXYZ(k * 2 + 1, pos[b * 3], pos[b * 3 + 1], pos[b * 3 + 2]);
+		ca.setXYZ(k * 2, col.r, col.g, col.b);
+		ca.setXYZ(k * 2 + 1, col.r, col.g, col.b);
+	}
+	const finish = (l: THREE_NS.LineSegments, n: number) => {
+		l.geometry.setDrawRange(0, n * 2);
+		l.geometry.getAttribute('position').needsUpdate = true;
+		l.geometry.getAttribute('color').needsUpdate = true;
+	};
+
+	function writeLocal(f: Frame) {
+		const dim = !!focus?.nodes;
+		f.localEdges.forEach((e, k) => {
+			const i = from[e];
+			if (dim) c.set(PALETTE.DIM);
+			else c.set(typeColor[i]);
+			seg(localLines, k, from[e], to[e], c);
+		});
+		finish(localLines, f.localEdges.length);
+	}
+
+	function writeHighlight(f: Frame) {
+		c.set(focus?.path ? PALETTE.PATH : PALETTE.LINK_HL);
+		const pos = P();
+		let n = 0;
+		const arrow = (a: number, b: number) => {
+			const dx = pos[b * 3] - pos[a * 3];
+			const dy = pos[b * 3 + 1] - pos[a * 3 + 1];
+			const dz = pos[b * 3 + 2] - pos[a * 3 + 2];
+			const len = Math.hypot(dx, dy, dz);
+			if (len < 14) return;
+			v3.set(dx / len, dy / len, dz / len);
+			q.setFromUnitVectors(UP, v3);
+			const back = R * (base[b] > 1 ? 1.6 : 1) + 4;
+			m4.compose(
+				new THREE.Vector3(
+					pos[b * 3] - v3.x * back,
+					pos[b * 3 + 1] - v3.y * back,
+					pos[b * 3 + 2] - v3.z * back
+				),
+				q,
+				S1
+			);
+			arrows.setMatrixAt(n, m4);
+			arrows.setColorAt(n, c);
+			n++;
+		};
+		f.highlightEdges.forEach((e, k) => {
+			seg(hiLines, k, from[e], to[e], c);
+			arrow(from[e], to[e]);
+			if (bidi[e]) arrow(to[e], from[e]);
+		});
+		finish(hiLines, f.highlightEdges.length);
+		arrows.count = n;
+		arrows.instanceMatrix.needsUpdate = true;
+		arrows.instanceColor!.needsUpdate = true;
+	}
+
+	function writeLabels(f: Frame) {
+		const sel = focusIdx.selected;
+		pool.forEach((slot, k) => {
+			const l = f.labels[k];
+			if (!l) {
+				if (slot.node !== -1) slot.el.style.display = 'none';
+				slot.node = -1;
+				return;
+			}
+			if (slot.node !== l.node) {
+				slot.node = l.node;
+				slot.el.textContent = o.name(l.id);
+				slot.el.dataset.id = l.id;
+				slot.el.style.width = `${l.w}px`;
+				slot.el.style.display = 'block';
+				slot.el.style.fontWeight = l.node === sel ? '600' : '400';
+				slot.el.style.outline = l.node === sel ? '1px solid #fff' : 'none';
+			}
+			slot.el.style.transform = `translate(${l.x}px,${l.y}px)`;
+		});
+	}
+
+	// ---- 外部介面 ----
+	const off = (() => {
+		const prev = scene.onBeforeRender;
+		scene.onBeforeRender = (...args) => {
+			prev.apply(scene, args);
+			update();
+		};
+		return () => (scene.onBeforeRender = prev);
+	})();
+	syncIds();
+
+	return {
+		/** 可見子圖（拓撲或系統篩選改變） */
+		setGraph(g: Graph) {
+			graph = g;
+			syncIds();
+			applyScene();
+		},
+		setFocus(f: Focus) {
+			focus = f;
+			applyFocus();
+		},
+		/** runtime 座標改變 */
+		positions: writePositions,
+		/** 名稱改了：標籤重寫文字與寬度，不碰版面 */
+		refreshLabels() {
+			widths.clear();
+			for (const s of pool) s.node = -1;
+			labelsDirty = true;
+		},
+		/** 尺寸／DPR 改變 */
+		invalidate() {
+			dirty = labelsDirty = true;
+		},
+		setHover(x: number | null, y = 0) {
+			const h = x === null ? -1 : pickIndex(x, y);
+			if (h === hover) return h;
+			hover = h;
+			labelsDirty = dirty = true;
+			return h;
+		},
+		/** 畫布 CSS 座標 → 節點 id（沒有點中回 null） */
+		pick(x: number, y: number) {
+			const i = pickIndex(x, y);
+			return i < 0 ? null : ids[i];
+		},
+		/** 立即算一次（測試／量測用，不等下一幀） */
+		flush() {
+			dirty = true;
+			update();
+		},
+		frame: () => frame,
+		perf: () => ({ lodMs, lodMaxMs, frames }),
+		/** 節點在畫布上的 CSS 座標；相機背後或隱藏回 null */
+		project(id: string): ScreenPoint | null {
+			const i = rt.snapshot().index.get(id);
+			if (i === undefined || !visible[i]) return null;
+			const v = currentView();
+			const pos = P();
+			const p = project(v, pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2]);
+			return p && { id, ...p, px: (R * v.focal) / p.depth };
+		},
+		/** 畫面內所有可見節點的投影（e2e 找重疊點用） */
+		projectAll(): ScreenPoint[] {
+			const v = currentView();
+			const pos = P();
+			const out: ScreenPoint[] = [];
+			for (let i = 0; i < ids.length; i++) {
+				if (!visible[i]) continue;
+				const p = project(v, pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2]);
+				if (p && p.x >= 0 && p.y >= 0 && p.x <= v.width && p.y <= v.height)
+					out.push({ id: ids[i], ...p, px: (R * v.focal) / p.depth });
+			}
+			return out;
+		},
+		dispose() {
+			off();
+			for (const x of [points, detailMesh, localLines, hiLines, arrows]) x.removeFromParent();
+			pointGeom.dispose();
+			detailMesh.dispose();
+			arrows.dispose();
+			for (const d of disposables) d.dispose();
+			for (const s of pool) s.el.remove();
+		}
+	};
+
+	function pickIndex(x: number, y: number) {
+		const v = currentView();
+		return pick({ positions: P(), grid, visible, view: v, ray: pickRay(v, x, y), x, y });
+	}
+}
+
+export type UniverseLayers = ReturnType<typeof createUniverseLayers>;

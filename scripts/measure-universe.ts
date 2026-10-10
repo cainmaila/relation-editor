@@ -1,7 +1,8 @@
 // P1 量測腳本（可給 P8 重用）。Node 24 直接執行 TS：
 //   pnpm measure:universe layout  [--edges 20000,100000] [--seed 1] [--ticks 100]
 //   pnpm measure:universe browser [--edges 20000] [--init zero|d3] [--samples 5] [--url http://localhost:4173]
-//                                 [--channel chrome] [--headed] [--angle swiftshader]
+//                                 [--channel chrome] [--headed] [--angle swiftshader] [--p6] [--out dir]
+// --p6：另外記錄 LOD／繪製計數、真滾輪拉近與真滑鼠點選（P6 煙霧，不是正式驗收）
 // browser 模式需先 `pnpm build && pnpm preview`（production build）。結果寫到 --out（預設 .superpowers/sdd/plan/artifacts/p1）。
 // 只記錄數據，不判定門檻；門檻以計畫 §5 為準。
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -335,6 +336,96 @@ async function search(page: Page, text: string, timeout: number) {
 	return { text, typedAt: r1(typedAt), resultAt: r1(resultAt), latency: r1(resultAt - typedAt) };
 }
 
+type GV = {
+	lod(): Record<string, unknown> | null;
+	render(): Record<string, number>;
+	detailIds(): string[];
+	labels(): unknown[];
+	selected(): string | null;
+	projectAll(): { id: string; x: number; y: number; depth: number; px: number }[];
+};
+const gvEval = <T>(page: Page, f: (h: GV) => T) =>
+	page.evaluate(
+		(src) =>
+			new Function('h', `return (${src})(h)`)(
+				(window as unknown as { __graphView: GV }).__graphView
+			) as T,
+		f.toString()
+	);
+const lodNow = (page: Page) =>
+	gvEval(page, (h) => ({
+		lod: h.lod(),
+		render: h.render(),
+		labels: h.labels().length
+	}));
+
+/**
+ * P6 煙霧：真滾輪拉近（逐點 LOD 升級）、在拉近畫面用真滑鼠點一個細節節點、再滾回遠景。
+ * 只記錄 LOD／繪製計數與截圖，不是正式驗收（5 冷啟 30 樣本屬 P8）。
+ */
+async function p6(page: Page, cx: number, cy: number, name: string, shots: boolean) {
+	const far = await lodNow(page);
+	await page.mouse.move(cx, cy);
+	const zoomIn = await frames(page, async () => {
+		for (let i = 0; i < 30; i++) {
+			await page.mouse.wheel(0, -200);
+			await page.waitForTimeout(16);
+		}
+	});
+	await page.waitForTimeout(1500);
+	const near = await lodNow(page);
+	if (shots) await page.screenshot({ path: path.join(OUT, `${name}-near.png`) });
+	// 真實點選：拉近畫面裡挑一個細節節點、點下去，比對選取
+	const box = (await page.locator('canvas').first().boundingBox())!;
+	const target = await gvEval(page, (h) => {
+		const d = new Set(h.detailIds());
+		return h.projectAll().filter((p) => d.has(p.id) && p.px >= 6);
+	}).then((ps) =>
+		ps.find(
+			(p) =>
+				p.x > box.x + 80 &&
+				p.y > box.y + 80 &&
+				p.x < box.x + box.width - 400 &&
+				p.y < box.y + box.height - 200 &&
+				ps.every((q) => q.id === p.id || q.depth > p.depth || Math.hypot(q.x - p.x, q.y - p.y) > 12)
+		)
+	);
+	let pick: { target: string | null; selected: string | null; ms: number } = {
+		target: null,
+		selected: null,
+		ms: NaN
+	};
+	if (target) {
+		const t0 = Date.now();
+		await page.mouse.click(target.x, target.y);
+		await page
+			.waitForFunction(
+				(id) => (window as unknown as { __graphView: GV }).__graphView.selected() === id,
+				target.id,
+				{ timeout: 5000 }
+			)
+			.catch(() => {});
+		pick = {
+			target: target.id,
+			selected: await gvEval(page, (h) => h.selected()),
+			ms: Date.now() - t0
+		};
+	}
+	await page.waitForTimeout(500);
+	const selectedNear = await lodNow(page);
+	if (shots) await page.screenshot({ path: path.join(OUT, `${name}-near-selected.png`) });
+	const zoomOut = await frames(page, async () => {
+		for (let i = 0; i < 30; i++) {
+			await page.mouse.wheel(0, 200);
+			await page.waitForTimeout(16);
+		}
+	});
+	await page.waitForTimeout(1500);
+	const back = await lodNow(page);
+	if (shots) await page.screenshot({ path: path.join(OUT, `${name}-far-selected.png`) });
+	return { far, zoomIn, near, pick, selectedNear, zoomOut, back };
+}
+
 async function browser() {
 	const url = opt('url', 'http://localhost:4173');
 	const init = opt('init', 'zero');
@@ -342,7 +433,7 @@ async function browser() {
 	const channel = opt('channel', '');
 	const timeout = int('timeout', opt('timeout', '180000'));
 	const angle = opt('angle', '');
-	const tag = `${init}${channel ? `-${channel}` : ''}${flag('headed') ? '-headed' : ''}${angle ? `-${angle}` : ''}`;
+	const tag = `${init}${channel ? `-${channel}` : ''}${flag('headed') ? '-headed' : ''}${angle ? `-${angle}` : ''}${flag('p6') ? '-p6' : ''}`;
 	const results = [];
 	let browserVersion = '';
 	for (const edges of EDGES) {
@@ -408,6 +499,7 @@ async function browser() {
 						(await cdp.send('Performance.getMetrics')).metrics.find((m) => m.name === n)!.value /
 							2 ** 20
 					);
+				const p6r = flag('p6') ? await p6(page, cx, cy, name, s === 0) : null;
 				const heapUsedMB = await metric('JSHeapUsedSize');
 				await cdp.send('HeapProfiler.collectGarbage');
 				const heapAfterGcMB = await metric('JSHeapUsedSize');
@@ -444,6 +536,7 @@ async function browser() {
 					drag: dragF,
 					wheel: wheelF,
 					renderInfoAfterDrag: info,
+					p6: p6r,
 					heapUsedMB,
 					heapAfterGcMB,
 					consoleErrors: errors
@@ -461,6 +554,12 @@ async function browser() {
 						drag: r.drag.intervalMs,
 						wheel: r.wheel.intervalMs,
 						calls: info?.calls,
+						p6: p6r && {
+							far: p6r.far.lod,
+							near: p6r.near.lod,
+							pick: p6r.pick,
+							zoomIn: p6r.zoomIn.intervalMs
+						},
 						heapAfterGcMB
 					})
 				);

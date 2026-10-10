@@ -19,6 +19,37 @@ type Hook = {
 	fits(): Fit[];
 	autoFit(): boolean;
 	loseContext(): void;
+	lod(): Lod | null;
+	detailIds(): string[];
+	localEdgeIds(): string[];
+	highlightEdgeIds(): string[];
+	labels(): { id: string; x: number; y: number; w: number; h: number }[];
+	project(id: string): Pt | null;
+	projectAll(): Pt[];
+	render(): { calls: number; points: number; triangles: number; lines: number };
+};
+type Pt = { id: string; x: number; y: number; depth: number; px: number };
+type Lod = {
+	visibleNodes: number;
+	baseNodes: number;
+	detail: number;
+	detailOmitted: number;
+	localEdges: number;
+	localEdgesOmitted: number;
+	highlightTotal: number;
+	highlightDrawn: number;
+	highlightOmitted: number;
+	highlightHidden: number;
+	labels: number;
+	labelsOmitted: number;
+	config: {
+		maxDetail: number;
+		maxLocalEdges: number;
+		maxHighlightEdges: number;
+		maxLabels: number;
+		pickTolerancePx: number;
+		nodeRadius: number;
+	};
 };
 const gv = <T>(page: Page, f: (h: Hook) => T) =>
 	page.evaluate(
@@ -307,5 +338,215 @@ test.describe('代表性大圖（10k／20k）', () => {
 			{ ids: 0, ms: 600, phase: 'done' }
 		]);
 		expect(untouched.after!.position).not.toEqual(untouched.before.pose.position);
+	});
+});
+
+// P6：分層批次繪製、逐點投影 LOD 與可靠點選。一律用真實滑鼠（page.mouse）點／拖／滾輪，
+// 座標由 __graphView.project() 換算（只讀），不用相機 setter 取代操作。
+/** 等幾個動畫幀（含標籤節流後的全量 pass） */
+const frames = (page: Page, n = 12) =>
+	page.evaluate(
+		(k) =>
+			new Promise<void>((r) => {
+				let i = 0;
+				const f = () => (++i >= k ? r() : requestAnimationFrame(f));
+				requestAnimationFrame(f);
+			}),
+		n
+	);
+const lod = async (page: Page) => (await gv(page, (h) => h.lod()))!;
+const projectOf = (page: Page, id: string) =>
+	page.evaluate((x) => (window as unknown as { __graphView: Hook }).__graphView.project(x), id);
+/** 只留滑鼠真的會落在畫布上的點（排除圖例、狀態列等浮層蓋住的位置） */
+const onCanvas = (page: Page, pts: Pt[]) =>
+	page.evaluate(
+		(ps) =>
+			ps.filter((p) => {
+				const el = document.elementFromPoint(p.x, p.y);
+				if (!(el instanceof HTMLCanvasElement)) return false;
+				// 四周 12px 也要是畫布（避開浮層邊緣）
+				return [
+					[-12, 0],
+					[12, 0],
+					[0, -12],
+					[0, 12]
+				].every(([dx, dy]) => document.elementFromPoint(p.x + dx, p.y + dy) === el);
+			}),
+		pts
+	);
+/** 與 lod.pick 相同規則的預期結果：容差／投影半徑內取深度最小，再比螢幕距離 */
+const expected = (pts: Pt[], x: number, y: number, tol: number) =>
+	pts
+		.filter((p) => Math.hypot(p.x - x, p.y - y) <= Math.max(tol, p.px))
+		.sort(
+			(a, b) => a.depth - b.depth || Math.hypot(a.x - x, a.y - y) - Math.hypot(b.x - x, b.y - y)
+		)[0]?.id ?? null;
+/** 點下去「應該」就是自己、且周圍 gap px 內沒有別的點（避免次像素平手） */
+const clean =
+	(pts: Pt[], tol: number, gap = 1) =>
+	(p: Pt) =>
+		expected(pts, p.x, p.y, tol) === p.id &&
+		pts.every((q) => q.id === p.id || Math.hypot(q.x - p.x, q.y - p.y) > gap);
+
+test.describe('P6 LOD 與點選（正式 mock）', () => {
+	test.beforeEach(async ({ page }) => {
+		await page.goto('/');
+		await ready(page);
+		await expect.poll(() => phase(page), { timeout: 60_000 }).toBe('done');
+		await settle(page);
+		await frames(page);
+	});
+
+	test('遠景：所有可見節點都是點、各層在預算內、標籤不重疊；圖例有系統數與 LOD 省略數', async ({
+		page
+	}) => {
+		const s = await lod(page);
+		expect(s.visibleNodes).toBe(2066);
+		// 遠景點與細節互斥（升級的節點不重畫點）
+		expect(s.baseNodes + s.detail).toBe(s.visibleNodes);
+		expect(s.detail).toBeLessThanOrEqual(s.config.maxDetail);
+		expect(s.localEdges).toBeLessThanOrEqual(s.config.maxLocalEdges);
+		expect(s.labels).toBeLessThanOrEqual(s.config.maxLabels);
+		const labels = await gv(page, (h) => h.labels());
+		for (let i = 0; i < labels.length; i++)
+			for (let j = i + 1; j < labels.length; j++) {
+				const [a, b] = [labels[i], labels[j]];
+				const overlap = a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+				expect(overlap, `${a.id} × ${b.id}`).toBe(false);
+			}
+		const legend = page.getByRole('region', { name: '宇宙圖例' });
+		await expect(legend.getByRole('list', { name: '系統' })).toContainText('電力 672');
+		await expect(legend).toContainText('遠景點');
+		await expect(legend).toContainText(`近景節點 ${s.detail.toLocaleString('en-US')}`);
+		await expect(legend).toContainText('名稱標籤');
+	});
+
+	test('遠處的點（未升級細節）用真實滑鼠也點得到；選取一定有標籤；點空白取消', async ({ page }) => {
+		const s = await lod(page);
+		const detail = new Set(await gv(page, (h) => h.detailIds()));
+		const pts = await gv(page, (h) => h.projectAll());
+		const far = (
+			await onCanvas(
+				page,
+				pts.filter((p) => !detail.has(p.id) && p.px < 4)
+			)
+		).find(clean(pts, s.config.pickTolerancePx));
+		expect(far, '找不到可點的遠景點').toBeTruthy();
+		await page.mouse.click(far!.x, far!.y);
+		await expect.poll(() => gv(page, (h) => h.selected())).toBe(far!.id);
+		await frames(page);
+		expect((await gv(page, (h) => h.labels())).map((l) => l.id)).toContain(far!.id);
+		expect(await gv(page, (h) => h.detailIds())).toContain(far!.id);
+		const box = (await page.locator('main canvas').first().boundingBox())!;
+		await page.mouse.click(box.x + 3, box.y + 3);
+		await expect.poll(() => gv(page, (h) => h.selected())).toBe(null);
+	});
+
+	test('滾輪拉近：逐點升級細節，近處點選正確；局部連線兩端都是細節、都在預算內', async ({
+		page
+	}) => {
+		const box = (await page.locator('main canvas').first().boundingBox())!;
+		const before = (await lod(page)).detail;
+		await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+		for (let i = 0; i < 12; i++) await page.mouse.wheel(0, -300);
+		await settle(page);
+		await frames(page);
+		const s = await lod(page);
+		expect(s.detail).toBeGreaterThan(before);
+		expect(s.detail).toBeLessThanOrEqual(s.config.maxDetail);
+		expect(s.localEdges).toBeLessThanOrEqual(s.config.maxLocalEdges);
+		expect(s.labels).toBeLessThanOrEqual(s.config.maxLabels);
+		expect(s.baseNodes + s.detail).toBe(s.visibleNodes);
+		const detail = new Set(await gv(page, (h) => h.detailIds()));
+		const pts = await gv(page, (h) => h.projectAll());
+		const near = (
+			await onCanvas(
+				page,
+				pts.filter((p) => detail.has(p.id) && p.px >= 6)
+			)
+		).find(clean(pts, s.config.pickTolerancePx));
+		expect(near, '拉近後應有可點的細節節點').toBeTruthy();
+		await page.mouse.click(near!.x, near!.y);
+		await expect.poll(() => gv(page, (h) => h.selected())).toBe(near!.id);
+	});
+
+	test('重疊的點：真實點擊取最近（深度最小）的節點', async ({ page }) => {
+		const tol = (await lod(page)).config.pickTolerancePx;
+		const all = await gv(page, (h) => h.projectAll());
+		const pts = await onCanvas(page, all);
+		let found: { far: Pt; near: Pt } | null = null;
+		const sorted = [...pts].sort((a, b) => a.x - b.x);
+		for (let i = 0; i < sorted.length && !found; i++)
+			for (let j = i + 1; j < sorted.length && sorted[j].x - sorted[i].x < 3; j++) {
+				const [a, b] = [sorted[i], sorted[j]];
+				if (Math.hypot(a.x - b.x, a.y - b.y) < 3 && Math.abs(a.depth - b.depth) > 1) {
+					found = a.depth > b.depth ? { far: a, near: b } : { far: b, near: a };
+					break;
+				}
+			}
+		expect(found, '找不到重疊的點對').toBeTruthy();
+		const want = expected(all, found!.far.x, found!.far.y, tol);
+		expect(want).not.toBe(found!.far.id);
+		await page.mouse.click(found!.far.x, found!.far.y);
+		await expect.poll(() => gv(page, (h) => h.selected())).toBe(want);
+	});
+
+	test('拖曳相機不算點擊：按在節點上拖動放開，選取不變', async ({ page }) => {
+		const tol = (await lod(page)).config.pickTolerancePx;
+		const pts = await gv(page, (h) => h.projectAll());
+		const p = (await onCanvas(page, pts)).find(clean(pts, tol, 4))!;
+		expect(p).toBeTruthy();
+		const pose = await gv(page, (h) => h.pose());
+		await page.mouse.move(p.x, p.y);
+		await page.mouse.down();
+		await page.mouse.move(p.x + 80, p.y + 30, { steps: 4 });
+		await page.mouse.up();
+		await settle(page);
+		expect(await gv(page, (h) => h.selected())).toBe(null);
+		expect((await gv(page, (h) => h.pose())).position).not.toEqual(pose.position);
+	});
+
+	test('隱藏系統的節點點不到；搜尋隱藏系統的節點會自動勾回並選取', async ({ page }) => {
+		const all = await gv(page, (h) => h.projectAll());
+		const pose = await gv(page, (h) => h.pose());
+		await page.getByRole('checkbox', { name: '網路' }).click({ modifiers: ['Alt'] });
+		await expect.poll(() => gv(page, (h) => h.nodeCount())).toBe(346);
+		await frames(page);
+		expect(await gv(page, (h) => h.pose())).toEqual(pose);
+		const shown = await gv(page, (h) => h.projectAll());
+		const vis = new Set(shown.map((p) => p.id));
+		const hidden = (await onCanvas(page, all)).find(
+			(p) => !vis.has(p.id) && shown.every((q) => Math.hypot(q.x - p.x, q.y - p.y) > 24)
+		);
+		expect(hidden, '找不到被隱藏、周圍無可見點的節點').toBeTruthy();
+		expect(await projectOf(page, hidden!.id)).toBe(null);
+		await page.mouse.click(hidden!.x, hidden!.y);
+		await frames(page);
+		expect(await gv(page, (h) => h.selected())).toBe(null);
+		// 既有 reveal：搜尋隱藏系統的節點，自動勾回並選取
+		await page.keyboard.press('ControlOrMeta+k');
+		await page.getByRole('textbox', { name: '搜尋節點' }).fill(hidden!.id);
+		await page.keyboard.press('Enter');
+		await expect.poll(() => gv(page, (h) => h.selected())).toBe(hidden!.id);
+		await expect.poll(() => projectOf(page, hidden!.id)).not.toBe(null);
+	});
+
+	test('高亮邊誠實計數：總數＝已畫＋省略＋系統隱藏，已畫不超過上限', async ({ page }) => {
+		await page.keyboard.press('ControlOrMeta+k');
+		await page.getByRole('textbox', { name: '搜尋節點' }).fill('台電市電');
+		await page.keyboard.press('Enter');
+		await expect.poll(() => gv(page, (h) => h.selected())).toBe('台電市電');
+		await page.keyboard.press('f');
+		await expect(page.getByRole('region', { name: '找客戶結果' })).toBeVisible();
+		await frames(page);
+		const s = await lod(page);
+		expect(s.highlightTotal).toBeGreaterThan(s.config.maxHighlightEdges);
+		expect(s.highlightDrawn).toBe(s.config.maxHighlightEdges);
+		expect(s.highlightDrawn + s.highlightOmitted + s.highlightHidden).toBe(s.highlightTotal);
+		expect((await gv(page, (h) => h.highlightEdgeIds())).length).toBe(s.highlightDrawn);
+		expect(s.detail).toBeLessThanOrEqual(s.config.maxDetail);
+		const legend = page.getByRole('region', { name: '宇宙圖例' });
+		await expect(legend).toContainText(`共 ${s.highlightTotal.toLocaleString('en-US')}`);
+		await expect(legend).toContainText(`已畫 ${s.highlightDrawn.toLocaleString('en-US')}`);
 	});
 });

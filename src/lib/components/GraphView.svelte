@@ -1,43 +1,59 @@
 <script lang="ts">
-	// 全圖（只讀）：3d-force-graph 只提供相機／場景／控制（不給它 graphData，不跑它的模擬），
-	// 節點用 InstancedMesh、邊用單一 LineSegments。座標由 editor.universe（session runtime）持有：
-	// 掛載當下就畫初始座標，背景 Worker 的分段結果直接就地更新 GPU buffer，不經 Svelte state。
-	// 系統篩選、選取、找客戶只換繪製子集合或顏色，不重算版面；重新整理版面只由按鈕觸發。
+	// 全圖（只讀）：3d-force-graph 只提供相機／場景／控制（不給它 graphData，不跑它的模擬）。
+	// 繪製分層在 universe/renderer.ts：遠景 Points（可見系統全部節點）、近景 detail（依每個節點的投影半徑、
+	// 有上限）、局部邊／高亮邊批次、有限標籤池；LOD 決策在 universe/lod.ts。這個元件只負責生命週期與 UI。
+	// 座標由 editor.universe（session runtime）持有，背景 Worker 的分段結果就地寫進 GPU buffer，不經 Svelte state。
 	import { onMount, untrack } from 'svelte';
 	import type { Editor } from '#lib/editor.svelte.js';
 	import { SYSTEM_COLORS } from '#lib/components/Canvas.svelte';
-	import { UNREACHABLE_LABEL, nodeType } from '#lib/model/config.js';
+	import { SYSTEMS, UNREACHABLE_LABEL, nodeType } from '#lib/model/config.js';
 	import type * as THREE from 'three';
 	import type { Graph } from '#lib/model/types.js';
 	import type { GraphProbe } from '#lib/measure.js';
 	import type { CameraDriver, CameraPose, LayoutStatus } from '#lib/universe/runtime.js';
+	import { LOD, type LodStats } from '#lib/universe/lod.js';
+	import { PALETTE, createUniverseLayers, type Focus } from '#lib/universe/renderer.js';
 
 	// probe：只有量測入口傳入，記錄首幀／相機可操作／版面整理的時間點
 	let { editor, probe }: { editor: Editor; probe?: GraphProbe } = $props();
 
-	const DIM = '#1e293b';
-	const LINK_HL = '#e2e8f0';
-	const PATH = '#22d3ee';
-	const SEL = '#ffffff';
-	const WARN = '#facc15';
-	const BROKEN = '#fb7185';
 	/** 定位單一節點時鏡頭與節點的距離 */
 	const DIST = 160;
+	/** 相機入鏡呼叫紀錄只留最近幾筆（e2e 觀察用，不可無限成長） */
+	const FITS_CAP = 20;
+	/** 按下到放開移動超過這個距離就是拖曳相機，不算點選 */
+	const CLICK_SLOP = 5;
 
-	type Api = { build: (g: Graph) => void; paint: () => void };
+	type Api = { build: (g: Graph) => void; paint: () => void; refresh: () => void };
 	type Hooks = Record<string, unknown>;
 
 	const rt = untrack(() => editor.universe);
 	let host: HTMLDivElement;
+	let labelHost: HTMLDivElement;
 	let api = $state.raw<Api | null>(null);
 	let ready = $state(false);
 	/** renderer 層的失敗（載入模組、WebGL 建立、context lost）；搜尋與編輯不受影響 */
 	let failure = $state<string | null>(null);
 	let attempt = $state(0);
 	let layout = $state.raw<LayoutStatus>(rt.status);
+	/** LOD 計數（renderer 最多每 250ms 回報一次） */
+	let stats = $state.raw<LodStats | null>(null);
 	let focusNodes: Set<string> | null = null;
 	/** 掛載前就發生的視野請求屬於其他頁（2D）；這次掛載只接手之後的請求 */
 	let seenSeq = untrack(() => editor.view.seq);
+
+	/** 圖例：各系統目前可見節點數（隨拓撲／篩選，不隨相機） */
+	const perSystem = $derived.by(() => {
+		const n: Record<string, number> = {};
+		for (const node of editor.sceneGraph.nodes) {
+			const s = nodeType(node.type).system ?? '通用';
+			n[s] = (n[s] ?? 0) + 1;
+		}
+		return n;
+	});
+	const legendSystems = $derived(
+		[...SYSTEMS.filter((s) => editor.systems.includes(s)), '通用'].filter((s) => perSystem[s])
+	);
 
 	// 版面狀態（約每 200ms 一次）才進 Svelte；座標不進
 	onMount(() =>
@@ -67,6 +83,7 @@
 			dead = true;
 			api = null;
 			ready = false;
+			stats = null;
 			off?.();
 		};
 	});
@@ -82,6 +99,13 @@
 		const a = api;
 		void [editor.selected, editor.result, editor.unprocessed, editor.unreachable];
 		if (a) untrack(() => a.paint());
+	});
+
+	// 改名／屬性：只重寫標籤文字，不重建 buffer、不碰版面
+	$effect(() => {
+		const a = api;
+		void editor.revision;
+		if (a) untrack(() => a.refresh());
 	});
 
 	// 視野請求（reveal／找客戶／全景）；renderer 未就緒時由 runtime 排隊，只留最後一次
@@ -105,390 +129,412 @@
 					: `已停止整理（${t}）`;
 		return '初始版面（尚未整理）';
 	};
+	const fmt = (n: number) => n.toLocaleString('en-US');
 
 	async function init(isDead: () => boolean): Promise<{ api: Api; off: () => void }> {
-		const [{ default: ForceGraph3D }, THREE] = await Promise.all([
+		const [{ default: ForceGraph3D }, three] = await Promise.all([
 			import('3d-force-graph'),
 			import('three')
 		]);
-		const noop = { api: { build: () => {}, paint: () => {} }, off: () => {} };
+		const noop = { api: { build: () => {}, paint: () => {}, refresh: () => {} }, off: () => {} };
 		// 卸載後才載入完成：不建立任何 GPU 資源
 		if (isDead()) return noop;
 
-		const fg = new ForceGraph3D(host).backgroundColor('#0b1020').showNavInfo(false);
-		const renderer = fg.renderer();
-		if (!renderer?.getContext?.()) {
-			fg._destructor();
-			throw new Error('無法建立 WebGL');
+		// 每建立一項資源就登記釋放；初始化中途失敗時反向釋放已建立的部分
+		const undo: (() => void)[] = [];
+		const off = () => {
+			while (undo.length)
+				try {
+					undo.pop()!();
+				} catch (e) {
+					console.warn('3D 宇宙清理失敗', e);
+				}
+		};
+		try {
+			return build();
+		} catch (e) {
+			off();
+			throw e;
 		}
-		const canvas = renderer.domElement;
-		const controls = fg.controls() as EventTarget & { target: THREE.Vector3; update(): void };
-		probe?.renderer(renderer);
-		probe?.mark('graph:init');
-		if (probe) rt.mark = probe.mark;
 
-		let g: Graph = { nodes: [], edges: [] };
-		let ids: string[] = [];
-		let idx = new Map<string, number>();
-		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- 非響應的內部索引
-		let inc = new Map<string, { edge: number; other: string }[]>();
-		let colors: string[] = [];
-		let im: THREE.InstancedMesh | null = null;
-		let center = new THREE.Vector3();
-		let radius = 1;
-		let first = true;
-		let frame = 0;
-
-		const nodeMat = new THREE.MeshLambertMaterial({ transparent: true, opacity: 0.85 });
-		const edgeMat = new THREE.LineBasicMaterial({
-			vertexColors: true,
-			transparent: true,
-			opacity: 0.3,
-			depthWrite: false
-		});
-		const hiMat = new THREE.LineBasicMaterial({ vertexColors: true, depthWrite: false });
-		const nodeGeom = new THREE.SphereGeometry(4, 8, 8);
-		let edgeLine: THREE.LineSegments | null = null;
-		let hiLine: THREE.LineSegments | null = null;
-
-		const clearScene = () => {
-			for (const o of [im, edgeLine, hiLine]) {
-				o?.removeFromParent();
-				if (o && o !== im) o.geometry.dispose();
+		function build(): { api: Api; off: () => void } {
+			const fg = new ForceGraph3D(host)
+				.backgroundColor('#0b1020')
+				.showNavInfo(false)
+				.enablePointerInteraction(false);
+			undo.push(() => fg._destructor());
+			const renderer = fg.renderer();
+			if (!renderer?.getContext?.()) throw new Error('無法建立 WebGL');
+			const canvas = renderer.domElement;
+			const controls = fg.controls() as EventTarget & { target: THREE.Vector3 };
+			probe?.renderer(renderer);
+			probe?.mark('graph:init');
+			if (probe) {
+				rt.mark = probe.mark;
+				undo.push(() => {
+					if (rt.mark === probe.mark) rt.mark = null;
+				});
 			}
-			im?.dispose();
-			im = edgeLine = hiLine = null;
-		};
 
-		/** runtime 的目前座標（全部節點，含被篩掉的） */
-		const at = (id: string, v = new THREE.Vector3()) => {
-			const s = rt.snapshot();
-			const i = s.index.get(id);
-			if (i === undefined) return null;
-			return v.set(s.positions[i * 3], s.positions[i * 3 + 1], s.positions[i * 3 + 2]);
-		};
+			let g: Graph = { nodes: [], edges: [] };
+			let sceneIds = new Set<string>();
+			let first = true;
+			let frame = 0;
+			let hoverFrame = 0;
 
-		const fit = (target: readonly string[], ms: number) => {
-			const pick = target.length ? target : ids;
-			const pts = pick.flatMap((id) => at(id) ?? []);
-			if (!pts.length) return;
-			const c = pts.reduce((s, p) => s.add(p), new THREE.Vector3()).divideScalar(pts.length);
-			const r = Math.max(...pts.map((p) => p.distanceTo(c)));
-			const d = pts.length === 1 ? DIST : Math.max(r * 2.5, 60);
-			fg.cameraPosition({ x: c.x, y: c.y, z: c.z + d }, c, ms);
-		};
-		const xyz = (v: THREE.Vector3) => ({ x: v.x, y: v.y, z: v.z });
-		// 每次相機入鏡呼叫（含當時版面狀態），供 e2e 直接觀察「晚到的自動入鏡」有沒有發生
-		const fits: { ids: number; ms: number; phase: string }[] = [];
-		const driver: CameraDriver = {
-			fit: (target, ms) => {
-				fits.push({ ids: target.length, ms, phase: rt.status.phase });
-				fit(target, ms);
-			},
-			pose: (): CameraPose => ({
-				position: xyz(fg.camera().position),
-				target: xyz(controls.target)
-			}),
-			restore: (p) => fg.cameraPosition(p.position, p.target, 0)
-		};
+			const layers = createUniverseLayers({
+				THREE: three,
+				scene: fg.scene(),
+				camera: () => fg.camera() as THREE.PerspectiveCamera,
+				size: () => ({ width: canvas.clientWidth, height: canvas.clientHeight }),
+				pixelRatio: () => renderer.getPixelRatio(),
+				labelHost,
+				runtime: rt,
+				name: (id) => editor.node(id)?.name ?? id,
+				nodeColor: (type) => SYSTEM_COLORS[nodeType(type).system ?? '通用'],
+				onStats: (s) => (stats = s)
+			});
+			undo.push(() => layers.dispose());
 
-		// 相機離圖心越遠邊越淡，拉近越清楚
-		const lod = () => {
-			const t = Math.min(
-				1,
-				Math.max(0, (1.5 - fg.camera().position.distanceTo(center) / radius) / 1.2)
-			);
-			edgeMat.opacity = 0.04 + 0.5 * t;
-		};
-		const interacted = () => rt.camera.interacted();
-		controls.addEventListener('change', lod);
-		controls.addEventListener('start', interacted);
-
-		/** 高亮邊另畫在不透明的一層；找客戶路徑加箭頭（V 形，畫在終點節點外緣） */
-		const highlight = (fl: Set<number> | null, path: boolean) => {
-			hiLine?.removeFromParent();
-			hiLine?.geometry.dispose();
-			hiLine = null;
-			if (!fl) return;
-			const p: number[] = [];
-			const seg = (a: THREE.Vector3, b: THREE.Vector3) => p.push(a.x, a.y, a.z, b.x, b.y, b.z);
-			const arrow = (a: THREE.Vector3, b: THREE.Vector3) => {
-				const d = b.clone().sub(a);
-				const len = d.length();
-				if (len < 14) return;
-				d.divideScalar(len);
-				const side = new THREE.Vector3().crossVectors(d, new THREE.Vector3(0, 1, 0));
-				if (side.lengthSq() < 1e-6) side.set(1, 0, 0);
-				side.normalize().multiplyScalar(3);
-				const tip = b.clone().addScaledVector(d, -5);
-				const back = tip.clone().addScaledVector(d, -6);
-				seg(tip, back.clone().add(side));
-				seg(tip, back.clone().sub(side));
+			/** runtime 的目前座標（全部節點，含被篩掉的） */
+			const at = (id: string, v = new three.Vector3()) => {
+				const p = rt.position(id);
+				return p ? v.set(p[0], p[1], p[2]) : null;
 			};
-			for (const i of fl) {
-				const e = g.edges[i];
-				const a = at(e.from);
-				const b = at(e.to);
-				if (!a || !b) continue;
-				seg(a, b);
-				if (path) {
-					arrow(a, b);
-					if (e.bidirectional) arrow(b, a);
+
+			const fit = (target: readonly string[], ms: number) => {
+				const pick = target.length ? target : g.nodes.map((n) => n.id);
+				const pts = pick.flatMap((id) => at(id) ?? []);
+				if (!pts.length) return;
+				const c = pts.reduce((s, p) => s.add(p), new three.Vector3()).divideScalar(pts.length);
+				let r = 0;
+				for (const p of pts) r = Math.max(r, p.distanceTo(c));
+				const d = pts.length === 1 ? DIST : Math.max(r * 2.5, 60);
+				fg.cameraPosition({ x: c.x, y: c.y, z: c.z + d }, c, ms);
+			};
+			const xyz = (v: THREE.Vector3) => ({ x: v.x, y: v.y, z: v.z });
+			// 相機入鏡呼叫（含當時版面狀態），供 e2e 觀察「晚到的自動入鏡」；只留最近 FITS_CAP 筆
+			const fits: { ids: number; ms: number; phase: string }[] = [];
+			const driver: CameraDriver = {
+				fit: (target, ms) => {
+					fits.push({ ids: target.length, ms, phase: rt.status.phase });
+					if (fits.length > FITS_CAP) fits.shift();
+					fit(target, ms);
+				},
+				pose: (): CameraPose => ({
+					position: xyz(fg.camera().position),
+					target: xyz(controls.target)
+				}),
+				restore: (p) => fg.cameraPosition(p.position, p.target, 0)
+			};
+			const interacted = () => rt.camera.interacted();
+			controls.addEventListener('start', interacted);
+			undo.push(() => controls.removeEventListener('start', interacted));
+
+			const paint = () => {
+				const res = editor.result;
+				const sel = editor.selected;
+				let nodes: Set<string> | null = null;
+				let edges: Set<string> | null = null;
+				let total = 0;
+				if (res) {
+					nodes = res.nodes;
+					edges = res.edges;
+					total = res.edges.size;
+				} else if (sel?.kind === 'node' && sceneIds.has(sel.id)) {
+					const all = editor.incidentEdges(sel.id);
+					const near = all.filter((e) => sceneIds.has(e.from) && sceneIds.has(e.to));
+					nodes = new Set([sel.id, ...near.map((e) => (e.from === sel.id ? e.to : e.from))]);
+					edges = new Set(near.map((e) => e.id));
+					total = all.length;
+				} else if (sel?.kind === 'edge') {
+					const e = editor.edge(sel.id);
+					if (e && sceneIds.has(e.from) && sceneIds.has(e.to)) {
+						nodes = new Set([e.from, e.to]);
+						edges = new Set([e.id]);
+						total = 1;
+					}
 				}
-			}
-			const hc = new THREE.Color(path ? PATH : LINK_HL);
-			const col = Array.from({ length: p.length }, (_, k) => [hc.r, hc.g, hc.b][k % 3]);
-			const geom = new THREE.BufferGeometry();
-			geom.setAttribute('position', new THREE.Float32BufferAttribute(p, 3));
-			geom.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
-			hiLine = new THREE.LineSegments(geom, hiMat);
-			hiLine.frustumCulled = false;
-			fg.scene().add(hiLine);
-		};
+				focusNodes = nodes;
+				const f: Focus = {
+					selected: sel?.kind === 'node' ? sel.id : null,
+					nodes,
+					edges,
+					path: !!res,
+					highlightTotal: total,
+					warn: editor.unprocessed,
+					broken: editor.unreachable
+				};
+				layers.setFocus(f);
+			};
 
-		let lastFocus: { fl: Set<number> | null; path: boolean } = { fl: null, path: false };
-		const paint = () => {
-			if (!im || !edgeLine) return;
-			const res = editor.result;
-			const sel = editor.selected;
-			let fn: Set<string> | null = null;
-			let fl: Set<number> | null = null;
-			const path = !!res;
-			if (res) {
-				fn = res.nodes;
-				fl = new Set(g.edges.flatMap((e, i) => (res.edges.has(e.id) ? [i] : [])));
-			} else if (sel?.kind === 'node' && idx.has(sel.id)) {
-				const near = inc.get(sel.id) ?? [];
-				fn = new Set([sel.id, ...near.map((x) => x.other)]);
-				fl = new Set(near.map((x) => x.edge));
-			} else if (sel?.kind === 'edge') {
-				const i = g.edges.findIndex((e) => e.id === sel.id);
-				if (i >= 0) {
-					fn = new Set([g.edges[i].from, g.edges[i].to]);
-					fl = new Set([i]);
-				}
-			}
-			focusNodes = fn;
-
-			const c = new THREE.Color();
-			ids.forEach((id, i) => {
-				let col = colors[i];
-				if (editor.unprocessed.has(id)) col = WARN;
-				else if (editor.unreachable.has(id)) col = BROKEN;
-				if (fn && !fn.has(id)) col = DIM;
-				else if (sel?.kind === 'node' && id === sel.id) col = SEL;
-				else if (path && fn) col = PATH;
-				im!.setColorAt(i, c.set(col));
-			});
-			im.instanceColor!.needsUpdate = true;
-
-			const ec = edgeLine.geometry.getAttribute('color') as THREE.BufferAttribute;
-			g.edges.forEach((e, i) => {
-				c.set(fl ? DIM : colors[idx.get(e.from)!]);
-				ec.setXYZ(i * 2, c.r, c.g, c.b);
-				ec.setXYZ(i * 2 + 1, c.r, c.g, c.b);
-			});
-			ec.needsUpdate = true;
-			lastFocus = { fl, path };
-			highlight(fl, path);
-		};
-
-		/** 把 runtime 目前座標就地寫進 GPU buffer（版面每段進度、拓撲 reconcile 後） */
-		const place = () => {
-			if (!im || !edgeLine) return;
-			const m = new THREE.Matrix4();
-			const v = new THREE.Vector3();
-			center = new THREE.Vector3();
-			ids.forEach((id, i) => {
-				const p = at(id, v) ?? v.set(0, 0, 0);
-				center.add(p);
-				const s = editor.unprocessed.has(id) || editor.unreachable.has(id) ? 1.6 : 1;
-				im!.setMatrixAt(i, m.makeScale(s, s, s).setPosition(p));
-			});
-			im.instanceMatrix.needsUpdate = true;
-			center.divideScalar(Math.max(ids.length, 1));
-			let r = 1;
-			for (const id of ids) r = Math.max(r, at(id, v)?.distanceTo(center) ?? 0);
-			radius = r * 1.2;
-
-			const ep = edgeLine.geometry.getAttribute('position') as THREE.BufferAttribute;
-			const w = new THREE.Vector3();
-			g.edges.forEach((e, i) => {
-				const a = at(e.from, v);
-				const b = at(e.to, w);
-				if (a) ep.setXYZ(i * 2, a.x, a.y, a.z);
-				if (b) ep.setXYZ(i * 2 + 1, b.x, b.y, b.z);
-			});
-			ep.needsUpdate = true;
-			lod();
-			highlight(lastFocus.fl, lastFocus.path);
-		};
-
-		const build = (graph: Graph) => {
-			g = graph;
-			ids = graph.nodes.map((n) => n.id);
-			idx = new Map(ids.map((id, i) => [id, i]));
-			colors = graph.nodes.map((n) => SYSTEM_COLORS[nodeType(n.type).system ?? '通用']);
-			inc = new Map();
-			const list = (id: string) => inc.get(id) ?? inc.set(id, []).get(id)!;
-			graph.edges.forEach((e, i) => {
-				list(e.from).push({ edge: i, other: e.to });
-				list(e.to).push({ edge: i, other: e.from });
-			});
-			clearScene();
-			im = new THREE.InstancedMesh(nodeGeom, nodeMat, ids.length);
-			im.frustumCulled = false;
-			ids.forEach((_, i) => im!.setColorAt(i, new THREE.Color(colors[i])));
-			fg.scene().add(im);
-			const eg = new THREE.BufferGeometry();
-			const n6 = graph.edges.length * 6;
-			eg.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n6), 3));
-			eg.setAttribute('color', new THREE.BufferAttribute(new Float32Array(n6), 3));
-			edgeLine = new THREE.LineSegments(eg, edgeMat);
-			edgeLine.frustumCulled = false;
-			fg.scene().add(edgeLine);
-			place();
-			paint();
-			if (!first) return;
-			// 首幀：初始座標已上 GPU；相機接手（恢復上次姿態或整體入鏡），再背景開始整理
-			first = false;
-			ready = true;
-			probe?.mark('universe:first-frame', { nodes: ids.length, edges: graph.edges.length });
-			rt.camera.attach(driver);
-			requestAnimationFrame(() => {
-				if (isDead()) return;
-				probe?.mark('camera:interactive');
-				rt.startInitial();
-			});
-		};
-
-		// 版面進度：一幀最多寫一次 GPU buffer
-		const offPositions = rt.subscribe((e) => {
-			if (e !== 'positions' || frame) return;
-			frame = requestAnimationFrame(() => {
-				frame = 0;
-				place();
-			});
-		});
-
-		// InstancedMesh 不走 raycast，點擊改以螢幕座標找最近的節點（10px 內）
-		let down = { x: 0, y: 0 };
-		const onDown = (e: PointerEvent) => (down = { x: e.clientX, y: e.clientY });
-		const onClick = (e: MouseEvent) => {
-			if (!ready || Math.hypot(e.clientX - down.x, e.clientY - down.y) > 5) return;
-			const r = canvas.getBoundingClientRect();
-			const v = new THREE.Vector3();
-			let best: string | null = null;
-			let bd = 10;
-			for (const id of ids) {
-				const p = at(id, v);
-				if (!p) continue;
-				const q = fg.graph2ScreenCoords(p.x, p.y, p.z);
-				const d = Math.hypot(q.x + r.left - e.clientX, q.y + r.top - e.clientY);
-				if (d < bd) [bd, best] = [d, id];
-			}
-			editor.select(best ? { kind: 'node', id: best } : null);
-		};
-		const onLost = (e: Event) => {
-			e.preventDefault();
-			ready = false;
-			failure = '3D 繪圖內容遺失（WebGL context lost）';
-		};
-		const onRestored = () => {
-			failure = null;
-			ready = true;
-			place();
-			paint();
-		};
-		canvas.addEventListener('pointerdown', onDown);
-		canvas.addEventListener('click', onClick);
-		canvas.addEventListener('webglcontextlost', onLost);
-		canvas.addEventListener('webglcontextrestored', onRestored);
-
-		const ro = new ResizeObserver(() => fg.width(host.clientWidth).height(host.clientHeight));
-		ro.observe(host);
-
-		const view = {
-			/** renderer 可操作且目前可見圖已畫出（不代表版面整理完成，見 layout()） */
-			get ready() {
-				return ready;
-			},
-			selected: () => (editor.selected?.kind === 'node' ? editor.selected.id : null),
-			highlighted: () => [...(focusNodes ?? [])],
-			click: (id: string) => editor.select({ kind: 'node', id }),
-			search: (name: string) => {
-				const ns = editor.graphVisible.nodes;
-				const n = ns.find((x) => x.name === name) ?? ns.find((x) => x.name.includes(name));
-				if (!n) return null;
-				editor.select({ kind: 'node', id: n.id });
-				editor.fit([n.id]);
-				return n.id;
-			},
-			find: (id: string) => editor.findCustomers(id),
-			// 唯讀掛勾，供 e2e 驗證 PRD 的節點／邊數量（3D 畫面讀不到 DOM）
-			nodeCount: () => ids.length,
-			edgeCount: () => g.edges.length,
-			// P5：版面與相機分開觀察
-			layout: () => rt.status,
-			workerStarts: () => rt.workerStarts,
-			version: () => rt.snapshot().version,
-			position: (id: string) => rt.position(id),
-			pose: () => driver.pose(),
-			fits: () => fits.map((f) => ({ ...f })),
-			autoFit: () => rt.camera.autoFit,
-			loseContext: () =>
-				(
-					renderer.getContext().getExtension('WEBGL_lose_context') as {
-						loseContext(): void;
-					} | null
-				)?.loseContext()
-		};
-		const win = window as unknown as { __graphView?: Hooks };
-		win.__graphView = view;
-
-		return {
-			api: { build, paint },
-			off: () => {
-				if (win.__graphView === view) delete win.__graphView;
+			const build = (graph: Graph) => {
+				g = graph;
+				sceneIds = new Set(graph.nodes.map((n) => n.id));
+				layers.setGraph(graph);
+				paint();
+				if (!first) return;
+				// 首幀：初始座標已上 GPU；相機接手（恢復上次姿態或整體入鏡），再背景開始整理
+				first = false;
+				ready = true;
+				probe?.mark('universe:first-frame', {
+					nodes: graph.nodes.length,
+					edges: graph.edges.length
+				});
+				rt.camera.attach(driver);
+				requestAnimationFrame(() => {
+					if (isDead()) return;
+					probe?.mark('camera:interactive');
+					rt.startInitial();
+				});
+			};
+			undo.push(() => {
 				rt.camera.detach();
 				rt.stop('detached');
+			});
+
+			// 版面進度：一幀最多寫一次 GPU buffer；格網只在這裡重建
+			const offPositions = rt.subscribe((e) => {
+				if (e !== 'positions' || frame) return;
+				frame = requestAnimationFrame(() => {
+					frame = 0;
+					layers.positions();
+				});
+			});
+			undo.push(() => {
 				offPositions();
 				cancelAnimationFrame(frame);
-				ro.disconnect();
-				canvas.removeEventListener('pointerdown', onDown);
-				canvas.removeEventListener('click', onClick);
-				canvas.removeEventListener('webglcontextlost', onLost);
-				canvas.removeEventListener('webglcontextrestored', onRestored);
-				controls.removeEventListener('change', lod);
-				controls.removeEventListener('start', interacted);
-				clearScene();
-				nodeGeom.dispose();
-				nodeMat.dispose();
-				edgeMat.dispose();
-				hiMat.dispose();
-				fg._destructor();
-			}
-		};
+				cancelAnimationFrame(hoverFrame);
+			});
+
+			// 點選：事件當下用格網＋投影＋深度挑（不靠 raycast），拖曳相機不算點選
+			const local = (e: { clientX: number; clientY: number }) => {
+				const r = canvas.getBoundingClientRect();
+				return [e.clientX - r.left, e.clientY - r.top] as const;
+			};
+			let down: { x: number; y: number } | null = null;
+			let travel = 0;
+			const onDown = (e: PointerEvent) => {
+				down = { x: e.clientX, y: e.clientY };
+				travel = 0;
+			};
+			const onMove = (e: PointerEvent) => {
+				if (down) {
+					travel = Math.max(travel, Math.hypot(e.clientX - down.x, e.clientY - down.y));
+					return;
+				}
+				if (e.buttons || hoverFrame || e.target !== canvas) return;
+				const [x, y] = local(e);
+				hoverFrame = requestAnimationFrame(() => {
+					hoverFrame = 0;
+					if (!ready) return;
+					canvas.style.cursor = layers.setHover(x, y) >= 0 ? 'pointer' : '';
+				});
+			};
+			const onLeave = () => {
+				layers.setHover(null);
+				canvas.style.cursor = '';
+			};
+			const onClick = (e: MouseEvent) => {
+				const d = down;
+				down = null;
+				if (!ready || !d) return;
+				if (Math.max(travel, Math.hypot(e.clientX - d.x, e.clientY - d.y)) > CLICK_SLOP) return;
+				const id = layers.pick(...local(e));
+				editor.select(id ? { kind: 'node', id } : null);
+			};
+			const onLost = (e: Event) => {
+				e.preventDefault();
+				ready = false;
+				failure = '3D 繪圖內容遺失（WebGL context lost）';
+			};
+			const onRestored = () => {
+				failure = null;
+				ready = true;
+				layers.invalidate();
+			};
+			const listen = (t: EventTarget, type: string, fn: (e: never) => void) => {
+				t.addEventListener(type, fn as EventListener);
+				undo.push(() => t.removeEventListener(type, fn as EventListener));
+			};
+			listen(canvas, 'pointerdown', onDown);
+			listen(window, 'pointermove', onMove);
+			listen(canvas, 'pointerleave', onLeave);
+			listen(canvas, 'click', onClick);
+			listen(canvas, 'webglcontextlost', onLost);
+			listen(canvas, 'webglcontextrestored', onRestored);
+
+			// 尺寸與 DPR：重設 renderer，LOD／標籤以新的 CSS 尺寸重新投影
+			const ro = new ResizeObserver(() => {
+				fg.width(host.clientWidth).height(host.clientHeight);
+				layers.invalidate();
+			});
+			ro.observe(host);
+			undo.push(() => ro.disconnect());
+			let dpr: MediaQueryList | null = null;
+			const onDpr = () => {
+				renderer.setPixelRatio(window.devicePixelRatio);
+				fg.width(host.clientWidth).height(host.clientHeight);
+				layers.invalidate();
+				watchDpr();
+			};
+			const watchDpr = () => {
+				dpr?.removeEventListener('change', onDpr);
+				dpr = matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
+				dpr.addEventListener('change', onDpr);
+			};
+			watchDpr();
+			undo.push(() => dpr?.removeEventListener('change', onDpr));
+
+			const rect = () => canvas.getBoundingClientRect();
+			const view = {
+				/** renderer 可操作且目前可見圖已畫出（不代表版面整理完成，見 layout()） */
+				get ready() {
+					return ready;
+				},
+				selected: () => (editor.selected?.kind === 'node' ? editor.selected.id : null),
+				highlighted: () => [...(focusNodes ?? [])],
+				click: (id: string) => editor.select({ kind: 'node', id }),
+				search: (name: string) => {
+					const ns = editor.graphVisible.nodes;
+					const n = ns.find((x) => x.name === name) ?? ns.find((x) => x.name.includes(name));
+					if (!n) return null;
+					editor.select({ kind: 'node', id: n.id });
+					editor.fit([n.id]);
+					return n.id;
+				},
+				find: (id: string) => editor.findCustomers(id),
+				// 唯讀掛勾，供 e2e 驗證 PRD 的節點／邊數量（3D 畫面讀不到 DOM）
+				nodeCount: () => g.nodes.length,
+				edgeCount: () => g.edges.length,
+				// P5：版面與相機分開觀察
+				layout: () => rt.status,
+				workerStarts: () => rt.workerStarts,
+				version: () => rt.snapshot().version,
+				position: (id: string) => rt.position(id),
+				pose: () => driver.pose(),
+				fits: () => fits.map((f) => ({ ...f })),
+				autoFit: () => rt.camera.autoFit,
+				loseContext: () =>
+					(
+						renderer.getContext().getExtension('WEBGL_lose_context') as {
+							loseContext(): void;
+						} | null
+					)?.loseContext(),
+				// P6：LOD 與點選（唯讀；project 回傳 viewport 座標，給真滑鼠點）
+				lod: () => {
+					const f = layers.frame();
+					return f && { ...f.stats, ...layers.perf(), config: LOD };
+				},
+				detailIds: () => [...(layers.frame()?.detailNodeIds ?? [])],
+				localEdgeIds: () => [...(layers.frame()?.localEdgeIds ?? [])],
+				highlightEdgeIds: () => [...(layers.frame()?.highlightEdgeIds ?? [])],
+				labels: () =>
+					(layers.frame()?.labels ?? []).map(({ id, x, y, w, h }) => ({ id, x, y, w, h })),
+				project: (id: string) => {
+					const p = layers.project(id);
+					const r = rect();
+					return p && { ...p, x: p.x + r.left, y: p.y + r.top };
+				},
+				projectAll: () => {
+					const r = rect();
+					return layers.projectAll().map((p) => ({ ...p, x: p.x + r.left, y: p.y + r.top }));
+				},
+				render: () => ({ ...renderer.info.render, pixelRatio: renderer.getPixelRatio() })
+			};
+			const win = window as unknown as { __graphView?: Hooks };
+			win.__graphView = view;
+			undo.push(() => {
+				if (win.__graphView === view) delete win.__graphView;
+			});
+
+			return {
+				api: { build, paint, refresh: () => layers.refreshLabels() },
+				off
+			};
+		}
 	}
 </script>
 
-<div class="relative size-full bg-[#0b1020]">
+<div class="relative size-full overflow-hidden bg-[#0b1020]">
 	<div bind:this={host} class="absolute inset-0"></div>
-	<ul class="absolute bottom-3 left-3 space-y-1 text-xs text-slate-300">
-		<li>
-			<span class="mr-1.5 inline-block size-2 rounded-full" style:background={WARN}></span>未處理
-		</li>
-		<li>
-			<span class="mr-1.5 inline-block size-2 rounded-full" style:background={BROKEN}
-			></span>{UNREACHABLE_LABEL}
-		</li>
-		{#if editor.result}
+	<div
+		bind:this={labelHost}
+		class="pointer-events-none absolute inset-0 overflow-hidden"
+		aria-label="節點標籤"
+		role="group"
+	></div>
+	<section
+		aria-label="宇宙圖例"
+		class="absolute bottom-3 left-3 max-w-[22rem] space-y-1.5 rounded-lg border border-slate-700/60 bg-[#0b1020]/80 px-3 py-2 text-xs text-slate-300 backdrop-blur"
+	>
+		<ul class="flex flex-wrap gap-x-3 gap-y-1" aria-label="系統">
+			{#each legendSystems as s (s)}
+				<li>
+					<span class="mr-1 inline-block size-2 rounded-full" style:background={SYSTEM_COLORS[s]}
+					></span>{s} <span class="text-slate-400 tabular-nums">{fmt(perSystem[s])}</span>
+				</li>
+			{/each}
+		</ul>
+		<ul class="flex flex-wrap gap-x-3 gap-y-1">
 			<li>
-				<span class="mr-1.5 inline-block size-2 rounded-full" style:background={PATH}
-				></span>找客戶路徑
+				<span class="mr-1 inline-block size-2 rounded-full" style:background={PALETTE.WARN}
+				></span>未處理
 			</li>
+			<li>
+				<span class="mr-1 inline-block size-2 rounded-full" style:background={PALETTE.BROKEN}
+				></span>{UNREACHABLE_LABEL}
+			</li>
+			{#if editor.result}
+				<li>
+					<span class="mr-1 inline-block size-2 rounded-full" style:background={PALETTE.PATH}
+					></span>找客戶路徑
+				</li>
+			{/if}
+		</ul>
+		{#if stats}
+			<dl
+				class="grid grid-cols-[auto_1fr] gap-x-2 border-t border-slate-700/60 pt-1.5 tabular-nums"
+				aria-label="細節層級"
+				data-detail={stats.detail}
+				data-labels={stats.labels}
+			>
+				<dt class="text-slate-400">遠景點</dt>
+				<dd>{fmt(stats.baseNodes)}</dd>
+				<dt class="text-slate-400">近景節點</dt>
+				<dd>
+					{fmt(stats.detail)}／上限 {fmt(LOD.maxDetail)}{#if stats.detailOmitted}・省略 {fmt(
+							stats.detailOmitted
+						)}{/if}
+				</dd>
+				<dt class="text-slate-400">局部連線</dt>
+				<dd>
+					{fmt(stats.localEdges)}／上限 {fmt(LOD.maxLocalEdges)}{#if stats.localEdgesOmitted}・省略
+						{fmt(stats.localEdgesOmitted)}{/if}
+				</dd>
+				<dt class="text-slate-400">名稱標籤</dt>
+				<dd>
+					{fmt(stats.labels)}／上限 {LOD.maxLabels}{#if stats.labelsOmitted}・省略 {fmt(
+							stats.labelsOmitted
+						)}{/if}
+				</dd>
+				{#if stats.highlightTotal}
+					<dt class="text-slate-400">高亮連線</dt>
+					<dd>
+						共 {fmt(stats.highlightTotal)}・已畫 {fmt(
+							stats.highlightDrawn
+						)}{#if stats.highlightOmitted}・省略
+							{fmt(stats.highlightOmitted)}{/if}{#if stats.highlightHidden}・系統隱藏 {fmt(
+								stats.highlightHidden
+							)}{/if}
+					</dd>
+				{/if}
+				<dd class="col-span-2 text-slate-500">
+					拉近到節點 ≥{LOD.detailEnterPx}px 才顯示細節、局部連線與名稱；遠景只畫點
+				</dd>
+			</dl>
 		{/if}
-	</ul>
+	</section>
 	<div
 		class="absolute right-3 bottom-3 flex items-center gap-2 rounded-lg border border-slate-700/60 bg-[#0b1020]/80 px-3 py-1.5 text-xs text-slate-200 backdrop-blur"
 		role="group"
