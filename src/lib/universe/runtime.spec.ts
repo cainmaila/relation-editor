@@ -135,7 +135,7 @@ describe('UniverseRuntime 版面 Worker', () => {
 		expect(rt.workerStarts).toBe(1);
 	});
 
-	it('舊 generation／舊拓撲／ID 不符／長度不符（detached）的回覆都丟棄，不污染目前座標', () => {
+	it('舊 generation／舊拓撲／ID 不符的回覆都丟棄，不污染目前座標', () => {
 		const { rt, w } = setup();
 		rt.start();
 		const old = w.made[0].sent[0] as LayoutStart;
@@ -147,10 +147,34 @@ describe('UniverseRuntime 版面 Worker', () => {
 		send(w.made[0], reply(old, 'progress', 100));
 		send(w.made[1], reply(cur, 'progress', 100, { topologyRevision: 9 }));
 		send(w.made[1], reply(cur, 'progress', 100, { idsKey: idsKey(['a']) }));
-		send(w.made[1], reply(cur, 'progress', 100, { positions: new Float32Array(0) }));
 		expect(positions(rt)).toEqual(current);
 		expect(rt.status.phase).toBe('running');
+		expect(w.made[1].dead).toBe(false);
 	});
+
+	it.each([
+		['progress 長度不符', 'progress', new Float32Array(3)],
+		['done 長度不符', 'done', new Float32Array(0)],
+		['done 型別不符', 'done', [0, 0, 0]]
+	] as const)(
+		'目前 job 的回覆座標格式錯誤（%s）：明確 error、結束 Worker、座標保留、可重試',
+		(_, type, bad) => {
+			const { rt, w } = setup();
+			rt.start();
+			const req = w.made[0].sent[0] as LayoutStart;
+			const before = positions(rt);
+			send(w.made[0], reply(req, type, 1, { positions: bad as unknown as Float32Array }));
+			expect(rt.status).toMatchObject({
+				phase: 'error',
+				generation: req.generation,
+				message: expect.stringContaining('座標格式')
+			});
+			expect(w.made[0].dead).toBe(true);
+			expect(positions(rt)).toEqual(before);
+			expect(rt.start()).toBe(true);
+			expect(rt.status.phase).toBe('running');
+		}
+	);
 
 	it('非有限座標視為錯誤，保留上一版座標', () => {
 		const { rt, w } = setup();
@@ -223,6 +247,57 @@ describe('UniverseRuntime 版面 Worker', () => {
 		expect(rt.start()).toBe(true);
 		w.made[1].onerror!(new Event('error'));
 		expect(rt.status.phase).toBe('error');
+	});
+
+	it('停止時 stop 訊息送不出：仍確實 terminate、狀態 stopped、記錄診斷、不拋出', () => {
+		const { rt, w } = setup();
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		rt.start();
+		const wk = w.made[0];
+		wk.postMessage = () => {
+			throw new Error('post boom');
+		};
+		expect(() => rt.stop()).not.toThrow();
+		expect(wk.dead).toBe(true);
+		expect(rt.status).toMatchObject({ phase: 'stopped', reason: 'user' });
+		expect(warn).toHaveBeenCalledWith(expect.stringContaining('stop'), expect.any(Error));
+		expect(rt.start()).toBe(true);
+		warn.mockRestore();
+	});
+
+	it('停止時 terminate 拋出：狀態仍 stopped、記錄診斷、不拋出', () => {
+		const { rt, w } = setup();
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		rt.start();
+		w.made[0].terminate = () => {
+			throw new Error('term boom');
+		};
+		expect(() => rt.stop()).not.toThrow();
+		expect(rt.status).toMatchObject({ phase: 'stopped', reason: 'user' });
+		expect(warn).toHaveBeenCalledWith(expect.stringContaining('terminate'), expect.any(Error));
+		warn.mockRestore();
+	});
+
+	it('完成時 terminate 拋出：仍套用座標並標示 done、初始入鏡照常、記錄診斷、不拋出', () => {
+		const { rt, w } = setup();
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const calls: string[] = [];
+		rt.camera.attach({
+			fit: (ids, ms) => void calls.push(`fit:${ids.join(',')}:${ms}`),
+			restore: () => {},
+			pose: () => ({ position: { x: 0, y: 0, z: 0 }, target: { x: 0, y: 0, z: 0 } })
+		});
+		rt.startInitial();
+		const req = w.made[0].sent[0] as LayoutStart;
+		w.made[0].terminate = () => {
+			throw new Error('term boom');
+		};
+		expect(() => send(w.made[0], reply(req, 'done', 2))).not.toThrow();
+		expect(rt.position('a')![0]).toBeCloseTo(req.positions[0] + 2);
+		expect(rt.status).toMatchObject({ phase: 'done', tick: req.budget });
+		expect(calls).toEqual(['fit::0', 'fit::600']);
+		expect(warn).toHaveBeenCalledWith(expect.stringContaining('terminate'), expect.any(Error));
+		warn.mockRestore();
 	});
 
 	it('訂閱者收到 positions 與 status 通知；取消訂閱後不再收到', () => {

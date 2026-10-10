@@ -101,6 +101,11 @@ export class CameraState {
 		else this.#pending = ids;
 	}
 
+	/** 初始整理完成時是否還會自動入鏡（唯讀，供測試觀察） */
+	get autoFit() {
+		return this.#autoFit;
+	}
+
 	/** 使用者拖曳／縮放：取消之後的自動入鏡 */
 	interacted() {
 		this.#autoFit = false;
@@ -291,14 +296,21 @@ export class UniverseRuntime {
 		)
 			return;
 		if (msg.type === 'error') return this.#fail(job.generation, msg.message);
-		const p = msg.positions;
-		if (!(p instanceof Float32Array) || p.length !== this.#snap.ids.length * 3) return;
+		// 戳記有效但座標格式錯誤：不能靜默丟棄（done 若壞掉會永遠 running），明確失敗並結束 Worker
+		const p: unknown = msg.positions;
+		const want = this.#snap.ids.length * 3;
+		if (!(p instanceof Float32Array) || p.length !== want)
+			return this.#fail(
+				job.generation,
+				`版面回覆座標格式錯誤（${p instanceof Float32Array ? `長度 ${p.length}` : '非 Float32Array'}，預期 Float32Array 長度 ${want}）`
+			);
 		for (let i = 0; i < p.length; i++)
 			if (!Number.isFinite(p[i])) return this.#fail(job.generation, '版面計算出現非有限座標');
 		this.#setPositions(this.#snap.ids, p, this.#snap.topologyRevision);
 		if (msg.type === 'done') {
 			this.#job = null;
-			job.worker.terminate();
+			// 清理失敗只記錄，不影響 done 的結算
+			this.#terminate(job);
 			this.#setStatus({ phase: 'done', tick: msg.tick });
 		} else this.#setStatus({ tick: msg.tick });
 		this.mark?.(msg.type === 'done' ? 'layout:worker-done' : 'layout:progress', {
@@ -320,12 +332,28 @@ export class UniverseRuntime {
 	#cancel() {
 		const job = this.#job!;
 		this.#job = null;
+		// 分段邊界結束（盡力而為）；送不出也一定要 terminate，確保不再佔 CPU
 		try {
-			// 分段邊界結束；terminate 確保不再佔 CPU
 			job.worker.postMessage({ type: 'stop', generation: job.generation }, []);
+		} catch (e) {
+			console.warn(
+				`版面 Worker stop 訊息送出失敗（generation ${job.generation}），仍強制 terminate`,
+				e
+			);
+		}
+		this.#terminate(job);
+	}
+
+	/** terminate 與 stop 投遞分開保證；失敗只記錄診斷，不往外拋 */
+	#terminate(job: Job) {
+		try {
 			job.worker.terminate();
 		} catch (e) {
-			console.warn('版面 Worker 結束失敗', e);
+			console.warn(`版面 Worker terminate 失敗（generation ${job.generation}）`, e);
+			this.mark?.('layout:cleanup-error', {
+				generation: job.generation,
+				message: e instanceof Error ? e.message : String(e)
+			});
 		}
 	}
 
@@ -333,11 +361,7 @@ export class UniverseRuntime {
 		const job = this.#job;
 		if (job) {
 			this.#job = null;
-			try {
-				job.worker.terminate();
-			} catch (err) {
-				console.warn('版面 Worker 結束失敗', err);
-			}
+			this.#terminate(job);
 		}
 		const message = e instanceof Error ? e.message : String(e);
 		this.#setStatus({ phase: 'error', generation, message });

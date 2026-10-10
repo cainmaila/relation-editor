@@ -16,6 +16,8 @@ type Hook = {
 	version(): number;
 	position(id: string): [number, number, number] | undefined;
 	pose(): Pose;
+	fits(): Fit[];
+	autoFit(): boolean;
 	loseContext(): void;
 };
 const gv = <T>(page: Page, f: (h: Hook) => T) =>
@@ -48,29 +50,49 @@ async function toGraph(page: Page) {
 	await tab(page, 'graph').click();
 	await ready(page);
 }
+type Fit = { ids: number; ms: number; phase: string };
+/** 真實滑鼠拖曳（經 TrackballControls 的 pointer 事件） */
 async function drag(page: Page) {
 	const box = (await page.locator('main canvas').first().boundingBox())!;
 	const [x, y] = [box.x + box.width / 2, box.y + box.height / 2];
 	await page.mouse.move(x, y);
 	await page.mouse.down();
-	await page.mouse.move(x + 160, y + 60, { steps: 10 });
+	await page.mouse.move(x + 160, y + 60, { steps: 3 });
 	await page.mouse.up();
-	// TrackballControls 有慣性：等相機停下再讀姿態
-	let prev = '';
-	await expect
-		.poll(
-			async () => {
-				// 阻尼是漸近收斂：取到整數單位
-				const now = JSON.stringify(await gv(page, (h) => h.pose()), (_, v) =>
-					typeof v === 'number' ? Math.round(v) : v
-				);
-				const still = now === prev;
-				prev = now;
-				return still;
-			},
-			{ timeout: 45_000, intervals: [500] }
-		)
-		.toBe(true);
+}
+/**
+ * TrackballControls 有慣性（每次 update 衰減 √0.8）。以「動畫幀」判斷停止，不用牆鐘取樣：
+ * 負載高時一秒可能不到一幀，隔 500ms 的兩次取樣會誤判為靜止。
+ * 連續 10 幀每幀位移 < 1e-3 → 之後剩餘位移的幾何級數總和 < 0.01 單位。
+ */
+async function settle(page: Page) {
+	await page.evaluate(
+		() =>
+			new Promise<void>((resolve, reject) => {
+				const h = (window as unknown as { __graphView: { pose(): Pose } }).__graphView;
+				const flat = (p: Pose) => [
+					p.position.x,
+					p.position.y,
+					p.position.z,
+					p.target.x,
+					p.target.y,
+					p.target.z
+				];
+				let prev = flat(h.pose());
+				let still = 0;
+				let frames = 0;
+				const step = () => {
+					const now = flat(h.pose());
+					const d = Math.max(...now.map((v, i) => Math.abs(v - prev[i])));
+					prev = now;
+					still = d < 1e-3 ? still + 1 : 0;
+					if (still >= 10) resolve();
+					else if (++frames > 5_000) reject(new Error(`相機 ${frames} 幀後仍在動：${d}`));
+					else requestAnimationFrame(step);
+				};
+				requestAnimationFrame(step);
+			})
+	);
 }
 const expectPose = (a: Pose, b: Pose) => {
 	for (const k of ['position', 'target'] as const)
@@ -122,6 +144,7 @@ test.describe('正式 mock（2,066 節點）', () => {
 	test('切頁後返回：相機與控制目標保留，不自動重新整理', async ({ page }) => {
 		await expect.poll(() => phase(page), { timeout: 60_000 }).toBe('done');
 		await drag(page);
+		await settle(page);
 		const pose = await gv(page, (h) => h.pose());
 		await tab(page, 'edit').click();
 		await toGraph(page);
@@ -132,6 +155,7 @@ test.describe('正式 mock（2,066 節點）', () => {
 	test('全景只移相機，和重新整理版面不同', async ({ page }) => {
 		await expect.poll(() => phase(page), { timeout: 60_000 }).toBe('done');
 		await drag(page);
+		await settle(page);
 		const moved = await gv(page, (h) => h.pose());
 		const v = await gv(page, (h) => h.version());
 		await badge(page).getByRole('button', { name: '全景' }).click();
@@ -234,19 +258,54 @@ test.describe('代表性大圖（10k／20k）', () => {
 	test('使用者拖曳後，初始整理完成不再搶走相機；沒動過才自動入鏡', async ({ browser }) => {
 		const run = async (touch: boolean) => {
 			const page = await browser.newPage();
+			// 擋住 layout Worker 腳本：初始整理已送出（running）但在放行前不可能完成，
+			// 拖曳與取樣一定早於 done，不受平行負載影響。
+			let release!: () => void;
+			const gate = new Promise<void>((r) => (release = r));
+			let held = false;
+			await page.route('**/layout.worker-*.js', async (route) => {
+				held = true;
+				await gate;
+				await route.continue();
+			});
 			await page.goto(URL);
 			await marked(page, 'camera:interactive');
-			if (touch) await drag(page);
-			const pose = await gv(page, (h) => h.pose());
+			await expect.poll(() => held).toBe(true);
+			await expect.poll(() => phase(page)).toBe('running');
+			// 首幀只做過一次瞬間整體入鏡
+			expect(await gv(page, (h) => [h.autoFit(), h.fits()])).toEqual([
+				true,
+				[{ ids: 0, ms: 0, phase: 'seed' }]
+			]);
+			if (touch) {
+				await drag(page);
+				// 真實 pointer 輸入已讓 runtime 取消晚到的入鏡，且版面仍在整理
+				expect(await gv(page, (h) => [h.layout().phase, h.autoFit()])).toEqual(['running', false]);
+			}
+			const before = await gv(page, (h) => ({ phase: h.layout().phase, pose: h.pose() }));
+			expect(before.phase).toBe('running');
+			release();
 			await marked(page, 'layout:worker-done');
-			// 自動入鏡是 600ms 動畫
-			await page.waitForTimeout(1_000);
-			const after = await gv(page, (h) => h.pose());
+			expect(await phase(page)).toBe('done');
+			// done 同步結算入鏡：此時的呼叫紀錄就是最終結果
+			const fits = await gv(page, (h) => h.fits());
+			let after: Pose | null = null;
+			if (!touch) {
+				// 600ms 的入鏡動畫實際移動了相機
+				await expect
+					.poll(async () => (await gv(page, (h) => h.pose())).position)
+					.not.toEqual(before.pose.position);
+				after = await gv(page, (h) => h.pose());
+			}
 			await page.close();
-			return { pose, after };
+			return { fits, before, after };
 		};
 		const [touched, untouched] = await Promise.all([run(true), run(false)]);
-		expectPose(touched.after, touched.pose);
-		expect(untouched.after.position).not.toEqual(untouched.pose.position);
+		expect(touched.fits).toEqual([{ ids: 0, ms: 0, phase: 'seed' }]);
+		expect(untouched.fits).toEqual([
+			{ ids: 0, ms: 0, phase: 'seed' },
+			{ ids: 0, ms: 600, phase: 'done' }
+		]);
+		expect(untouched.after!.position).not.toEqual(untouched.before.pose.position);
 	});
 });

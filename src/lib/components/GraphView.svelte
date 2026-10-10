@@ -178,8 +178,13 @@
 			fg.cameraPosition({ x: c.x, y: c.y, z: c.z + d }, c, ms);
 		};
 		const xyz = (v: THREE.Vector3) => ({ x: v.x, y: v.y, z: v.z });
+		// 每次相機入鏡呼叫（含當時版面狀態），供 e2e 直接觀察「晚到的自動入鏡」有沒有發生
+		const fits: { ids: number; ms: number; phase: string }[] = [];
 		const driver: CameraDriver = {
-			fit,
+			fit: (target, ms) => {
+				fits.push({ ids: target.length, ms, phase: rt.status.phase });
+				fit(target, ms);
+			},
 			pose: (): CameraPose => ({
 				position: xyz(fg.camera().position),
 				target: xyz(controls.target)
@@ -429,6 +434,8 @@
 			version: () => rt.snapshot().version,
 			position: (id: string) => rt.position(id),
 			pose: () => driver.pose(),
+			fits: () => fits.map((f) => ({ ...f })),
+			autoFit: () => rt.camera.autoFit,
 			loseContext: () =>
 				(
 					renderer.getContext().getExtension('WEBGL_lose_context') as {
