@@ -268,6 +268,29 @@ async function routeRendererChunk(page: Page, mode: 'abort' | 'hold') {
 	return { hits: () => hits, release };
 }
 
+/**
+ * 3d-force-graph 入口靜態 import 的共用 chunk（three；同時也是 import('three') 的入口）第一次失敗。
+ * 以內容辨識：含 WebGLRenderer、本身沒有相對 import、不是 3d-force-graph 入口。
+ */
+async function routeSharedThreeChunk(page: Page) {
+	const urls: string[] = [];
+	const chunk = (u: URL) => u.pathname.includes('/_app/immutable/') && u.pathname.endsWith('.js');
+	await page.route(chunk, async (route) => {
+		const res = await route.fetch();
+		const body = await res.text();
+		const three =
+			body.includes('WebGLRenderer') &&
+			!body.includes('scene-nav-info') &&
+			!/from"\.\//.test(body.slice(0, 4000));
+		if (three && route.request().method() === 'GET') {
+			urls.push(route.request().url());
+			if (urls.length === 1) return route.abort('failed');
+		}
+		return route.fulfill({ response: res, body });
+	});
+	return { urls: () => urls };
+}
+
 test.describe('3D 程式庫載入（P8 殘留情境）', () => {
 	test('動態載入失敗：明確錯誤，搜尋仍可用；按重試後真的載入成功', async ({ page }) => {
 		const errors: string[] = [];
@@ -290,6 +313,41 @@ test.describe('3D 程式庫載入（P8 殘留情境）', () => {
 		expect(r.hits()).toBe(2);
 		expect(await gv(page, (h) => h.nodeCount())).toBe(2066);
 		expect(errors).toEqual([]);
+	});
+
+	test('入口依賴的共用 chunk 失敗：瀏覽器記住失敗，重試不會拿錯模組，明確要求手動重新整理（不自動重整）', async ({
+		page
+	}) => {
+		const errors: string[] = [];
+		page.on('pageerror', (e) => errors.push(e.message));
+		const r = await routeSharedThreeChunk(page);
+		await page.goto('/');
+		const alert = page.getByRole('alert').filter({ hasText: '3D 宇宙載入失敗' });
+		await expect(alert).toBeVisible({ timeout: 30_000 });
+		await alert.getByRole('button', { name: '重試' }).click();
+		// 入口換 URL 重抓仍會靜態 import 那個已記成失敗的共用 chunk → 改成需要重新整理的說明，不再給重試
+		await expect(alert).toContainText('需要重新整理頁面', { timeout: 30_000 });
+		await expect(alert).toContainText('請自行重新整理頁面');
+		await expect(alert.getByRole('button', { name: '重試' })).toHaveCount(0);
+		await expect(alert).not.toContainText('not a constructor');
+		await expect(page.locator('main canvas')).toHaveCount(0);
+		const nav = page.url();
+		await page.waitForTimeout(1000);
+		expect(page.url()).toBe(nav);
+		// 編輯仍可用（沒有被自動重整清掉）
+		await page.keyboard.press('ControlOrMeta+k');
+		await page.getByRole('textbox', { name: '搜尋節點' }).fill('機櫃 A-03');
+		await page.keyboard.press('Enter');
+		await expect(
+			page.getByRole('complementary', { name: '詳情' }).getByLabel('名稱', { exact: true })
+		).toHaveValue('機櫃 A-03');
+		// 只在本站 _app/immutable/ 內重抓
+		for (const u of r.urls()) expect(new URL(u).pathname).toMatch(/^\/_app\/immutable\/chunks\//);
+		expect(errors).toEqual([]);
+		// 使用者自行重新整理後正常
+		await page.reload();
+		await ready(page);
+		expect(await gv(page, (h) => h.nodeCount())).toBe(2066);
 	});
 
 	test('載入中切到編輯頁：載入完成後不建立殘留畫布，回全圖正常', async ({ page }) => {

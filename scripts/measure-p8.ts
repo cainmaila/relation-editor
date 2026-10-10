@@ -17,6 +17,14 @@ import {
 	type CDPSession,
 	type Page
 } from 'playwright';
+import {
+	BUDGET,
+	judge as judgeRows,
+	line,
+	workspaceVerdict,
+	WORKSPACE_FORMAL,
+	type JudgePlan
+} from './p8-verdict.ts';
 
 type Summary = { n: number; min: number; p50: number; p95: number; max: number; sum: number };
 type FramesResult = {
@@ -48,16 +56,8 @@ export type Deps = {
 	) => Promise<{ text: string; typedAt: number; resultAt: number; latency: number }>;
 };
 
-/** 正式門檻（計畫 §5／brief 補充；不放寬） */
-export const BUDGET = {
-	coldMs: 2000,
-	frameP95Ms: 33.3,
-	searchP95Ms: 150,
-	selectP95Ms: 100,
-	return3dMs: 500,
-	commitP95Ms: 150,
-	analysisMs: 500
-};
+/** 正式門檻（計畫 §5／brief 補充；不放寬）；判定邏輯在 p8-verdict.ts（有單元自測） */
+export { BUDGET };
 
 // ---------------------------------------------------------------- 頁內探針
 type P8 = {
@@ -866,120 +866,17 @@ async function coldSample(d: Deps, s: Session, o: SampleOpts) {
 
 type Sample = Awaited<ReturnType<typeof coldSample>>;
 
-/** 依門檻判定一組樣本（formal 與 stress 共用；stress 只是觀察） */
-function judge(d: Deps, xs: Sample[]) {
-	const all = <T>(f: (x: Sample) => T[]) => xs.flatMap(f);
-	const fin = (v: number[]) => v.filter(Number.isFinite);
-	const cold = xs.map((x) => x.cold.operableAndSearchMs);
-	const search = fin(all((x) => x.searches.map((s) => s.ms)));
-	const pickMs = all((x) => x.picks.map((p) => p.ms));
-	const select = fin([...pickMs, ...xs.map((x) => x.hub?.selectMs ?? NaN)]);
-	const picks = all((x) => x.picks);
-	const frame = (k: 'drag' | 'wheel') => xs.map((x) => x[k].intervalMs.p95);
-	const hubFrames = xs.flatMap((x) =>
-		x.hub ? [x.hub.drag.intervalMs.p95, x.hub.wheel.intervalMs.p95] : []
-	);
-	const analysis = fin(all((x) => x.analysis?.samples.map((s) => s.ms) ?? []));
-	const ret = xs.filter((x) => x.return3d);
-	const p95 = (v: number[]) => d.summary(v).p95;
-	const max = (v: number[]) => (v.length ? Math.max(...v) : NaN);
-	const row = (
-		metric: string,
-		value: number,
-		budget: number,
-		n: number,
-		extra: Record<string, unknown> = {}
-	) => ({
-		metric,
-		value: d.r1(value),
-		budget,
-		n,
-		pass: Number.isFinite(value) && value <= budget,
-		...extra
-	});
-	return [
-		row(
-			'cold: operable field AND full search (max of samples)',
-			max(cold),
-			BUDGET.coldMs,
-			cold.length,
-			{
-				samples: cold,
-				layoutDoneMs: xs.map((x) => x.cold.layoutDoneMs)
-			}
-		),
-		row(
-			'pointer rotation frame interval p95 (worst sample)',
-			max(frame('drag')),
-			BUDGET.frameP95Ms,
-			xs.length,
-			{ perSample: frame('drag') }
-		),
-		row(
-			'wheel frame interval p95 (worst sample)',
-			max(frame('wheel')),
-			BUDGET.frameP95Ms,
-			xs.length,
-			{ perSample: frame('wheel') }
-		),
-		row(
-			'hub selected + trace: rotation/wheel p95 (worst)',
-			max(hubFrames),
-			BUDGET.frameP95Ms,
-			hubFrames.length,
-			{ perSample: hubFrames }
-		),
-		row('search input → latest complete page p95', p95(search), BUDGET.searchP95Ms, search.length, {
-			max: d.r1(max(search)),
-			failed: all((x) => x.searches).length - search.length
-		}),
-		row('selection → highlight + details p95', p95(select), BUDGET.selectP95Ms, select.length, {
-			max: d.r1(max(select)),
-			pointerPicks: picks.length,
-			pointerCorrect: picks.filter((p) => p.correct).length,
-			kinds: Object.fromEntries(
-				['far', 'overlap', 'near', 'behind'].map((k) => [
-					k,
-					`${picks.filter((p) => p.kind === k && p.correct).length}/${picks.filter((p) => p.kind === k).length}`
-				])
-			)
-		}),
-		row(
-			'pointer picks wrong or not attempted (count; wrong = selected ≠ target, missing = harness found no on-screen target)',
-			picks.length - picks.filter((p) => p.correct).length,
-			0,
-			picks.length,
-			{
-				wrong: picks.filter((p) => !p.correct && p.target).length,
-				missingTarget: picks.filter((p) => !p.target).length
-			}
-		),
-		(() => {
-			const r = ret.flatMap((x) => x.return3d!.samples);
-			const unchanged =
-				r.every((y) => y.workerStartsBefore === y.workerStartsAfter) &&
-				ret.every((x) => x.return3d!.workerStartsBefore === x.return3d!.workerStartsAfter);
-			const v = row(
-				'return to 3D (max; renderer ready + new frame + latest analysis visible)',
-				max(r.map((y) => y.ms)),
-				BUDGET.return3dMs,
-				r.length,
-				{ workerStartsUnchanged: unchanged }
-			);
-			return { ...v, pass: v.pass && unchanged };
-		})(),
-		row(
-			'browser analysis: topology command → latest results + revision (max)',
-			max(analysis),
-			BUDGET.analysisMs,
-			analysis.length,
-			{
-				p95: d.r1(p95(analysis))
-			}
-		),
-		row('console errors (count)', all((x) => x.consoleErrors).length, 0, xs.length, {})
-	];
-}
+/** 一組樣本依計畫應有的量（formal 與 stress 共用；stress 只是觀察） */
+const planOf = (o: Omit<SampleOpts, 'name' | 'shots' | 'trace'>, samples: number): JudgePlan => ({
+	nodes: o.nodes ?? 10_000,
+	edges: o.edges,
+	samples,
+	// coldSample：max(0, searches-2) 個精確名稱＋（searches ≥ 2 時）兩個廣泛搜尋
+	searches: Math.max(0, o.searches - 2) + (o.searches >= 2 ? 2 : 0),
+	picks: o.picks,
+	analysis: !!o.analysis
+});
+const judge = (xs: Sample[], plan: JudgePlan) => judgeRows(xs, plan);
 
 // ---------------------------------------------------------------- modes
 async function runSamples(
@@ -1069,15 +966,9 @@ async function formal(d: Deps) {
 	const timeout = d.int('timeout', d.opt('timeout', '180000'));
 	const samples = d.int('samples', d.opt('samples', '5'));
 	for (const edges of d.EDGES) {
-		const xs = await runSamples(
-			d,
-			'formal',
-			l,
-			[{ edges, url, timeout, searches: 6, picks: 5, analysis: true }],
-			samples,
-			true
-		);
-		const verdict = judge(d, xs);
+		const o = { edges, url, timeout, searches: 6, picks: 5, analysis: true };
+		const xs = await runSamples(d, 'formal', l, [o], samples, true);
+		const verdict = judge(xs, planOf(o, samples));
 		const env = await envOf(d, l, {
 			cold: 'each sample = new browser process (cold HTTP/JIT cache)'
 		});
@@ -1089,9 +980,7 @@ async function formal(d: Deps) {
 			JSON.stringify(
 				{
 					formal: edges,
-					verdict: verdict.map(
-						(v) => `${v.pass ? 'PASS' : 'FAIL'} ${v.metric}: ${v.value}/${v.budget} (n=${v.n})`
-					)
+					verdict: verdict.map(line)
 				},
 				null,
 				1
@@ -1154,8 +1043,8 @@ async function stress(d: Deps) {
 		const verdict = r.list.map((o) => ({
 			fixture: `${o.nodes ?? 10000}/${o.edges}`,
 			verdict: judge(
-				d,
-				xs.filter((x) => x.edges === o.edges && x.nodes === (o.nodes ?? 10000))
+				xs.filter((x) => x.edges === o.edges && x.nodes === (o.nodes ?? 10000)),
+				planOf(o, r.samples)
 			)
 		}));
 		await writeFile(
@@ -1168,11 +1057,8 @@ async function stress(d: Deps) {
 					{
 						stress: r.label,
 						fixture: v.fixture,
-						verdict: v.verdict.map(
-							// 縮減觀察（例如 dpr2 50k 不跑分析／hub）沒量到的項目標 SKIP，不冒充 FAIL 或 PASS
-							(x) =>
-								`${x.n === 0 ? 'SKIP(not measured)' : x.pass ? 'PASS' : 'FAIL'} ${x.metric}: ${x.value}/${x.budget}`
-						)
+						// 縮減觀察（例如 dpr2 50k 不跑分析／hub）依計畫不量的項目標 SKIP，不冒充 FAIL 或 PASS
+						verdict: v.verdict.map(line)
 					},
 					null,
 					1
@@ -1407,7 +1293,20 @@ async function workspaceSample(
 				return r.painted - w.__p8.last.pointerup;
 			})
 			.catch(() => NaN);
-		connect.push({ from: a.id, to: b.id, frames: f, menuMs });
+		// 語意：選單是「起點 → 放開的那張卡片」，不是別對（快但錯不算）
+		const pair = await page.evaluate(
+			({ from, to }) => {
+				const w = window as unknown as {
+					__measure: { editor: { node: (id: string) => { name: string } | undefined } };
+				};
+				const m = document.querySelector('[role=menu][aria-label="建立邊"]');
+				const a = w.__measure.editor.node(from)?.name;
+				const b = w.__measure.editor.node(to)?.name;
+				return !!m && !!a && !!b && (m.textContent ?? '').includes(`${a} → ${b}`);
+			},
+			{ from: a.id, to: b.id }
+		);
+		connect.push({ from: a.id, to: b.id, frames: f, menuMs, pair });
 		await page.keyboard.press('Escape');
 		await settle(page, 300);
 	}
@@ -1522,55 +1421,24 @@ async function workspace(d: Deps) {
 	};
 	const formalWs = await run('workspace200', 200, 1000, false, samples, 10);
 	const stress500 = await run('workspace500-stress', 500, 5000, true, 1, 10);
-	const fin = (v: number[]) => v.filter(Number.isFinite);
-	const verdict = (xs: typeof formalWs) => {
-		const pan = xs.flatMap((x) =>
-			'pan' in x ? [...x.pan, ...(x.panZoomed ?? [])].map((p) => p.intervalMs.p95) : []
-		);
-		const con = xs.flatMap((x) =>
-			'connect' in x ? x.connect.map((c) => c.frames.intervalMs.p95) : []
-		);
-		const commit = fin(xs.flatMap((x) => ('commits' in x ? x.commits.map((c) => c.ms) : [])));
-		const menu = fin(xs.flatMap((x) => ('connect' in x ? x.connect.map((c) => c.menuMs) : [])));
-		const max = (v: number[]) => (v.length ? Math.max(...v) : NaN);
-		const row = (metric: string, value: number, budget: number, n: number) => ({
-			metric,
-			value: d.r1(value),
-			budget,
-			n,
-			pass: Number.isFinite(value) && value <= budget
-		});
-		return [
-			row(
-				'2D pan frame p95 (worst drag; fit-all + zoomed)',
-				max(pan),
-				BUDGET.frameP95Ms,
-				pan.length
-			),
-			row('2D connection-drag frame p95 (worst drag)', max(con), BUDGET.frameP95Ms, con.length),
-			row(
-				'edit commit → visible feedback p95',
-				d.summary(commit).p95,
-				BUDGET.commitP95Ms,
-				commit.length
-			),
-			row(
-				'connection release → 建立邊 menu p95 (feedback)',
-				d.summary(menu).p95,
-				BUDGET.commitP95Ms,
-				menu.length
-			),
-			row('console errors', xs.flatMap((x) => x.consoleErrors).length, 0, xs.length)
-		];
+	// 正式：3 樣本、恰好 200／1000、15 平移、9 連線（選單是那一對）、30 提交；少一筆、壞一筆都 FAIL
+	const plan = { ...WORKSPACE_FORMAL, samples };
+	// 500 壓力只是觀察：規模以實際挑到的集合為準（dense 上限 5000，不一定剛好）
+	const stressPlan = {
+		...WORKSPACE_FORMAL,
+		samples: 1,
+		nodes: 500,
+		edges: stress500[0]?.set.edges ?? 5000
 	};
 	const env = await envOf(d, l, { fixture: `10000/${edges}` });
 	const out = {
 		env,
 		budget: BUDGET,
-		formal: { verdict: verdict(formalWs), samples: formalWs },
+		formal: { plan, verdict: workspaceVerdict(formalWs, plan), samples: formalWs },
 		stress500: {
 			note: 'measurement-only forceWorkspace; product admission (200/1000) unchanged',
-			verdict: verdict(stress500),
+			plan: stressPlan,
+			verdict: workspaceVerdict(stress500, stressPlan),
 			samples: stress500
 		}
 	};
@@ -1578,12 +1446,8 @@ async function workspace(d: Deps) {
 	console.log(
 		JSON.stringify(
 			{
-				workspace: out.formal.verdict.map(
-					(v) => `${v.pass ? 'PASS' : 'FAIL'} ${v.metric}: ${v.value}/${v.budget} (n=${v.n})`
-				),
-				stress500: out.stress500.verdict.map(
-					(v) => `${v.pass ? 'ok' : 'over'} ${v.metric}: ${v.value}`
-				)
+				workspace: out.formal.verdict.map(line),
+				stress500: out.stress500.verdict.map((v) => `observation ${line(v)}`)
 			},
 			null,
 			1

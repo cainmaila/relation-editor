@@ -1,6 +1,6 @@
 // renderer 建構中途失敗：已加進場景的物件、已建立的 GPU 資源、標籤 DOM、場景 hook 都要收回。
 // （檔名帶 .svelte 只為了走 browser 專案：標籤池需要真的 DOM）
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
 import { UniverseRuntime } from './runtime';
 import { createUniverseLayers, type UniverseLayersOptions } from './renderer';
@@ -29,7 +29,12 @@ function setup(three: Three, labelHost = document.createElement('div')) {
 }
 
 /** 記下每個 GPU 資源（geometry／material）是否被 dispose */
-function tracked(failAt: { cls: 'InstancedMesh'; nth: number } | null) {
+function tracked(
+	failAt: { cls: 'InstancedMesh'; nth: number } | null,
+	/** 第 n 個被 dispose 的資源 dispose 時丟錯（模擬收回失敗） */
+	disposeFailAt = 0
+) {
+	let disposedN = 0;
 	const made: { disposed: boolean }[] = [];
 	// TS mixin 規則：建構子必須是 (...a: any[])
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -44,6 +49,7 @@ function tracked(failAt: { cls: 'InstancedMesh'; nth: number } | null) {
 				const d = this.dispose.bind(this);
 				this.dispose = () => {
 					rec.disposed = true;
+					if (++disposedN === disposeFailAt) throw new Error('dispose 失敗');
 					d();
 				};
 			}
@@ -80,6 +86,28 @@ describe('createUniverseLayers 建構失敗清理', () => {
 		expect(scene.children).toEqual([]);
 		expect(scene.onBeforeRender).toBe(hook);
 		expect(labelHost.childElementCount).toBe(0);
+	});
+
+	it('收回途中某一步也失敗：丟出原始錯誤、標準 warn 記下收回錯誤、其餘照樣收回', () => {
+		const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		try {
+			const { three, made } = tracked({ cls: 'InstancedMesh', nth: 2 }, 1);
+			const { scene, hook, labelHost, opts } = setup(three);
+			expect(() => createUniverseLayers(opts)).toThrow('InstancedMesh 建立失敗');
+			// 收回錯誤不吞掉也不蓋掉原始錯誤：warn 一次，帶收回錯誤與原始錯誤
+			expect(warn).toHaveBeenCalledTimes(1);
+			const [msg, cleanupErr, cause] = warn.mock.calls[0];
+			expect(String(msg)).toMatch(/cleanup/);
+			expect((cleanupErr as Error).message).toBe('dispose 失敗');
+			expect((cause as Error).message).toBe('InstancedMesh 建立失敗');
+			// 丟錯的那一步之後的收回步驟照樣執行
+			expect(made.every((m) => m.disposed)).toBe(true);
+			expect(scene.children).toEqual([]);
+			expect(scene.onBeforeRender).toBe(hook);
+			expect(labelHost.childElementCount).toBe(0);
+		} finally {
+			warn.mockRestore();
+		}
 	});
 
 	it('標籤池建到一半失敗：已插入的標籤移除、GPU 資源與場景都收回', () => {

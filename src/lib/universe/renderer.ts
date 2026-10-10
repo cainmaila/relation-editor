@@ -77,8 +77,9 @@ export function createUniverseLayers(o: UniverseLayersOptions) {
 		for (const f of undo.reverse()) {
 			try {
 				f();
-			} catch {
-				// 收回失敗不蓋掉原始錯誤
+			} catch (cleanup) {
+				// 收回失敗不蓋掉原始錯誤（下面照樣丟 e），但要留下紀錄；其餘收回步驟繼續
+				console.warn('[universe] renderer cleanup failed after construction error', cleanup, e);
 			}
 		}
 		throw e;

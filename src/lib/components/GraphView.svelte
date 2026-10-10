@@ -1,8 +1,24 @@
 <script lang="ts" module>
-	import { retryableImport } from '#lib/universe/retry-import.js';
+	import { ImportReloadRequired, retryableImport } from '#lib/universe/retry-import.js';
+	type ForceGraphModule = typeof import('3d-force-graph');
+	type ThreeModule = typeof import('three');
+	// 可重抓的只有本站的 build 資產：production＝與本模組同一個 _app/immutable/ 目錄（同源）；dev＝同源
+	const assetRoot = new URL(import.meta.env.DEV ? '/' : '../', import.meta.url);
+	const asset = (u: URL) =>
+		u.origin === assetRoot.origin && u.pathname.startsWith(assetRoot.pathname);
 	// 文件層級：瀏覽器記住失敗的動態載入是整份文件共用，重掛元件後重試也要換 URL
-	const loadForceGraph = retryableImport(() => import('3d-force-graph'));
-	const loadThree = retryableImport(() => import('three'));
+	const loadForceGraph = retryableImport(() => import('3d-force-graph'), {
+		accept: (m): m is ForceGraphModule =>
+			typeof (m as Partial<ForceGraphModule> | null)?.default === 'function',
+		asset
+	});
+	const loadThree = retryableImport(() => import('three'), {
+		accept: (m): m is ThreeModule => {
+			const t = m as Partial<ThreeModule> | null;
+			return typeof t?.WebGLRenderer === 'function' && typeof t?.Scene === 'function';
+		},
+		asset
+	});
 </script>
 
 <script lang="ts">
@@ -41,6 +57,8 @@
 	let ready = $state(false);
 	/** renderer 層的失敗（載入模組、WebGL 建立、context lost）；搜尋與編輯不受影響 */
 	let failure = $state<string | null>(null);
+	/** 這份文件內再試也不會成功（瀏覽器記住了共用模組的失敗）：不給重試鈕，只說明要手動重新整理 */
+	let needsReload = $state(false);
 	let attempt = $state(0);
 	let layout = $state.raw<LayoutStatus>(rt.status);
 	/** LOD 計數（renderer 最多每 250ms 回報一次） */
@@ -75,6 +93,7 @@
 		let off: (() => void) | undefined;
 		untrack(() => {
 			failure = null;
+			needsReload = false;
 			init(() => dead)
 				.then((f) => {
 					if (dead) f.off();
@@ -83,6 +102,7 @@
 				.catch((e: unknown) => {
 					if (dead) return;
 					console.error('3D 宇宙載入失敗', e);
+					needsReload = e instanceof ImportReloadRequired;
 					failure = `3D 宇宙載入失敗：${e instanceof Error ? e.message : String(e)}`;
 				});
 		});
@@ -606,10 +626,17 @@
 			<div class="space-y-2 text-center">
 				<p>{failure}</p>
 				<p class="text-xs text-slate-400">搜尋與編輯仍可使用</p>
-				<button
-					class="rounded border border-slate-600 px-3 py-1 hover:bg-slate-700"
-					onclick={() => attempt++}>重試</button
-				>
+				{#if needsReload}
+					<p class="text-xs text-amber-300">
+						瀏覽器已記住 3D 程式庫共用模組的載入失敗，這個分頁內重試不會成功；
+						請自行重新整理頁面（重新整理會遺失這次尚未保存的編輯）。
+					</p>
+				{:else}
+					<button
+						class="rounded border border-slate-600 px-3 py-1 hover:bg-slate-700"
+						onclick={() => attempt++}>重試</button
+					>
+				{/if}
 			</div>
 		</div>
 	{:else if !ready}

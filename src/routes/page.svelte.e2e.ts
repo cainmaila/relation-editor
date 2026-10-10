@@ -420,6 +420,153 @@ test.describe('編輯（編輯頁）', () => {
 		await expect(tab(page, 'edit')).toHaveText('編輯頁 2/200');
 	});
 
+	test('拉線預覽畫在 viewport 外、平移縮放後仍貼著把手與滑鼠；目標合法／不合法照舊', async ({
+		page
+	}) => {
+		// P8：預覽線若在 viewport 裡（夾在上千條邊與卡片之間），每幀都要重畫整個 viewport；
+		// 改畫在 viewport 外的螢幕座標層，外觀與起訖點必須和原本一樣
+		await toEdit(page, ['偵測器 SD-01', G, 'UPS-1']);
+		await page.getByRole('button', { name: 'Fit View' }).click();
+		await settle(page);
+		// 真滾輪縮放＋真拖曳平移後再拉線：座標換算要跟著相機
+		const pb = (await pane(page).boundingBox())!;
+		await page.mouse.move(pb.x + pb.width / 2, pb.y + pb.height / 2);
+		await page.mouse.wheel(0, 240);
+		await settle(page);
+		await page.mouse.move(pb.x + 30, pb.y + 30);
+		await page.mouse.down();
+		await page.mouse.move(pb.x + 90, pb.y + 50, { steps: 6 });
+		await page.mouse.up();
+		await settle(page);
+		// 清掉選取：選取卡片的工具列會蓋到上方卡片
+		await clickPane(page);
+
+		const from = (await node(page, '偵測器 SD-01').boundingBox())!;
+		const to = (await node(page, G).boundingBox())!;
+		const bad = (await node(page, 'UPS-1').boundingBox())!;
+		const preview = page.locator('svg.connection-preview');
+		const path = preview.locator('path');
+		/** 預覽線起訖點（螢幕座標） */
+		const ends = () =>
+			path.evaluate((p: SVGPathElement) => {
+				const m = p.getScreenCTM()!;
+				const at = (l: number) => p.getPointAtLength(l).matrixTransform(m);
+				const a = at(0);
+				const b = at(p.getTotalLength());
+				return { a: { x: a.x, y: a.y }, b: { x: b.x, y: b.y } };
+			});
+		/** 預覽與內建連線路徑相同，且套用和 viewport 一樣的平移／縮放 */
+		const sameAsBuiltin = async () => {
+			const r = await page.evaluate(() => {
+				const own = document.querySelector('svg.connection-preview g')!;
+				const builtin = document.querySelector('.svelte-flow__connectionline path')!;
+				const m = new DOMMatrix(
+					getComputedStyle(document.querySelector('.svelte-flow__viewport')!).transform
+				);
+				const t = (own as SVGGElement).transform.baseVal.consolidate()!.matrix;
+				return {
+					d: [own.querySelector('path')!.getAttribute('d'), builtin.getAttribute('d')],
+					t: [t.a, t.e, t.f],
+					v: [m.a, m.e, m.f]
+				};
+			});
+			expect(r.d[0]).toBe(r.d[1]);
+			for (let i = 0; i < 3; i++) expect(r.t[i]).toBeCloseTo(r.v[i], 3);
+		};
+		await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+		await page.mouse.down();
+		const free = { x: from.x + from.width / 2 + 40, y: from.y + from.height + 60 };
+		await page.mouse.move(free.x, free.y, { steps: 8 });
+		await expect(path).toBeVisible();
+		// 內建的連線 SVG（在 viewport 裡）不再畫出；預覽不在 viewport 裡
+		await expect(
+			page.locator('.svelte-flow__viewport svg.svelte-flow__connectionline')
+		).toBeHidden();
+		expect(await preview.evaluate((el) => !!el.closest('.svelte-flow__viewport'))).toBe(false);
+		// 和內建連線（仍在 DOM、只是不畫）同一條路徑；終點＝滑鼠的螢幕位置
+		await sameAsBuiltin();
+		let e = await ends();
+		expect(Math.abs(e.b.x - free.x)).toBeLessThan(2);
+		expect(Math.abs(e.b.y - free.y)).toBeLessThan(2);
+		// 滑到不合法的目標（偵測器 → UPS 沒有合法類型）：紅框，線標 invalid
+		await page.mouse.move(bad.x + bad.width / 2, bad.y + bad.height / 2, { steps: 8 });
+		await expect(page.locator('.svelte-flow__handle.connectingto:not(.valid)')).toHaveCount(1);
+		await expect(preview.locator('g.invalid')).toHaveCount(1);
+		// 滑到合法目標：綠框，線標 valid，終點吸到目標
+		await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 8 });
+		await expect(page.locator('.svelte-flow__handle.connectingto.valid')).toHaveCount(1);
+		await expect(preview.locator('g.valid')).toHaveCount(1);
+		await sameAsBuiltin();
+		// 整張卡片是把手：終點吸到目標卡片中心（和內建一致）
+		e = await ends();
+		expect(Math.abs(e.b.x - (to.x + to.width / 2))).toBeLessThan(3);
+		expect(Math.abs(e.b.y - (to.y + to.height / 2))).toBeLessThan(3);
+		await page.mouse.up();
+		await expect(path).toHaveCount(0);
+		const m = page.getByRole('menu', { name: '建立邊' });
+		await expect(m).toContainText(`偵測器 SD-01 → ${G}`);
+		const n0 = await graphEdges(page).count();
+		await m.getByRole('menuitem', { name: '監測' }).click();
+		await expect(graphEdges(page)).toHaveCount(n0 + 1);
+	});
+
+	test('拉線中亮暗凍結：滑過邊、離開起點超過 200ms 都不重設卡片與邊的樣式', async ({ page }) => {
+		// P8 實測：拖曳中滑過邊（hoverEdge）或離開起點留下的 200ms 計時到期（hoverNode），
+		// 都會重設上千條邊的樣式、整個 viewport 重畫，連線拖曳掉到 30fps
+		await toEdit(page, ['偵測器 SD-01', G, 'UPS-1', '機櫃 A-01']);
+		await page.getByRole('button', { name: 'Fit View' }).click();
+		await settle(page);
+		await clickPane(page);
+		const from = (await node(page, '偵測器 SD-01').boundingBox())!;
+		const to = (await node(page, G).boundingBox())!;
+		await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+		await page.mouse.down();
+		await page.mouse.move(from.x + from.width / 2 + 20, from.y + from.height + 30, { steps: 4 });
+		await expect(page.locator('svg.connection-preview path')).toBeVisible();
+		// 拉線開始後：記錄卡片與邊的樣式變動
+		await page.evaluate(() => {
+			const w = window as unknown as { __restyle: string[] };
+			w.__restyle = [];
+			new MutationObserver((rs) => {
+				for (const r of rs) {
+					const t = r.target as Element;
+					if (
+						t.matches(
+							'.svelte-flow__edge-path, .svelte-flow__node-graph > div:not(.svelte-flow__handle)'
+						)
+					)
+						w.__restyle.push(
+							`${t.nodeName} ${r.attributeName}: ${r.oldValue} → ${t.getAttribute(r.attributeName!)}`
+						);
+				}
+			}).observe(document.querySelector('.svelte-flow__viewport')!, {
+				subtree: true,
+				attributes: true,
+				attributeOldValue: true,
+				attributeFilter: ['style', 'class']
+			});
+		});
+		// 滑過畫布上每一條邊的中點，再停超過 200ms
+		const mids = await page.evaluate(() =>
+			[...document.querySelectorAll<SVGPathElement>('.svelte-flow__edge-path')].map((p) => {
+				const m = p.getScreenCTM()!;
+				const q = p.getPointAtLength(p.getTotalLength() / 2).matrixTransform(m);
+				return { x: q.x, y: q.y };
+			})
+		);
+		expect(mids.length).toBeGreaterThan(0);
+		for (const q of mids) await page.mouse.move(q.x, q.y, { steps: 4 });
+		await page.waitForTimeout(400);
+		expect(
+			await page.evaluate(() => (window as unknown as { __restyle: string[] }).__restyle)
+		).toEqual([]);
+		// 照常放到合法目標、建立選單
+		await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 6 });
+		await expect(page.locator('.svelte-flow__handle.connectingto.valid')).toHaveCount(1);
+		await page.mouse.up();
+		await expect(page.getByRole('menu', { name: '建立邊' })).toContainText(`偵測器 SD-01 → ${G}`);
+	});
+
 	test('情境 10：違反連接限制時擋下', async ({ page }) => {
 		await toEdit(page, [
 			'機櫃 A-01',
@@ -937,6 +1084,31 @@ test.describe('編輯器操作', () => {
 			.getByRole('menuitem', { name: /確認刪除/ })
 			.click();
 		await expect(graphNodes(page)).toHaveCount(1);
+	});
+
+	test('刪除規則一致：會連帶刪邊的節點（詳情／右鍵／鍵盤）都要二次確認；沒有邊的節點、單一條邊直接刪', async ({
+		page
+	}) => {
+		await toEdit(page, ['偵測器 SD-02', G]);
+		await addNode(page, '攝影機', '攝影機 CAM-04');
+		await expect(graphNodes(page)).toHaveCount(3);
+		// 鍵盤：有邊的節點先問
+		await pick(page, '偵測器 SD-02');
+		await page.keyboard.press('Delete');
+		await expect(detail(page)).toContainText('連同 1 條邊一起刪除？');
+		await expect(graphNodes(page)).toHaveCount(3);
+		await detail(page).getByRole('button', { name: '取消', exact: true }).click();
+		// 鍵盤：沒有邊的節點與詳情、右鍵一樣直接刪
+		await pick(page, '攝影機 CAM-04');
+		await page.keyboard.press('Delete');
+		await expect(node(page, '攝影機 CAM-04')).toHaveCount(0);
+		await expect(graphNodes(page)).toHaveCount(2);
+		// 單一條邊：鍵盤直接刪，兩端節點留著
+		await pick(page, '偵測器 SD-02');
+		await pickEdge(page, `監測：${G}`);
+		await page.keyboard.press('Delete');
+		await expect(graphEdges(page)).toHaveCount(0);
+		await expect(graphNodes(page)).toHaveCount(2);
 	});
 });
 

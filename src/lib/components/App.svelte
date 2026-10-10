@@ -58,8 +58,11 @@
 			} else if (k === 'f' && graph && s?.kind === 'node') editor.findCustomers(s.id);
 			else if (e.code === 'Digit1' && e.shiftKey) editor.fit();
 			else if ((e.key === 'Delete' || e.key === 'Backspace') && s && !graph) {
+				// 與詳情、右鍵同一規則：會連帶刪邊的節點才二次確認；單一條邊、沒有邊的節點直接刪
+				// （被擋的節點交給 deleteNode 顯示原因）
 				if (s.kind === 'edge') editor.deleteEdge(s.id);
-				else if (editor.deleteBlock(s.id)) editor.deleteNode(s.id);
+				else if (editor.deleteBlock(s.id) || !editor.incidentEdges(s.id).length)
+					editor.deleteNode(s.id);
 				else {
 					editor.armDelete = s.id;
 					editor.panels.right = true;

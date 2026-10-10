@@ -42,6 +42,7 @@
 	import GraphNode from './GraphNode.svelte';
 	import Icon from './Icon.svelte';
 	import ViewSync from './ViewSync.svelte';
+	import ConnectionPreview from './ConnectionPreview.svelte';
 
 	let { editor }: { editor: Editor } = $props();
 
@@ -221,6 +222,15 @@
 	/** 拖曳連線中（目標卡片的 target 把手要浮到最上層才接得到） */
 	let linking = $state(false);
 
+	/**
+	 * 開始拖曳連線：凍結亮起狀態。拖曳中滑過的邊、離開起點卡片留下的 200ms 計時都不再改 focus——
+	 * 否則每次滑過一條邊或計時到期，就要重設上千條邊的樣式、整個 viewport 重畫（P8 實測連線拖曳掉到 30fps）
+	 */
+	function startLink() {
+		clearTimeout(hoverTimer);
+		linking = true;
+	}
+
 	/** 拖曳放開：放在節點上 → 選邊類型；放在空白 → 新增節點並連線 */
 	function connectEnd(e: MouseEvent | TouchEvent, from?: string) {
 		linking = false;
@@ -301,13 +311,14 @@
 		class={[editor.connecting && 'connecting', linking && 'linking']}
 		clickConnect={false}
 		connectionDragThreshold={6}
+		connectionLineContainerStyle="display: none"
 		onnodeclick={({ node, event }) => nodeClick(node.id, event.detail)}
 		onedgeclick={({ edge }) => edgeClick(edge.id)}
 		onpaneclick={() => editor.select(null)}
 		onnodepointerenter={({ node }) => hover(node.id)}
 		onnodepointerleave={() => hover(null)}
-		onedgepointerenter={({ edge }) => (editor.hoverEdge = edge.id)}
-		onedgepointerleave={() => (editor.hoverEdge = null)}
+		onedgepointerenter={({ edge }) => !linking && (editor.hoverEdge = edge.id)}
+		onedgepointerleave={() => !linking && (editor.hoverEdge = null)}
 		onnodecontextmenu={({ event, node }) => {
 			if (editor.stacks.has(node.id)) return void menuAt(event);
 			editor.select({ kind: 'node', id: node.id });
@@ -320,7 +331,7 @@
 			editor.menu = { kind: 'edge', id: edge.id, ...at };
 		}}
 		onpanecontextmenu={({ event }) => (editor.menu = { kind: 'pane', ...menuAt(event) })}
-		onconnectstart={() => (linking = true)}
+		onconnectstart={startLink}
 		onconnectend={(e, s) => connectEnd(e, s.fromNode?.id)}
 		isValidConnection={(c) =>
 			!!editor.node(c.target) &&
@@ -346,6 +357,8 @@
 			nodeBorderRadius={4}
 		/>
 		<ViewSync {editor} />
+		<!-- 內建連線 SVG 在 viewport 裡（上面 display: none）；預覽改畫在 viewport 外，拉線時不重畫上千條邊 -->
+		<ConnectionPreview />
 		{#if editor.working.length === 0}
 			<p
 				class="pointer-events-none absolute inset-0 z-10 grid place-items-center px-6 text-center text-sm text-slate-400"
