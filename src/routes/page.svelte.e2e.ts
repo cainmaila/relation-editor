@@ -22,6 +22,8 @@ type GraphViewHook = {
 	nodeCount: () => number;
 	edgeCount: () => number;
 	search: (name: string) => string | null;
+	highlightEdgeIds: () => string[];
+	selectedEdge: () => string | null;
 };
 declare global {
 	interface Window {
@@ -1213,5 +1215,65 @@ test.describe('局部工作區（P4）', () => {
 		const b1 = await node(page, '機櫃 PDU A-05-A').boundingBox();
 		expect(b1!.x).toBeCloseTo(b0!.x, 0);
 		expect(b1!.y).toBeCloseTo(b0!.y, 0);
+	});
+});
+
+test.describe('全圖追查（P7）', () => {
+	const trace = (page: Page) => page.getByRole('region', { name: '找客戶結果' });
+
+	test('編輯拓撲後追查依最新資料重算，並標明分析版本', async ({ page }) => {
+		expect(await findCustomers(page, '機櫃 PDU A-04-A')).toEqual(['客戶丙']);
+		const version = trace(page).getByLabel('分析版本');
+		await expect(version).toHaveText(/拓撲版本 \d+\s*$/);
+		const before = await version.textContent();
+		await toEdit(page, ['機櫃 PDU A-04-A', '機櫃 A-04']);
+		await pick(page, '機櫃 PDU A-04-A');
+		await pickEdge(page, '供電：機櫃 A-04');
+		await detail(page).getByRole('button', { name: '刪除邊' }).click();
+		await toGraph(page);
+		// 追查仍在：結果依刪邊後的拓撲重算，明講已變更
+		await expect(trace(page)).toContainText('走不到任何客戶');
+		await expect(version).toContainText('拓撲已變更，已依最新資料重算');
+		expect(await version.textContent()).not.toBe(before);
+		await expect(page.getByRole('main')).toContainText('機櫃 PDU A-04-A → 0 位客戶');
+		await trace(page).getByRole('button', { name: /清除/ }).click();
+		await expect(trace(page)).toHaveCount(0);
+	});
+
+	test('完整結果分頁：沿途關係全數可翻；單選一條關係獨立亮起、追查保留、兩端可加入編輯頁', async ({
+		page
+	}) => {
+		await findCustomers(page, '台電市電');
+		await trace(page)
+			.getByText(`沿途關係（${TOTAL_EDGES - 6}）`)
+			.click();
+		const nav = trace(page).getByRole('navigation', { name: '沿途關係分頁' });
+		await expect(nav).toContainText(`共 ${TOTAL_EDGES - 6} 條`);
+		const pages = Math.ceil((TOTAL_EDGES - 6) / 50);
+		await expect(nav).toContainText(`第 1 / ${pages} 頁`);
+		const rels = trace(page).getByRole('list', { name: '沿途關係' }).getByRole('listitem');
+		await expect(rels).toHaveCount(50);
+		await nav.getByRole('button', { name: '下一頁' }).click();
+		await expect(nav).toContainText(`第 2 / ${pages} 頁`);
+		await expect(rels).toHaveCount(50);
+		await rels.first().getByRole('button').first().click();
+		// 選了關係：詳情顯示邊、追查還在、這條排第一（選取色）
+		await expect(detail(page).getByRole('button', { name: /^起點：/ })).toBeVisible();
+		await expect(trace(page)).toContainText('43');
+		const sel = await page.evaluate(() => window.__graphView!.selectedEdge());
+		expect(sel).not.toBeNull();
+		await expect
+			.poll(() => page.evaluate(() => window.__graphView!.highlightEdgeIds()[0]))
+			.toBe(sel);
+		await trace(page).getByRole('button', { name: '兩端加入編輯頁' }).click();
+		await expect(rels.first()).toContainText('已在編輯頁');
+		await expect(nav).toContainText(`第 2 / ${pages} 頁`);
+		// 沿途節點同樣完整分頁
+		await trace(page)
+			.getByText(`沿途節點（${TOTAL - 5}）`)
+			.click();
+		const nodeNav = trace(page).getByRole('navigation', { name: '沿途節點分頁' });
+		await expect(nodeNav).toContainText(`共 ${TOTAL - 5} 個`);
+		await expect(nodeNav).toContainText(`第 1 / ${Math.ceil((TOTAL - 5) / 50)} 頁`);
 	});
 });

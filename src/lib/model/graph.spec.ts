@@ -341,3 +341,95 @@ describe('共用索引', () => {
 		expect(unreachable(cut, buildGraphIndex(cut))).toEqual(new Set(['TPKC 大樓', 'a', 'b']));
 	});
 });
+
+describe('P7 全圖追查（純圖語意）', () => {
+	const node = (id: string, type = '通用節點', name = id) => ({ id, type, name, props: {} });
+	const edge = (id: string, from: string, to: string, bidirectional = false) => ({
+		id,
+		type: '包含',
+		from,
+		to,
+		bidirectional,
+		props: {}
+	});
+	const g = (nodes: Graph['nodes'], edges: Graph['edges']): Graph => ({ nodes, edges });
+
+	it('單向 A→B→客戶：順向找得到，逆向找不到；起點是客戶時不算自己', () => {
+		const x = g(
+			[node('a'), node('b'), node('c', '客戶')],
+			[edge('ab', 'a', 'b'), edge('bc', 'b', 'c')]
+		);
+		expect(findCustomers(x, 'a')).toMatchObject({ customerIds: ['c'] });
+		expect([...findCustomers(x, 'a').edges]).toEqual(['ab', 'bc']);
+		const rev = g(x.nodes, [edge('ba', 'b', 'a'), edge('bc', 'b', 'c')]);
+		expect(findCustomers(rev, 'a')).toMatchObject({ customerIds: [], edges: new Set() });
+		expect(findCustomers(x, 'c')).toMatchObject({ customerIds: [], nodes: new Set(['c']) });
+	});
+
+	it('雙向邊：兩頭都能走，且邊只記一次', () => {
+		const x = g(
+			[node('a'), node('b'), node('c', '客戶')],
+			[edge('ba', 'b', 'a', true), edge('bc', 'b', 'c')]
+		);
+		const r = findCustomers(x, 'a');
+		expect(r.customerIds).toEqual(['c']);
+		expect([...r.edges].sort()).toEqual(['ba', 'bc']);
+	});
+
+	it('循環：不會無限走；環上的每條邊都在結果裡（回到起點的單向邊除外）', () => {
+		const x = g(
+			[node('a'), node('b'), node('d'), node('c', '客戶')],
+			[edge('ab', 'a', 'b'), edge('bd', 'b', 'd'), edge('da', 'd', 'a'), edge('dc', 'd', 'c')]
+		);
+		const r = findCustomers(x, 'a');
+		expect(r.customerIds).toEqual(['c']);
+		expect([...r.nodes].sort()).toEqual(['a', 'b', 'c', 'd']);
+		expect([...r.edges].sort()).toEqual(['ab', 'bd', 'dc']);
+	});
+
+	it('孤立／無客戶：結果只有起點，沒有邊與客戶', () => {
+		const x = g([node('a'), node('b'), node('c', '客戶')], [edge('ab', 'a', 'b')]);
+		expect(findCustomers(x, 'a')).toEqual({
+			customers: [],
+			customerIds: [],
+			nodes: new Set(['a']),
+			edges: new Set()
+		});
+		expect(findCustomers(x, 'c').edges.size).toBe(0);
+	});
+
+	it('重複：平行邊各自保留 ID；同名不同 ID 的客戶分開列出', () => {
+		const x = g(
+			[node('a'), node('c1', '客戶', '客戶甲'), node('c2', '客戶', '客戶甲')],
+			[edge('a1', 'a', 'c1'), edge('a1b', 'a', 'c1'), edge('a2', 'a', 'c2')]
+		);
+		const r = findCustomers(x, 'a');
+		expect(r.customerIds).toEqual(['c1', 'c2']);
+		expect(r.customers).toEqual(['客戶甲', '客戶甲']);
+		expect([...r.edges].sort()).toEqual(['a1', 'a1b', 'a2']);
+	});
+
+	it('唯讀 IDC 資料：沿唯讀的承載／服務邊照樣追查（2,066 mock 已知答案）', () => {
+		const m = full();
+		const r = findCustomers(m, '主機 H-02');
+		expect(r.customers).toEqual(['客戶乙']);
+		expect([...r.edges].every((id) => m.edges.find((e) => e.id === id)!.readonly)).toBe(true);
+		expect(r.nodes.has('機框 A-01-F2')).toBe(true);
+	});
+
+	it('10k 代表圖：結果完整（每個客戶 ID 唯一），與預先建好的索引一致', async () => {
+		const { scaleFixture } = await import('./scale-fixture');
+		const { graph: big, meta } = scaleFixture({ edges: 20_000 });
+		const idx = buildGraphIndex(big);
+		const r = findCustomers(big, meta.power, idx);
+		expect(r).toEqual(findCustomers(big, meta.power));
+		expect(new Set(r.customerIds).size).toBe(r.customerIds.length);
+		expect(r.customerIds).toHaveLength(200);
+		// 完整路徑邊數遠超過繪製上限 2,000：結果不受畫面限制
+		expect(r.edges.size).toBeGreaterThan(2000);
+		for (const id of r.edges) {
+			const e = idx.edgeById.get(id)!;
+			expect(r.nodes.has(e.from) && r.nodes.has(e.to)).toBe(true);
+		}
+	});
+});

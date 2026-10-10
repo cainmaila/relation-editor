@@ -259,6 +259,19 @@ describe('預算', () => {
 			highlightHidden: 5
 		});
 	});
+
+	it('追查中單選的關係：即使排在 2,000 條之外也一定畫、排第一（獨立高亮），總數不變', () => {
+		const g = lattice(13, 3);
+		for (let i = 0; i + 1 < g.ids.length; i++) g.edges.push([i, i + 1]);
+		const hl = g.edges.map((_, i) => i);
+		const last = hl.length - 1;
+		const f = run(
+			input(g, cam([0, 0, 200]), { highlight: hl, highlightTotal: hl.length, selectedEdge: last })
+		);
+		expect(f.highlightEdges[0]).toBe(last);
+		expect(f.highlightEdgeIds.length).toBe(2000);
+		expect(f.stats.highlightDrawn + f.stats.highlightOmitted).toBe(hl.length);
+	});
 });
 
 describe('選取優先（佔用同一個 detail 預算，不另開無上限池）', () => {

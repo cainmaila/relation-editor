@@ -285,6 +285,8 @@ export type FrameInput = {
 	highlight: readonly number[];
 	/** 高亮邊的完整數量（含被系統篩掉的） */
 	highlightTotal: number;
+	/** 單選的關係（edges 索引；-1＝無）：一定畫、排第一，renderer 用選取色獨立高亮 */
+	selectedEdge?: number;
 	labelWidth: (node: number) => number;
 	/** full＝重新挑選並避碰；reproject＝只重算上一幀標籤的位置（相機轉動中節流用） */
 	labels: 'full' | 'reproject';
@@ -403,8 +405,10 @@ export function computeFrame(inp: FrameInput, prev: LodState = EMPTY): Frame {
 		const p = seen.get(i) ?? proj(i);
 		return !!p && onScreen(p, 0);
 	};
+	const selEdge = inp.selectedEdge ?? -1;
 	const hl = inp.highlight
 		.map((e) => {
+			if (e === selEdge) return { e, k: -1 };
 			const s = inp.selected;
 			const touch = E.from[e] === s || E.to[e] === s ? 0 : 1;
 			const vis = viewOf(E.from[e]) || viewOf(E.to[e]) ? 0 : 1;

@@ -966,3 +966,170 @@ describe('3D 宇宙座標（session runtime）', () => {
 		expect(e.universe.workerStarts).toBe(2);
 	});
 });
+
+describe('P7 全圖追查與跨視圖一致性', () => {
+	const PDU = '機櫃 PDU A-04-A';
+	const RACK = '機櫃 A-04';
+	const FEED = '供電:機櫃 PDU A-04-A>機櫃 A-04';
+	const node = (id: string, type = '通用節點', name = id) => ({ id, type, name, props: {} });
+	const edge = (id: string, from: string, to: string) => ({
+		id,
+		type: '包含',
+		from,
+		to,
+		bidirectional: false,
+		props: {}
+	});
+
+	it('結果沿完整標準圖：系統全關、工作區很小或空都相同', () => {
+		const e = new Editor();
+		e.findCustomers('台電市電');
+		const full = e.result!;
+		expect(full.customerIds).toHaveLength(43);
+		e.systems = [];
+		const hidden = e.result!;
+		e.addToWork(['台電市電']);
+		const small = e.result!;
+		e.clearWorkspace();
+		const empty = e.result!;
+		expect(hidden).toEqual(full);
+		expect(small).toEqual(full);
+		expect(empty).toEqual(full);
+	});
+
+	it('起點即選取；選取其他節點或沿途關係不清掉追查', () => {
+		const e = new Editor();
+		e.findCustomers(PDU);
+		expect(e.selected).toEqual({ kind: 'node', id: PDU });
+		const r = e.result!;
+		e.select({ kind: 'node', id: '台電市電' });
+		expect(e.result).toBe(r);
+		expect(e.trace?.source).toBe(PDU);
+		const id = [...r.edges][0];
+		expect(e.focusEdge(id)).toBe(true);
+		expect(e.selected).toEqual({ kind: 'edge', id });
+		expect(e.result).toBe(r);
+		e.clearTrace();
+		expect(e.result).toBeNull();
+		expect(e.trace).toBeNull();
+	});
+
+	it('單一關係：系統隱藏的端點會勾回；兩端原子加入編輯頁，追查仍在', () => {
+		const e = new Editor();
+		e.findCustomers(PDU);
+		e.systems = [];
+		expect(e.focusEdge(FEED)).toBe(true);
+		expect(e.systems).toEqual(expect.arrayContaining(['電力', '空間']));
+		expect(e.admitEdgeEnds(FEED)).toBe(true);
+		expect(e.working).toEqual([PDU, RACK]);
+		expect(e.result?.edges.has(FEED)).toBe(true);
+		expect(e.focusEdge('nope')).toBe(false);
+		expect(e.message).toBe('邊已不存在：nope（選取已過期，請重新選取）');
+	});
+
+	it('加入兩端超過預算時什麼都不改，追查與選取保留', () => {
+		const filler = Array.from({ length: WORKSPACE_NODE_LIMIT }, (_, i) => node(`x${i}`));
+		const g = {
+			nodes: [node('a'), node('b'), node('c', '客戶'), ...filler],
+			edges: [edge('ab', 'a', 'b'), edge('bc', 'b', 'c')]
+		};
+		const e = new Editor(g);
+		e.addToWork(filler.slice(0, WORKSPACE_NODE_LIMIT - 1).map((n) => n.id));
+		e.findCustomers('a');
+		e.focusEdge('ab');
+		const before = [...e.working];
+		expect(e.admitEdgeEnds('ab')).toBe(false);
+		expect(e.message).toBe('工作區最多 200 個節點：要新增 2 個，只剩 1 個名額');
+		expect(e.working).toEqual(before);
+		expect(e.selected).toEqual({ kind: 'edge', id: 'ab' });
+		expect(e.result?.customerIds).toEqual(['c']);
+	});
+
+	it('改方向／刪邊：回到全圖時依最新拓撲重算，並標示分析版本', () => {
+		const e = new Editor();
+		e.findCustomers(PDU);
+		expect(e.result!.customers).toEqual(['客戶丙']);
+		expect(e.traceRevision).toBe(e.topologyRevision);
+		expect(e.traceChanged).toBe(false);
+		e.addToWork([PDU, RACK]);
+		e.setPage('edit');
+		// 編輯頁不顯示找客戶（PRD），追查暫停但不丟
+		expect(e.result).toBeNull();
+		expect(e.trace?.source).toBe(PDU);
+		expect(e.deleteEdge(FEED)).toBe(true);
+		e.setPage('graph');
+		expect(e.result!.customerIds).toEqual([]);
+		expect(e.result!.edges.size).toBe(0);
+		expect(e.traceRevision).toBe(e.topologyRevision);
+		expect(e.traceChanged).toBe(true);
+	});
+
+	it('改名只更新名稱與搜尋、不重算拓撲（結果物件不變）；改方向才重算', async () => {
+		const g = {
+			nodes: [node('a'), node('b'), node('c', '客戶', '客戶甲')],
+			edges: [edge('ab', 'a', 'b'), edge('cb', 'c', 'b')]
+		};
+		const e = new Editor(g);
+		e.findCustomers('a');
+		const r = e.result!;
+		expect(r.customerIds).toEqual([]);
+		const topo = e.topologyRevision;
+		e.updateNode('c', { name: '客戶乙' });
+		expect(e.result).toBe(r);
+		expect(e.topologyRevision).toBe(topo);
+		expect(e.traceChanged).toBe(false);
+		expect(e.node('c')!.name).toBe('客戶乙');
+		e.palette.set({ text: '客戶乙' });
+		await expect.poll(() => e.palette.status).toBe('ready');
+		expect(e.palette.ids).toEqual(['c']);
+		expect(e.palette.revision).toBe(e.revision);
+		e.updateEdge('cb', { bidirectional: true });
+		expect(e.result).not.toBe(r);
+		expect(e.result!.customerIds).toEqual(['c']);
+		expect(e.traceChanged).toBe(true);
+		e.search.dispose();
+	});
+
+	it('同名不同 ID 的客戶分開列出', () => {
+		const g = {
+			nodes: [node('a'), node('c1', '客戶', '客戶甲'), node('c2', '客戶', '客戶甲')],
+			edges: [edge('a1', 'a', 'c1'), edge('a2', 'a', 'c2')]
+		};
+		const e = new Editor(g);
+		e.findCustomers('a');
+		expect(e.result!.customerIds).toEqual(['c1', 'c2']);
+	});
+
+	it('刪除追查起點：結果清掉並說明；IDC 唯讀起點不能刪', () => {
+		const e = new Editor();
+		const id = e.addNode('攝影機')!;
+		expect(e.addEdge(id, '2F A 排監視與偵測範圍', '監測')).toBe(true);
+		e.setPage('graph');
+		e.findCustomers(id);
+		expect(e.result!.customers.sort()).toEqual(['客戶乙', '客戶甲']);
+		e.setPage('edit');
+		expect(e.deleteNode(id)).toBe(true);
+		expect(e.trace).toBeNull();
+		expect(e.message).toBe('追查起點已刪除，找客戶結果已清除');
+		e.setPage('graph');
+		expect(e.result).toBeNull();
+		// IDC 守門不變
+		e.findCustomers('主機 H-02');
+		e.addToWork(['主機 H-02']);
+		e.setPage('edit');
+		expect(e.deleteNode('主機 H-02')).toBe(false);
+		expect(e.trace?.source).toBe('主機 H-02');
+	});
+
+	it('拓撲編輯後追查立即反映（不是舊結果冒充最新）', () => {
+		const e = new Editor();
+		e.findCustomers('台電市電');
+		const before = e.result!;
+		e.addToWork([PDU, RACK]);
+		e.setPage('edit');
+		e.updateEdge(FEED, { bidirectional: true });
+		e.setPage('graph');
+		expect(e.result).not.toBe(before);
+		expect(e.traceRevision).toBe(e.topologyRevision);
+	});
+});

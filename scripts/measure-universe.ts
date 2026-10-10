@@ -1,5 +1,6 @@
 // P1 量測腳本（可給 P8 重用）。Node 24 直接執行 TS：
 //   pnpm measure:universe layout  [--edges 20000,100000] [--seed 1] [--ticks 100]
+//   pnpm measure:universe analysis [--edges 20000,100000] [--seed 1] [--samples 7] [--out dir]
 //   pnpm measure:universe browser [--edges 20000] [--init zero|d3] [--samples 5] [--url http://localhost:4173]
 //                                 [--channel chrome] [--headed] [--angle swiftshader] [--p6] [--out dir]
 // --p6：另外記錄 LOD／繪製計數、真滾輪拉近與真滑鼠點選（P6 煙霧，不是正式驗收）
@@ -15,6 +16,8 @@ import { chromium, type Page } from 'playwright';
 
 type Fixture = typeof import('../src/lib/model/scale-fixture.ts');
 type Sim = typeof import('../src/lib/layout-sim.ts');
+type GraphMod = typeof import('../src/lib/model/graph.ts');
+type ChangeMod = typeof import('../src/lib/model/graph-change.ts');
 
 const argv = process.argv.slice(2);
 const mode = argv[0];
@@ -30,7 +33,7 @@ const int = (name: string, raw: string) => {
 };
 const OUT = path.resolve(opt('out', '.superpowers/sdd/plan/artifacts/p1'));
 const SEED = int('seed', opt('seed', '1'));
-const EDGES = opt('edges', mode === 'layout' ? '20000,100000' : '20000')
+const EDGES = opt('edges', mode === 'browser' ? '20000' : '20000,100000')
 	.split(',')
 	.map((x) => int('edges', x));
 
@@ -587,10 +590,110 @@ async function browser() {
 	);
 }
 
+/**
+ * P7：全圖分析在主執行緒的同步成本（與 Editor 相同的純函式與同一 fixture）。
+ * 每個樣本＝一次拓撲編輯（改方向，applyCommand 含索引）後重算 unprocessed／unreachable／找客戶。
+ */
+async function analysis() {
+	const cfg = { configFile: false as const, logLevel: 'error' as const };
+	const fx = (await runnerImport<Fixture>('./src/lib/model/scale-fixture.ts', cfg)).module;
+	const gm = (await runnerImport<GraphMod>('./src/lib/model/graph.ts', cfg)).module;
+	const cm = (await runnerImport<ChangeMod>('./src/lib/model/graph-change.ts', cfg)).module;
+	const samples = int('samples', opt('samples', '7'));
+	const results = [];
+	for (const edges of EDGES) {
+		const { graph, meta } = fx.scaleFixture({ edges, seed: SEED });
+		const { degree, ...stats } = fx.graphStats(graph);
+		void degree;
+		let state = cm.initialGraphState(graph);
+		// 可改方向的非唯讀邊：每個樣本翻一次，確保 topologyRevision 前進
+		const flip =
+			graph.edges.find((e) => !e.readonly && e.from === meta.power) ??
+			graph.edges.find((e) => !e.readonly)!;
+		const t: Record<string, number[]> = {
+			command: [],
+			unprocessed: [],
+			unreachable: [],
+			findPower: [],
+			findHub: [],
+			total: []
+		};
+		const time = <T>(k: string, f: () => T) => {
+			const a = performance.now();
+			const v = f();
+			t[k].push(performance.now() - a);
+			return v;
+		};
+		let last = {
+			revision: 0,
+			topologyRevision: 0,
+			unprocessed: 0,
+			unreachable: 0,
+			power: { customers: 0, nodes: 0, edges: 0 },
+			hub: { customers: 0, nodes: 0, edges: 0 }
+		};
+		const size = (r: { customerIds: string[]; nodes: Set<string>; edges: Set<string> }) => ({
+			customers: r.customerIds.length,
+			nodes: r.nodes.size,
+			edges: r.edges.size
+		});
+		// 第一次為暖機（JIT），不計
+		for (let i = 0; i <= samples; i++) {
+			const a = performance.now();
+			// 偶數樣本改方向（沿用鄰接），奇數樣本刪邊再加回（整張重建索引）
+			const cur = state.index.edgeById.get(flip.id);
+			const cmd: Parameters<typeof cm.applyCommand>[1] =
+				i % 2 === 0
+					? cur
+						? { kind: 'updateEdge', id: flip.id, patch: { bidirectional: !cur.bidirectional } }
+						: { kind: 'addEdge', edge: flip }
+					: cur
+						? { kind: 'deleteEdge', id: flip.id }
+						: { kind: 'addEdge', edge: flip };
+			const r = time('command', () => cm.applyCommand(state, cmd));
+			if (!r.ok) throw new Error(r.message);
+			state = r.value.state;
+			const g = state.graph;
+			const idx = state.index;
+			const up = time('unprocessed', () => gm.unprocessed(g, idx));
+			const ur = time('unreachable', () => gm.unreachable(g, idx));
+			const p = time('findPower', () => gm.findCustomers(g, meta.power, idx));
+			const h = time('findHub', () => gm.findCustomers(g, meta.hub, idx));
+			t.total.push(performance.now() - a);
+			last = {
+				revision: state.revision,
+				topologyRevision: state.topologyRevision,
+				unprocessed: up.size,
+				unreachable: ur.size,
+				power: size(p),
+				hub: size(h)
+			};
+			if (i === 0) for (const k in t) t[k].length = 0;
+		}
+		const r = {
+			name: `analysis-${edges}`,
+			seed: SEED,
+			samples,
+			stats,
+			power: meta.power,
+			hub: meta.hub,
+			last,
+			ms: Object.fromEntries(Object.entries(t).map(([k, v]) => [k, summary(v)]))
+		};
+		console.log(JSON.stringify({ name: r.name, total: r.ms.total, last }));
+		results.push(r);
+	}
+	await writeFile(
+		path.join(OUT, `analysis-${EDGES.join('_')}.json`),
+		JSON.stringify({ env: environment(), results }, null, 2)
+	);
+}
+
 await mkdir(OUT, { recursive: true });
-if (mode === 'layout') await layout();
+if (mode === 'analysis') await analysis();
+else if (mode === 'layout') await layout();
 else if (mode === 'browser') await browser();
 else {
-	console.error('usage: measure-universe.ts layout|browser [options]');
+	console.error('usage: measure-universe.ts analysis|layout|browser [options]');
 	process.exit(1);
 }

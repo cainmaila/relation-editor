@@ -1,4 +1,4 @@
-// 編輯器狀態：圖（mock 初始值，不存檔）、系統勾選、選取、找客戶結果。
+// 編輯器狀態：圖（mock 初始值，不存檔）、系統勾選、選取、找客戶追查。
 import { untrack } from 'svelte';
 import {
 	EDGE_TYPES,
@@ -90,7 +90,11 @@ export class Editor {
 	/** 編輯頁的節點 id */
 	working = $state<string[]>([]);
 	selected = $state<Selection>(null);
-	result = $state<CustomerResult | null>(null);
+	/**
+	 * 找客戶追查：只記起點與開始時的拓撲版本。結果不另存，由完整標準圖算出（見 result），
+	 * 選取其他節點／關係不清掉；只有「清除」、Esc、換起點或刪掉起點才結束
+	 */
+	trace = $state<{ source: string; topologyRevision: number } | null>(null);
 	message = $state('');
 	/** 新增邊表單（拉線時帶入起點終點） */
 	draft = $state({ from: '', to: '', type: '' });
@@ -156,6 +160,26 @@ export class Editor {
 		this.outline = new SearchController(this.search, { matches: true });
 		this.palette = new SearchController(this.search);
 	}
+
+	/**
+	 * 找客戶結果：沿完整標準圖（不看工作區、系統勾選、LOD），只隨 topologyRevision 同步重算，
+	 * 所以不會把舊拓撲的結果當成最新（10k／100k 實測遠低於 500 ms，不需 Worker）。
+	 * 改名／屬性不重算；名稱由 UI 依 ID 即時讀取。編輯頁不顯示（PRD：找客戶只在全圖），追查暫停不丟
+	 */
+	result = $derived.by((): CustomerResult | null => {
+		void this.topologyRevision;
+		const t = this.trace;
+		if (!t || this.page !== 'graph') return null;
+		return untrack(() =>
+			this.node(t.source) ? findCustomers(this.graph, t.source, this.index) : null
+		);
+	});
+	/** 目前結果對應的拓撲版本（同步重算＝永遠是最新版本）；沒有結果為 null */
+	traceRevision = $derived(this.result ? this.topologyRevision : null);
+	/** 開始追查後拓撲已改變：結果已依最新資料重算，UI 要明講 */
+	traceChanged = $derived(
+		!!this.result && !!this.trace && this.trace.topologyRevision !== this.topologyRevision
+	);
 
 	// 拓撲分析只隨 topologyRevision 重算；改名／屬性不觸發
 	unprocessed = $derived.by(() => {
@@ -228,7 +252,6 @@ export class Editor {
 		const keep =
 			ids.length > 0 && (page === 'graph' || ids.every((id) => this.working.includes(id)));
 		this.page = page;
-		this.result = null;
 		this.connecting = null;
 		this.armDelete = null;
 		this.menu = null;
@@ -404,7 +427,6 @@ export class Editor {
 	select(sel: Selection) {
 		this.menu = null;
 		this.selected = sel;
-		this.result = null;
 		this.message = '';
 		this.connecting = null;
 		this.armDelete = null;
@@ -419,10 +441,29 @@ export class Editor {
 
 	/** 選取並置中；節點所屬系統沒勾就順手勾上。收起的成員不展開（免得整張重排），改亮它的疊卡 */
 	reveal(id: string) {
-		const s = nodeType(this.node(id)!.type).system;
-		if (s && !this.systems.includes(s)) this.systems.push(s);
+		this.#showSystemOf(id);
 		this.select({ kind: 'node', id });
 		this.fit([id]);
+	}
+
+	/** 系統沒勾就順手勾上（定位、聚焦關係用） */
+	#showSystemOf(id: string) {
+		const s = nodeType(this.node(id)!.type).system;
+		if (s && !this.systems.includes(s)) this.systems.push(s);
+	}
+
+	/**
+	 * 追查清單點一條關係：保留追查，單獨選取並亮這條邊、鏡頭對準兩端；
+	 * 端點所屬系統沒勾就勾回（畫面看得到才算定位）
+	 */
+	focusEdge(id: string): boolean {
+		const e = this.edge(id);
+		if (!e) return this.fail(`邊已不存在：${id}（選取已過期，請重新選取）`);
+		this.#showSystemOf(e.from);
+		this.#showSystemOf(e.to);
+		this.select({ kind: 'edge', id });
+		this.fit([e.from, e.to]);
+		return true;
 	}
 
 	/** 只看一個系統；已是唯一勾選時恢復全部 */
@@ -607,6 +648,10 @@ export class Editor {
 		if (!this.#guardNode(id) || !this.execute({ kind: 'deleteNode', id })) return false;
 		this.removeFromWork([id]);
 		this.select(null);
+		if (this.trace?.source === id) {
+			this.trace = null;
+			this.message = '追查起點已刪除，找客戶結果已清除';
+		}
 		return true;
 	}
 
@@ -626,9 +671,17 @@ export class Editor {
 		return this.#guardEdge(id) && this.execute({ kind: 'updateEdge', id, patch, base });
 	}
 
+	/** 全圖：選取起點並開始追查（換掉上一個追查），鏡頭對準完整結果 */
 	findCustomers(id: string) {
-		this.result = findCustomers(this.graph, id, this.index);
-		this.fit([...this.result.nodes]);
+		if (this.page !== 'graph' || !this.node(id)) return;
+		this.select({ kind: 'node', id });
+		this.trace = { source: id, topologyRevision: this.topologyRevision };
+		this.fit([...this.result!.nodes]);
+	}
+
+	/** 結束追查（清除按鈕、Esc） */
+	clearTrace() {
+		this.trace = null;
 	}
 
 	private fail(msg: string) {

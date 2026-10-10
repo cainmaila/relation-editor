@@ -5,8 +5,20 @@
 - P0–P4 已分階段審核，至 `3186ce4`；P4 獨立 check、工作區相關 unit 64／64、外部端點 e2e 通過，並已檢視修正 diff。
 - P3 QA 已修正：只改邊屬性造成搜尋永久 pending、Worker 同步失敗無錯誤 UI、排序與規格不符、缺少系統／類型搜尋篩選。
 - P5 至 `eb98d52` 已分階段審核：先顯示種子座標、背景整理、停止／重試、跨頁保存鏡頭。QA 修正 Worker 清理與壞回覆卡住；相機 race 測試改成真實輸入＋受控 Worker 時序，不放寬容差。
-- Next: P6 真正 LOD 與點選已由 agent 交付、待 parent QA；P7–P8 未交付。正式 10k 效能驗收尚未通過。
+- P6 至 `a2248c8` 已分階段審核：全量 Points、有限細節／連線／標籤與真實點選；QA 修正偏軸判斷、遠平面、移動避碰、殘留標籤與點選半徑。獨立 37 unit/component、7 P6 e2e 通過。
+- Next: P7 全圖追查與跨視圖一致性；P7–P8 未交付。正式 10k 效能驗收尚未通過。
 - P7 必須收尾：詳情既有完整關係清單仍需分頁；鄰居資料縮減後的頁碼須重設或限制，避免空白末頁。
+
+## P7 全圖追查與跨視圖一致性（分支 cainmaila/main-3-3）
+
+- **Goal:** 找客戶永遠沿完整標準圖（不看工作區、系統勾選、LOD），拓撲編輯後不讓舊結果冒充最新；所有完整清單每頁 50、總數完整、ID 為 key。計畫 `task-7-brief.md`，報告 `task-7-report.md`
+- **Done（agent-tested，待 parent QA）:**
+  - 先量：`scripts/measure-universe.ts analysis`，10k 節點／100k 邊一次編輯後全部分析（GraphIndex＋未處理＋無客戶路徑＋兩次找客戶）p50 164ms、max 330ms（20k 邊 max 43ms）< 500ms → 同步、不加 Worker；證據 `artifacts/p7`
+  - Editor：`trace`（起點＋開始時拓撲版本）＋`result` 改 `$derived`（只依 topologyRevision、只在全圖）、`traceRevision`／`traceChanged`、`clearTrace`、`focusEdge`；select 不再清追查；刪起點清除並說明；改名不重算
+  - `Pager`＋`PageNav`（縮小自動限制末頁）；`TraceResult`（客戶／沿途節點／沿途關係各自分頁，同名客戶加註 ID；點關係單選＋兩端加入編輯頁）；`EdgeList`（詳情連入／連出分頁）；NeighborPicker 改用 Pager
+  - LOD／renderer：`selectedEdge` 在高亮上限內一定畫、排第一、選取色，路徑保留
+- **驗證:** check／lint 通過；unit＋component 277／277（graph 純語意、Editor P7 9 項、Pager、NeighborPicker 縮減、DetailPanel 50／51／縮減／預算、LOD 選中邊）；production e2e page＋universe 70／70（新增 P7 2 項：編輯後追查重算＋版本、完整結果分頁＋單選關係＋兩端加入）
+- **Todo:** P8 正式效能矩陣與最終全檢
 
 ## P6 分層批次繪製、LOD 與可靠點選（分支 cainmaila/main-3-3）
 

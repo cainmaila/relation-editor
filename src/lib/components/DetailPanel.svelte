@@ -3,7 +3,9 @@
 	import { CONFIRM_STATES, IDC_MESSAGE, UNREACHABLE_LABEL, nodeType } from '#lib/model/config.js';
 	import { EDGE_COLORS, SYSTEM_COLORS } from './Canvas.svelte';
 	import Icon from './Icon.svelte';
+	import EdgeList from './EdgeList.svelte';
 	import NeighborPicker from './NeighborPicker.svelte';
+	import TraceResult from './TraceResult.svelte';
 
 	let { editor }: { editor: Editor } = $props();
 
@@ -35,8 +37,6 @@
 	);
 	const block = $derived(node ? editor.deleteBlock(node.id) : null);
 	const nameOf = (id: string) => editor.node(id)?.name ?? id;
-	const colorOf = (id: string) =>
-		SYSTEM_COLORS[nodeType(editor.node(id)?.type ?? '').system ?? '通用'];
 
 	let propKey = $state('');
 	let propValue = $state('');
@@ -185,47 +185,6 @@
 	{/if}
 {/snippet}
 
-{#snippet edgeList(title: string, list: typeof incoming, other: 'from' | 'to')}
-	<section class="border-t border-white/6 px-5 py-4">
-		<h3 class="mb-2 eyebrow">{title}（{list.length}）</h3>
-		<ul class="flex flex-col gap-1">
-			{#each list as e (e.id)}
-				<li class="flex items-center gap-1">
-					<button
-						aria-label="{e.type}：{nameOf(e[other])}"
-						class="group flex min-w-0 flex-1 items-center gap-2 rounded-md border border-white/6 bg-white/2 px-2.5 py-1.5 text-left text-xs transition-colors hover:border-white/15 hover:bg-white/5"
-						onclick={() => editor.select({ kind: 'edge', id: e.id })}
-						onmouseenter={() => (editor.hoverEdge = e.id)}
-						onmouseleave={() => (editor.hoverEdge = null)}
-					>
-						<span style:color={EDGE_COLORS[e.type]} title={e.type}
-							><Icon name={e.type} class="size-3.5" /></span
-						>
-						<span class="text-slate-600">{other === 'from' ? '←' : '→'}</span>
-						<span class="size-1.5 shrink-0 rounded-full" style:background={colorOf(e[other])}
-						></span>
-						<span class="truncate text-slate-200">{nameOf(e[other])}</span>
-						{#if e.bidirectional}<span class="ml-auto text-slate-500" title="雙向"
-								><Icon name="swap" class="size-3" /></span
-							>{/if}
-					</button>
-					{#if editor.working.includes(e[other])}
-						<span class="shrink-0 text-[11px] text-slate-500">已在編輯頁</span>
-					{:else}
-						<button
-							class="btn-ghost shrink-0 px-2 py-1 text-[11px]"
-							aria-label="加入編輯頁：{nameOf(e[other])}"
-							onclick={() => addWork([e[other]])}>加入編輯頁</button
-						>
-					{/if}
-				</li>
-			{:else}
-				<li class="text-xs text-slate-500">無</li>
-			{/each}
-		</ul>
-	</section>
-{/snippet}
-
 {#snippet idcBanner()}
 	<div
 		class="mx-5 mb-1 flex items-center gap-2 rounded-md border border-emerald-400/20 bg-emerald-400/5 px-3 py-2 text-xs text-emerald-200"
@@ -236,41 +195,8 @@
 {/snippet}
 
 <aside class="flex min-h-full flex-col" aria-label="詳情">
-	{#if editor.result && node}
-		<section
-			aria-label="找客戶結果"
-			class="m-4 mb-0 overflow-hidden rounded-lg border border-sky-400/30 bg-linear-to-br from-sky-400/15 to-indigo-500/5"
-		>
-			<div class="flex items-center gap-2 px-4 pt-3">
-				<p class="eyebrow text-sky-300!">找客戶結果</p>
-				<button
-					class="ml-auto text-[11px] text-slate-400 hover:text-slate-200"
-					onclick={() => (editor.result = null)}>清除 <span class="kbd">Esc</span></button
-				>
-			</div>
-			<p class="px-4 pt-1 text-sm text-slate-300">
-				從 <b class="text-slate-50">{node.name}</b> 沿方向走得到
-				<b class="text-2xl font-semibold text-sky-300 tabular-nums"
-					>{editor.result.customers.length}</b
-				>
-				位客戶
-			</p>
-			<ul class="flex flex-wrap gap-1.5 px-4 pt-2 pb-3">
-				{#each editor.result.customerIds as id, i (id)}
-					<li>
-						<button
-							class="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-2.5 py-0.5 text-xs text-emerald-200 hover:bg-emerald-400/20"
-							onclick={() => editor.fit([id])}>{editor.result?.customers[i]}</button
-						>
-					</li>
-				{:else}
-					<li class="text-xs text-rose-300">走不到任何客戶</li>
-				{/each}
-			</ul>
-			<p class="border-t border-white/6 px-4 py-2 text-[11px] text-slate-400">
-				沿途 {editor.result.nodes.size} 個節點、{editor.result.edges.size} 條邊已亮起
-			</p>
-		</section>
+	{#if editor.result && editor.trace}
+		{#key editor.trace.source}<TraceResult {editor} />{/key}
 	{/if}
 
 	{#if node}
@@ -408,8 +334,10 @@
 
 		{@render propsEditor()}
 		{#key node.id}<NeighborPicker {editor} id={node.id} />{/key}
-		{@render edgeList('連入', incoming, 'from')}
-		{@render edgeList('連出', outgoing, 'to')}
+		{#key node.id}
+			<EdgeList {editor} title="連入" list={incoming} other="from" />
+			<EdgeList {editor} title="連出" list={outgoing} other="to" />
+		{/key}
 	{:else if edge}
 		<header class="px-5 pt-5 pb-3">
 			<p class="flex items-center gap-2 text-xs text-slate-400">

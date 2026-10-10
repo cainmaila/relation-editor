@@ -41,6 +41,8 @@ export type Focus = {
 	path: boolean;
 	/** 高亮邊的完整數量（含系統篩選隱藏的） */
 	highlightTotal: number;
+	/** 單選的關係（追查中點一條邊）：必在 edges 內，用選取色獨立亮、一定畫 */
+	selectedEdge?: string | null;
 	warn: ReadonlySet<string>;
 	broken: ReadonlySet<string>;
 };
@@ -87,7 +89,7 @@ export function createUniverseLayers(o: UniverseLayersOptions) {
 	let bidi = new Uint8Array(0);
 	let adjacency: Adjacency = buildAdjacency(0, from, to);
 	let focus: Focus | null = null;
-	let focusIdx = { selected: -1, nodes: [] as number[], edges: [] as number[] };
+	let focusIdx = { selected: -1, nodes: [] as number[], edges: [] as number[], edge: -1 };
 	let hover = -1;
 	let state: LodState | undefined;
 	let frame: Frame | null = null;
@@ -279,7 +281,8 @@ export function createUniverseLayers(o: UniverseLayersOptions) {
 		focusIdx = {
 			selected: f?.selected ? (index.get(f.selected) ?? -1) : -1,
 			nodes: fn ? [...fn].flatMap((id) => index.get(id) ?? []) : [],
-			edges: f?.edges ? [...f.edges].flatMap((id) => edgeIndex.get(id) ?? []) : []
+			edges: f?.edges ? [...f.edges].flatMap((id) => edgeIndex.get(id) ?? []) : [],
+			edge: f?.selectedEdge ? (edgeIndex.get(f.selectedEdge) ?? -1) : -1
 		};
 		for (let i = 0; i < ids.length; i++) {
 			const id = ids[i];
@@ -366,6 +369,7 @@ export function createUniverseLayers(o: UniverseLayersOptions) {
 				focus: focusIdx.nodes,
 				highlight: focusIdx.edges,
 				highlightTotal: focus?.highlightTotal ?? 0,
+				selectedEdge: focusIdx.edge,
 				labelWidth: widthOf,
 				labels: full ? 'full' : 'reproject'
 			},
@@ -439,7 +443,7 @@ export function createUniverseLayers(o: UniverseLayersOptions) {
 	}
 
 	function writeHighlight(f: Frame) {
-		c.set(focus?.path ? PALETTE.PATH : PALETTE.LINK_HL);
+		const tone = focus?.path ? PALETTE.PATH : PALETTE.LINK_HL;
 		const pos = P();
 		let n = 0;
 		const arrow = (a: number, b: number) => {
@@ -465,6 +469,7 @@ export function createUniverseLayers(o: UniverseLayersOptions) {
 			n++;
 		};
 		f.highlightEdges.forEach((e, k) => {
+			c.set(e === focusIdx.edge ? PALETTE.SEL : tone);
 			seg(hiLines, k, from[e], to[e], c);
 			arrow(from[e], to[e]);
 			if (bidi[e]) arrow(to[e], from[e]);

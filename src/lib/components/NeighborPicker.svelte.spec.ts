@@ -110,4 +110,21 @@ describe('NeighborPicker 一跳鄰居預覽', () => {
 		await expect.element(box().getByRole('button', { name: /^加入勾選/ })).toBeDisabled();
 		expect(editor.working).toHaveLength(WORKSPACE_NODE_LIMIT - 9);
 	});
+
+	it('同一節點的鄰居縮減（拓撲編輯）：停在第 2 頁時頁碼限制回最後一頁，不出現空白頁', async () => {
+		editor = new Editor(graph());
+		editor.addToWork(['hub', ...Array.from({ length: 70 }, (_, i) => `rack-${pad(i)}`)]);
+		editor.setPage('edit');
+		render(NeighborPicker, { editor, id: 'hub' });
+		await box().getByRole('button', { name: '下一頁' }).click();
+		await expect.element(box().getByText('第 2 / 2 頁')).toBeInTheDocument();
+		// 刪到只剩 50 個鄰居（3 支攝影機＋47 個機櫃）
+		for (let i = 47; i < 70; i++) expect(editor.deleteEdge(`c-${i}`)).toBe(true);
+		await expect.element(box().getByText('共 50 個')).toBeInTheDocument();
+		await expect.poll(() => rows().elements().length).toBe(50);
+		await expect.element(box().getByRole('button', { name: '下一頁' })).not.toBeInTheDocument();
+		// 再加回一條：51 個，回到可翻頁，仍在第 1 頁
+		expect(editor.addEdge('hub', 'rack-047', '包含')).toBe(true);
+		await expect.element(box().getByText('第 1 / 2 頁')).toBeInTheDocument();
+	});
 });

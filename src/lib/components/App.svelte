@@ -18,7 +18,7 @@
 
 	const graph = $derived(editor.page === 'graph');
 	const origin = $derived(
-		editor.result && editor.selected ? editor.node(editor.selected.id)?.name : null
+		editor.result && editor.trace ? editor.node(editor.trace.source)?.name : null
 	);
 
 	$effect(() => {
@@ -41,7 +41,7 @@
 			else if (editor.dialog) editor.dialog = null;
 			else if (editor.connecting || editor.armDelete) editor.connecting = editor.armDelete = null;
 			else if (editor.legend) editor.legend = false;
-			else if (editor.result) editor.result = null;
+			else if (editor.result) editor.clearTrace();
 			else editor.select(null);
 		} else {
 			// 以下單鍵快捷鍵：輸入中或對話框開著時不觸發
@@ -111,7 +111,7 @@
 						.length} 位客戶
 					<button
 						class="btn-ghost rounded-full px-2.5 py-0.5 text-xs"
-						onclick={() => (editor.result = null)}>清除 <span class="kbd">Esc</span></button
+						onclick={() => editor.clearTrace()}>清除 <span class="kbd">Esc</span></button
 					>
 				</div>
 			{/if}

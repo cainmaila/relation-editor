@@ -237,10 +237,21 @@
 				let nodes: Set<string> | null = null;
 				let edges: Set<string> | null = null;
 				let total = 0;
+				let selectedEdge: string | null = null;
 				if (res) {
 					nodes = res.nodes;
 					edges = res.edges;
 					total = res.edges.size;
+					// 追查中單選一條關係：路徑保留，這條用選取色獨立亮（不在路徑上的也補進來）
+					const e = sel?.kind === 'edge' ? editor.edge(sel.id) : undefined;
+					if (e) {
+						selectedEdge = e.id;
+						if (!edges.has(e.id)) {
+							nodes = new Set([...nodes, e.from, e.to]);
+							edges = new Set([...edges, e.id]);
+							total++;
+						}
+					}
 				} else if (sel?.kind === 'node' && sceneIds.has(sel.id)) {
 					const all = editor.incidentEdges(sel.id);
 					const near = all.filter((e) => sceneIds.has(e.from) && sceneIds.has(e.to));
@@ -262,6 +273,7 @@
 					edges,
 					path: !!res,
 					highlightTotal: total,
+					selectedEdge,
 					warn: editor.unprocessed,
 					broken: editor.unreachable
 				};
@@ -410,6 +422,7 @@
 					return ready;
 				},
 				selected: () => (editor.selected?.kind === 'node' ? editor.selected.id : null),
+				selectedEdge: () => (editor.selected?.kind === 'edge' ? editor.selected.id : null),
 				highlighted: () => [...(focusNodes ?? [])],
 				click: (id: string) => editor.select({ kind: 'node', id }),
 				search: (name: string) => {

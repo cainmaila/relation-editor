@@ -1,6 +1,8 @@
 <script lang="ts">
 	// 一跳鄰居預覽：方向／邊類型篩選、每頁 50；預設不勾、不自動加入，按下加入才整批 admission
 	import { SvelteSet } from 'svelte/reactivity';
+	import { Pager } from '#lib/pager.svelte.js';
+	import PageNav from './PageNav.svelte';
 	import type { Editor } from '#lib/editor.svelte.js';
 	import {
 		edgeTypesAround,
@@ -11,18 +13,17 @@
 
 	let { editor, id }: { editor: Editor; id: string } = $props();
 
-	const PAGE = 50;
 	const FIRST = 20;
 
 	let dir = $state<Direction>('all');
 	let type = $state('');
-	let offset = $state(0);
 	const checked = new SvelteSet<string>();
 
 	const types = $derived(edgeTypesAround(editor.index, id, dir));
 	const all = $derived(neighborIds(editor.index, id, dir, types.includes(type) ? type : null));
-	const rows = $derived(all.slice(offset, offset + PAGE));
-	const pages = $derived(Math.max(1, Math.ceil(all.length / PAGE)));
+	// 總數縮小（同節點拓撲編輯）時 Pager 自動把頁碼限制在最後一頁
+	const pager = new Pager(() => all.length);
+	const rows = $derived(pager.slice(all));
 	const outside = $derived(editor.outsideCount(id));
 	/** 勾選中仍不在工作區的（加入後或資料變動時自動排除） */
 	const picked = $derived([...checked].filter((x) => editor.node(x) && !editor.inWork(x)));
@@ -34,7 +35,7 @@
 	/** 換條件回第一頁 */
 	function filter(next: () => void) {
 		next();
-		offset = 0;
+		pager.reset();
 	}
 
 	function pickFirst() {
@@ -72,22 +73,7 @@
 			{#each types as t (t)}<option value={t}>{t}</option>{/each}
 		</select>
 	</div>
-	<p class="mb-1.5 flex items-center gap-2 text-[11px] text-slate-500">
-		共 {all.length} 個
-		{#if pages > 1}
-			<span class="ml-auto">第 {offset / PAGE + 1} / {pages} 頁</span>
-			<button
-				class="btn-ghost px-1.5 py-0.5"
-				disabled={offset === 0}
-				onclick={() => (offset -= PAGE)}>上一頁</button
-			>
-			<button
-				class="btn-ghost px-1.5 py-0.5"
-				disabled={offset + PAGE >= all.length}
-				onclick={() => (offset += PAGE)}>下一頁</button
-			>
-		{/if}
-	</p>
+	<PageNav {pager} />
 	<ul class="flex max-h-64 flex-col gap-0.5 overflow-y-auto">
 		{#each rows as n (n)}
 			{@const inside = editor.inWork(n)}
