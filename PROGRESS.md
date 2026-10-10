@@ -1,122 +1,15 @@
 # PROGRESS
 
-## 主 agent QA 進度
+## P8 端到端與效能驗收、文件收斂（分支 cainmaila/main-3-3）
 
-- P0–P4 已分階段審核，至 `3186ce4`；P4 獨立 check、工作區相關 unit 64／64、外部端點 e2e 通過，並已檢視修正 diff。
-- P3 QA 已修正：只改邊屬性造成搜尋永久 pending、Worker 同步失敗無錯誤 UI、排序與規格不符、缺少系統／類型搜尋篩選。
-- P5 至 `eb98d52` 已分階段審核：先顯示種子座標、背景整理、停止／重試、跨頁保存鏡頭。QA 修正 Worker 清理與壞回覆卡住；相機 race 測試改成真實輸入＋受控 Worker 時序，不放寬容差。
-- P6 至 `a2248c8` 已分階段審核：全量 Points、有限細節／連線／標籤與真實點選；QA 修正偏軸判斷、遠平面、移動避碰、殘留標籤與點選半徑。獨立 37 unit/component、7 P6 e2e 通過。
-- Next: P7 全圖追查與跨視圖一致性；P7–P8 未交付。正式 10k 效能驗收尚未通過。
-- P7 必須收尾：詳情既有完整關係清單仍需分頁；鄰居資料縮減後的頁碼須重設或限制，避免空白末頁。
-
-## P7 全圖追查與跨視圖一致性（分支 cainmaila/main-3-3）
-
-- **Goal:** 找客戶永遠沿完整標準圖（不看工作區、系統勾選、LOD），拓撲編輯後不讓舊結果冒充最新；所有完整清單每頁 50、總數完整、ID 為 key。計畫 `task-7-brief.md`，報告 `task-7-report.md`
-- **Done（agent-tested，待 parent QA）:**
-  - 先量：`scripts/measure-universe.ts analysis`，10k 節點／100k 邊一次編輯後全部分析（GraphIndex＋未處理＋無客戶路徑＋兩次找客戶）p50 164ms、max 330ms（20k 邊 max 43ms）< 500ms → 同步、不加 Worker；證據 `artifacts/p7`
-  - Editor：`trace`（起點＋開始時拓撲版本）＋`result` 改 `$derived`（只依 topologyRevision、只在全圖）、`traceRevision`／`traceChanged`、`clearTrace`、`focusEdge`；select 不再清追查；刪起點清除並說明；改名不重算
-  - `Pager`＋`PageNav`（縮小自動限制末頁）；`TraceResult`（客戶／沿途節點／沿途關係各自分頁，同名客戶加註 ID；點關係單選＋兩端加入編輯頁）；`EdgeList`（詳情連入／連出分頁）；NeighborPicker 改用 Pager
-  - LOD／renderer：`selectedEdge` 在高亮上限內一定畫、排第一、選取色，路徑保留
-- **驗證:** check／lint 通過；unit＋component 277／277（graph 純語意、Editor P7 9 項、Pager、NeighborPicker 縮減、DetailPanel 50／51／縮減／預算、LOD 選中邊）；production e2e page＋universe 70／70（新增 P7 2 項：編輯後追查重算＋版本、完整結果分頁＋單選關係＋兩端加入）
-- **Todo:** P8 正式效能矩陣與最終全檢
-
-## P6 分層批次繪製、LOD 與可靠點選（分支 cainmaila/main-3-3）
-
-- **Goal:** 遠景所有可見節點畫 Points；逐點投影半徑升級細節（進 6px／出 4px）；細節、局部邊、高亮邊、標籤都有硬上限並誠實計數；點選靠格網＋投影＋深度。計畫 `.superpowers/sdd/plan/task-6-brief.md`，報告 `task-6-report.md`
-- **Done（agent-tested，待 parent QA）:**
-  - `src/lib/universe/lod.ts`：集中 `LOD` 設定（detail ≤1000、局部邊 ≤2000 且兩端皆細節、高亮邊 ≤2000、標籤 ≤80、點選容差 8px…）；`buildGrid`（只在座標變動重建）、`computeFrame`（視錐候選、穩定排序＋遲滯、選取／hover／高亮佔同一預算、標籤避碰、旋轉中只重投影）、`pick`（射線格網候選、相機背後／視錐外／隱藏系統排除、重疊取最近正深度）
-  - `src/lib/universe/renderer.ts`：Points（ShaderMaterial，升級節點 size=0 不重畫）、細節 InstancedMesh、局部／高亮 LineSegments 與有限箭頭 InstancedMesh（固定容量、drawRange），DOM 標籤池 80；相機變動只做 LOD 查詢、不重建 mesh
-  - GraphView 改為薄生命週期轉接：初始化失敗逐項釋放已建資源（undo 堆疊）、`fits` 紀錄上限 20、點擊判斷（拖曳 >5px 不算）、hover rAF 節流、resize／DPR 重新投影；圖例顯示各系統節點數與 LOD 已畫／上限／省略（中文）
-  - `scripts/measure-universe.ts --p6`：真滾輪拉近、真滑鼠點選、LOD／繪製計數與截圖
-- **驗證:** unit＋client 240／240（lod 23、GraphView 整合 2）、check／lint 通過、production e2e 82／82（新增 P6 7 項，真滑鼠遠／近／重疊點選、拖曳不選、隱藏系統不可點）；真 GPU（M2 Metal）10k smoke 1 樣本：遠景 10,000 點、拉近 244 細節／275 局部邊／70 標籤、真點選命中、drag／wheel／zoom 幀間隔 p95 16.8ms、draw calls 4–5，產物 `artifacts/p6`
-- **Todo:** 正式 5 冷啟動／30 樣本矩陣（P8）；P7 完整關係分頁 UI
-
-## P5 穩定座標與非阻塞宇宙（分支 cainmaila/main-3-3）
-
-- **Goal:** 宇宙座標由 session runtime 持有，種子立即可畫、可操作；版面在 Worker 分段整理、可停止、達預算凍結。計畫 `.superpowers/sdd/plan/task-5-brief.md`，報告 `task-5-report.md`
-- **Done（agent-tested，待 parent QA）:**
-  - `src/lib/universe/layout.ts`：決定性種子 `seedPositions`、`reconcile`（保留既有、新點放鄰居旁）、`idsKey`、Worker 協定；`layout-sim.ts` `startLayoutJob` 分段＋停止，`layout.worker.ts` 改為 start／stop
-  - `src/lib/universe/runtime.ts`：`UniverseRuntime`（generation＋topologyRevision＋idsKey＋長度檢查、拓撲變更取消但不自動重啟、`startInitial` 只一次、錯誤可重試）與 `CameraState`（最後請求生效、使用者操作取消晚到入鏡、卸載保存／重掛恢復）
-  - `Editor.universe` 隨 `execute` 依 topologyRevision 同步全圖座標；`layoutGraph` → `sceneGraph`（只是繪製子集合）
-  - GraphView：首幀即畫種子、進度就地更新 GPU buffer（不進 Svelte）、狀態列（停止／重新整理版面／全景）、import／WebGL／context lost 錯誤＋重試、完整清理
-  - `/measure` marker：`universe:first-frame`、`camera:interactive` 早於 `layout:worker-done`；harness 彙整分段 tickMs
-- **驗證:** unit 209／209、check／lint 通過、production e2e 75／75（新增 `universe.svelte.e2e.ts` 9 項）；真 GPU（M2 Metal）冷啟動 smoke 1 樣本：`camera:interactive` 200.9ms（P1 11557ms）、`layout:worker-done` 9032.8ms，產物 `artifacts/p5`
-- **Todo:** 正式 5 冷啟動／30 樣本矩陣（P8）；LOD（P6）；import 失敗路徑未自動化測試
-
-## P4 局部工作區與完整編輯閉環（分支 cainmaila/main-3-3）
-
-- **Goal:** 編輯頁成為有預算的局部工作區（200 節點／1000 原始誘導邊），所有建立路徑都先純計算准入、再原子提交。計畫 `.superpowers/sdd/plan/task-4-brief.md`
-- **Done（parent 已分階段審核，含超額原子拒絕、移出與外部端點修正）:**
-  - `src/lib/model/workspace.ts`：`planWorkspaceAdmission`（去重、新節點／提議邊計數、超額回需求與剩餘名額，不改任何狀態）、`inducedSubgraph`（工作區＝精確誘導邊）、`externalNeighbors`（in／out／all＋邊類型、完整外部計數）
-  - `Editor`：`addToWork`／`addNode`／`addEdge`／`addNodeWithEdge` 走准入後一次 `execute`；取消或超額不動 domain 與工作區；連到工作區外端點會連端點一起加入；兩端不全在工作區的邊在編輯頁唯讀（`邊的兩端都要在編輯頁才能修改`）
-  - 移出工作區（詳情、右鍵）、頂列「清空工作區」只改 membership；刪除確認寫出含工作區外 K 條邊
-  - 詳情「鄰居預覽」`NeighborPicker.svelte`：每頁 50、方向／邊類型篩選、預設不勾，「勾選本頁前 20 個」須明確按、加入前顯示將新增節點／帶入邊數
-  - 拖到空白：先選類型→再選合法關係（雙向列出）才一次建立新節點＋邊；不合法類型停用並寫原因
-  - 收疊預設關閉（頂列手動開）；版面／位置／2D 視野存在 `Editor`（`editLayout`／`editPositions`／`canvasViewport`），切 3D 卸載畫布再回來不重排、不跳視野；改名／屬性不重排
-  - P0 回報（切頁後選取換成別的節點）：unit＋e2e 回歸（開收疊重現情境）
-  - ⌘K：全圖 Enter＝定位；編輯頁 Enter＝明確「加入並定位」（`admitAndLocate`，先准入）
-  - `SearchService.#fail` 收 Worker 失敗時 `console.error('搜尋 Worker 結束失敗', e)`
-  - check 0、lint 綠、unit 171、e2e 65（全套跑一次）
-- **Todo:** 正式 10k 效能驗收（P5+）
-- **Notes:** e2e 500 上限改 200；收疊相關 e2e 先按「收疊同類」；拖曳建邊測試先 Fit View（視野保留後新卡片不再自動整張入鏡，目標貼邊會觸發 xyflow 自動平移）；報告 `.superpowers/sdd/plan/task-4-report.md`
-
-## P3 全量搜尋與分頁入口（分支 cainmaila/main-3-3）
-
-- **Goal:** 單一搜尋 Worker／服務取代各處自掃 `graph.nodes`；快捷搜尋、大綱、新增邊端點共用分頁結果，不常駐全部節點 DOM。計畫 `.superpowers/sdd/plan/task-3-brief.md`
-- **Done（agent-tested，待 parent QA）:**
-  - `src/lib/search/`：`search-index.ts`（NFKC＋大小寫＋空白正規化、多詞 AND、中文包含；排序 完全符合 > 名稱前綴 > 名稱包含 > 類型／屬性，同組穩定 ID 序；每頁 50、無隱藏上限）、`protocol.ts`（init／patch／query；ack／page／error）、`search.worker.ts`、`search-client.svelte.ts`（`SearchService` 依每次成功 `execute()` 發 patch、revision 斷號自動 init 重同步、Worker 錯誤可重試；各 UI 各自 `SearchController`，requestId＋revision 丟棄過期回覆）
-  - 只送純資料（props 字串化）；拓撲變更才附 issue 集合，改名／屬性不重算 topology
-  - `SearchResults.svelte` 共用清單：總數、更新中、錯誤＋重試、上一頁／下一頁、跨頁勾選（保留到清除或節點刪除）
-  - ⌘K：Enter／點列＝定位（編輯頁：加入並定位）；勾選→「加入編輯頁（N）」不切畫面，另給「前往編輯頁」
-  - 大綱：全圖查全部節點（隱藏系統變淡、可定位、可勾選加入）；編輯頁只查工作區；畫布淡化用完整命中集合（Worker 回 `matches`，非僅當頁）
-  - 新增邊：起終點各自搜尋挑選（取代列出全部節點的 select）
-  - 量測：首頁 DOM 44,763 → 189；首搜 30 ms、熱搜 p50 12 ms（`/tmp` 試跑，P1 基線檔未動）
-  - check 0、lint 綠、unit 140、e2e 61（全套跑一次，2 個 e2e 時序修正後重跑通過）
-- **Todo:** P4 才做 200／1000 加入預算（目前沿用 `addToWork` 500 上限）
-- **Notes:** 舊「依系統分組／收合」大綱 e2e 改為分頁斷言；只打 `A-03` 時同組依 ID 排序（`ToR Switch A-03` 在 `機櫃 A-03` 前）；報告 `.superpowers/sdd/plan/task-3-report.md`
-
-## P2 共用索引、命令與 revision（分支 cainmaila/main-3-3）
-
-- **Goal:** 兩個視圖共用的圖核心：`GraphIndex`、typed commands／`GraphChange`、`revision`／`topologyRevision`；詳情欄改本地草稿＋儲存／取消。計畫 `.superpowers/sdd/plan/task-2-brief.md`
-- **Done（parent QA：check 0 錯、核心 unit 54／54、草稿與刪除 e2e 4／4；已檢視命令／索引／UI diff）:**
-  - `graph-index.ts`：`buildGraphIndex()` 一次 O(V+E) 建 `nodeById／edgeById／incoming／outgoing／incident`（只記 EdgeId）；`graph.ts` 的 `unprocessed／unreachable／findCustomers／validateEdge／checkDeleteNode` 改吃選用的預建索引（舊呼叫照舊）；`findCustomers` 多回 `customerIds`
-  - `graph-change.ts`：`applyCommand()` 先驗完所有欄位才產生新狀態；IDC 唯讀、根節點、連接限制、不存在／過期（`base`）實體明確拒絕；改名／屬性只增 `revision`，增刪與方向改變才增 `topologyRevision`；回傳變更 ID 集合
-  - `Editor.execute()` 是唯一寫入口；`updateNode／updateEdge` 取代 `edit／setProp`；`node()／edge()` 走索引；`unprocessed／unreachable` 只看 `topologyRevision`；新 `layoutGraph` 供 3D 版面（改名不重建，spy 驗證）
-  - `DetailPanel` 本地草稿（名稱、方向、屬性、新增屬性）＋「儲存」「取消變更」，不 bind 標準圖；`ContextMenu` 方向切換走命令；`GraphView` 改吃 `layoutGraph`
-  - check 0、lint 綠、unit 104、e2e 57 全過（含新增「詳情草稿」）
-- **Todo:** ~~P3 起依 `revision`／`lastChange` 接搜尋~~（P3 完成）；P4 起 2D `editVisible`／`stacks` 仍隨任何 graph 變更重算
-- **Notes:** 切換選取會丟棄未儲存草稿（無提示）；報告 `.superpowers/sdd/plan/task-2-report.md`
-
-## P1 代表性 10k 資料與量測基線（分支 cainmaila/main-3-3）
-
-- **Goal:** 建立唯一 root、domain-valid、可重現的 10k 規模資料（20k／100k 邊）與 production 量測入口，記錄現況基線（不修效能、不改門檻）。計畫 `.superpowers/sdd/plan/task-1-brief.md`
-- **Done（controller 已檢視 diff，獨立通過 fixture/layout 46 tests、量測入口 13 e2e；基線效能未達標）:**
-  - `scaleFixture()`（`src/lib/model/scale-fixture.ts`）：seed 化；10,000 節點，hub 度 1001、ToR 環（有向 cycle）、20 個孤立節點、同名不同 id、8 系統、雙向邊、props 各自獨立；`graphStats()` 算 N／E／最大度／連通塊
-  - `/measure?edges=&seed=&init=` opt-in 量測頁：僅此路由掛 `window.__measure`（卸載即刪）；預設首頁仍是 mock（e2e 驗證）
-  - `GraphView` 加選用 `probe`：`graph:init`、`layout:start`、`layout:worker-done`、`layout:ready`、`camera:interactive`；worker 改用共用 `runLayout`（init 預設仍 zero）
-  - `pnpm measure:universe layout|browser`：Node 版面實驗（cpuprofile＋品質指標）與 Playwright 冷啟動（真實滑鼠拖曳／滾輪、搜尋、long task、heap、GPU 字串、截圖）
-  - check 0、lint 綠、unit 52、build 綠、e2e 45 全過（既有 43［主頁 42＋demo 1］＋量測 2）
-- **基線（M2、headless Chromium、真 Metal GPU、zero init、5 次冷啟）:** 20k 邊可操作相機 p50 11.56s、100k 10.86s（worker 版面 ~10–10.8s）；拖曳／滾輪 frame p95 ~16.7ms；heap(GC 後) 71／85MB；DOM 44.7k 元素。SwiftShader 軟體繪製拖曳 p95 433ms（不可用，不可與 GPU 數字混用）
-- **版面實驗:** d3 初始位置比 zero 少首 tick 尖峰（~630→~100ms）、移除 ~450k 離群點、分布正常；但總時仍 ~9–10s，熱點是 many-body charge（非 link）
-- **Todo:** P5 修冷啟動（≤2s 門檻目前未達）；搜尋 `slice(0,8)` 不完整；大綱一次渲染全部節點
-- **QA 修正:** `3418931` 增加 fixture／URL 有限整數與規模驗證、補邊嘗試上限、量測逾時與程序清理；拒絕錯誤參數，不默默改成有效資料。
-- **Notes:** 量測時工作樹未提交；d3 只跑 2 次、headed 1 次；layout cpuprofile 來自 Node 而非瀏覽器 worker。報告 `.superpowers/sdd/plan/task-1-report.md`，原始產物 `.superpowers/sdd/plan/artifacts/p1`（不 commit）
-
-## P0 接回 v0.4 雙頁基線（分支 cainmaila/main-3-3）
-
-- **Goal:** 把已提交的 v0.4 雙頁基線（`feat/v0.4-two-views` 5b59172）接進本分支，建立可重現的檢查基線；不宣稱符合新設計。計畫 `.superpowers/sdd/plan/task-0-brief.md`
-- **Done（parent 已獨立 QA：check 0 錯、unit 35、e2e 42 全過；已檢視基線整合與測試遷移 diff）:**
-  - merge `feat/v0.4-two-views`（fast-forward 47e087d→5b59172），`pnpm install --frozen-lockfile`（manifest 有變）
-  - `playwright.config.ts` webServer 改 `pnpm build && pnpm preview`（仍跑 production build）
-  - e2e 改成雙頁前置：以 `v04-two-views` 未提交 WIP 的 e2e 為底（逐項跑過才收），補 4 項前置修正（等編輯頁視野停下、取消加入時的選取、右鍵前先從大綱點選）；原全圖「A-02 命中 5 個」斷言補回
-  - `GraphView.svelte` 加唯讀 e2e 掛勾 `nodeCount()`／`edgeCount()`（取自同一 WIP）
-  - `.prettierignore` 排除 `.superpowers/`（git 已忽略的本機 SDD 檔讓 `pnpm lint` 失敗）
-  - check 0 錯、lint 綠、unit 35、build 綠、e2e 42 項全過（連跑 2 次）
-- **Todo:** P1 代表性資料與量測，後續依計畫；基線不等於新產品驗收通過
-- **Notes（已知差距）:**
-  - `v04-fix` 未提交 5 檔（編輯頁外節點唯讀、EdgeDialog 只列 working、GraphView 失敗處理／ready 前不飛、addNode 滿額擋下）**未帶入**，留給 P4／P5 依新設計處理
-  - 原 2D 全圖測試的 ×42 疊卡、全圖淡化數、收疊卡片數 1,398 在 3D 全圖無 DOM 可驗，改在編輯頁用小集合驗同一行為
-  - 情境 20（500 上限）e2e 逐一加入 500 個並驗第 501 個擋下；10k 效能、LOD、新搜尋未驗
+- **Goal:** 在真 GPU 上實跑正式效能矩陣、補殘留情境 e2e、README 收斂；計畫 `.superpowers/sdd/plan/task-8-brief.md`，報告 `task-8-report.md`，產物 `artifacts/p8`
+- **Status:** agent-tested，**待 parent QA**（P0–P7 已交付、已自本檔移除）
+- **Done:**
+  - `scripts/measure-p8.ts`：formal／workspace／stability／stress／selftest，頁內事件→畫出延遲、真滑鼠點選、PASS／FAIL 判定
+  - 正式 10k／20k、10k／100k 各 5 冷樣本全數 PASS（含 25／25 真點選）；20 輪穩定性 PASS；50k／100k 壓力可操作
+  - 修正：3D 點選改用 pointerup 小數座標（click 被截成整數，重疊點選錯）；2D 平移 116.7→16.8ms、提交 196→29.6ms、拉線 116→33.4ms；3D 程式庫載入失敗後「重試」真的重新下載
+- **Blocker（未達門檻，保留 FAIL）:** 編輯頁 200／1,000 拉線幀間隔 p95 33.4ms ＞ 33.3ms（Chrome 合成分層，詳見報告）
+- **Todo:** parent QA 與人工操作確認（全圖／工作集辨識、找到省略關係、移出≠刪除）
 
 ## 上萬節點渲染實驗（spike，不合併 main）
 

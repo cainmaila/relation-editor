@@ -254,7 +254,9 @@ async function routeRendererChunk(page: Page, mode: 'abort' | 'hold') {
 	let hits = 0;
 	let release!: () => void;
 	const held = new Promise<void>((r) => (release = r));
-	await page.route('**/_app/immutable/**/*.js', async (route) => {
+	// 用 predicate：glob 的 *.js 不會比對到重試用的 ?retry=n
+	const chunk = (u: URL) => u.pathname.includes('/_app/immutable/') && u.pathname.endsWith('.js');
+	await page.route(chunk, async (route) => {
 		const res = await route.fetch();
 		const body = await res.text();
 		if (!body.includes('scene-nav-info')) return route.fulfill({ response: res, body });

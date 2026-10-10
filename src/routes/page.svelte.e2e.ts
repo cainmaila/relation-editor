@@ -715,6 +715,8 @@ test.describe('加入編輯頁', () => {
 		const names: string[] = [];
 		for (let p = 1; names.length < 201; p++) {
 			await expect(outline(page)).toContainText(`第 ${p} / `);
+			// 頁碼先換、結果由 Worker 回來前舊列表標 aria-busy（淡化）：等新頁結果到了才讀
+			await expect(rows(page)).toHaveAttribute('aria-busy', 'false');
 			await expect(rows(page).getByRole('listitem')).toHaveCount(50);
 			names.push(
 				...(await rows(page)
