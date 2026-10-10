@@ -16,6 +16,8 @@
 	}: { editor: Editor; title: string; list: readonly GEdge[]; other: 'from' | 'to' } = $props();
 
 	const pager = new Pager(() => list.length);
+	// 翻頁列只在超過一頁時出現，頁碼限制不能跟著它卸載：總數縮到一頁後仍要寫回，長回來才不會跳回舊頁
+	$effect.pre(() => pager.clamp());
 	const nameOf = (id: string) => editor.node(id)?.name ?? id;
 	const colorOf = (id: string) =>
 		SYSTEM_COLORS[nodeType(editor.node(id)?.type ?? '').system ?? '通用'];

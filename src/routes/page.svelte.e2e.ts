@@ -606,9 +606,12 @@ test.describe('找客戶（全圖）', () => {
 			expect(on.has(n), n).toBe(true);
 		for (const n of off) expect(on.has(n), n).toBe(false);
 		// 沿途的邊：全部 4,020 條扣掉大樓 → 2F、三個感測點 → 通用節點、通用節點 → 機櫃 A-01／A-02
-		await expect(detail(page).getByRole('region', { name: '找客戶結果' })).toContainText(
-			`沿途 ${TOTAL - off.length} 個節點、${TOTAL_EDGES - 6} 條邊已亮起`
+		// 完整查詢總數（不是「全部已亮起」：畫布高亮另有繪製上限與系統篩選）
+		const result = detail(page).getByRole('region', { name: '找客戶結果' });
+		await expect(result).toContainText(
+			`完整查詢：沿途 ${TOTAL - off.length} 個節點、${TOTAL_EDGES - 6} 條邊`
 		);
+		await expect(result).not.toContainText('已亮起');
 	});
 
 	test('情境 16：找到的客戶是精確的', async ({ page }) => {

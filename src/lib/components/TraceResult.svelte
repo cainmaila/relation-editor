@@ -1,9 +1,10 @@
 <script lang="ts">
 	// 找客戶結果：客戶、沿途節點、沿途關係三份完整清單，各自每頁 50、顯示完整總數、以 ID 為 key。
-	// 點關係＝單獨亮這條邊並保留整個追查；可把兩端整批加入編輯頁（受 200／1,000 預算限制）
+	// 點客戶＝定位（隱藏系統會勾回並選取）；點關係＝單獨亮這條邊並保留整個追查；可把兩端整批加入編輯頁（受 200／1,000 預算限制）
 	import type { Editor } from '#lib/editor.svelte.js';
 	import { Pager } from '#lib/pager.svelte.js';
 	import PageNav from './PageNav.svelte';
+	import { LOD } from '#lib/universe/lod.js';
 
 	let { editor }: { editor: Editor } = $props();
 
@@ -58,7 +59,7 @@
 				<li>
 					<button
 						class="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-2.5 py-0.5 text-xs text-emerald-200 hover:bg-emerald-400/20"
-						onclick={() => editor.fit([id])}>{label(id)}</button
+						onclick={() => editor.locate(id)}>{label(id)}</button
 					>
 				</li>
 			{:else}
@@ -66,9 +67,12 @@
 			{/each}
 		</ul>
 	</div>
-	<p class="mt-2 border-t border-white/6 px-4 py-2 text-[11px] text-slate-400">
-		沿途 {nodes.length} 個節點、{edges.length} 條邊已亮起
-	</p>
+	<div class="mt-2 border-t border-white/6 px-4 py-2 text-[11px] text-slate-400">
+		<p>完整查詢：沿途 {nodes.length} 個節點、{edges.length} 條邊</p>
+		<p class="pt-0.5 text-slate-500">
+			畫布高亮最多畫 {LOD.maxHighlightEdges.toLocaleString('en-US')} 條、隱藏系統的不畫；已畫／省略／系統隱藏數見畫布「細節層級」的高亮連線。清單永遠是完整結果
+		</p>
+	</div>
 	<details bind:open={showNodes} class="border-t border-white/6 px-4 py-2 text-xs">
 		<summary class="cursor-pointer text-[11px] text-slate-400">沿途節點（{nodes.length}）</summary>
 		{#if showNodes}
@@ -88,9 +92,7 @@
 		{/if}
 	</details>
 	<details bind:open={showEdges} class="border-t border-white/6 px-4 py-2 text-xs">
-		<summary class="cursor-pointer text-[11px] text-slate-400"
-			>沿途關係（{edges.length}）・已亮起</summary
-		>
+		<summary class="cursor-pointer text-[11px] text-slate-400">沿途關係（{edges.length}）</summary>
 		{#if showEdges}
 			<div class="pt-1.5">
 				<PageNav pager={edgePager} unit="條" label="沿途關係分頁" />

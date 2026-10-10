@@ -130,12 +130,82 @@ describe('DetailPanel P7：完整清單分頁與追查', () => {
 		e.search.dispose();
 	});
 
+	it('追查結果文案是完整查詢總數，不宣稱全部已亮起；說明畫布繪製上限與系統篩選', async () => {
+		const e = new Editor(fan(3));
+		e.findCustomers('src');
+		render(DetailPanel, { editor: e });
+		await expect.element(trace().getByText('完整查詢：沿途 4 個節點、3 條邊')).toBeInTheDocument();
+		await expect.element(trace().getByText(/畫布高亮最多畫 2,000 條/)).toBeInTheDocument();
+		await expect.element(trace().getByText('沿途關係（3）')).toBeInTheDocument();
+		await expect.element(trace().getByText(/已亮起/)).not.toBeInTheDocument();
+		e.search.dispose();
+	});
+
+	it('點客戶 chip：客戶所屬系統（IDC）被隱藏也會勾回並選取，完整追查不變', async () => {
+		const e = new Editor(fan(3));
+		e.findCustomers('src');
+		e.systems = e.systems.filter((s) => s !== 'IDC');
+		expect(e.graphVisible.nodes.some((n) => n.id === 'cu-002')).toBe(false);
+		const before = { ...e.result!, nodes: [...e.result!.nodes], edges: [...e.result!.edges] };
+		render(DetailPanel, { editor: e });
+		await trace().getByRole('button', { name: '客戶 002' }).click();
+		expect(e.systems).toContain('IDC');
+		expect(e.graphVisible.nodes.some((n) => n.id === 'cu-002')).toBe(true);
+		expect(e.selected).toEqual({ kind: 'node', id: 'cu-002' });
+		expect(e.trace?.source).toBe('src');
+		expect([...e.result!.nodes]).toEqual(before.nodes);
+		expect([...e.result!.edges]).toEqual(before.edges);
+		expect(e.result!.customerIds).toEqual(before.customerIds);
+		await expect.element(trace()).toBeInTheDocument();
+		e.search.dispose();
+	});
+
+	it('連出 51 條停在第 2 頁 → 縮成 1 條（翻頁消失）→ 長回 51 條：停在第 1 頁，不跳回舊頁', async () => {
+		// 可合法重建的邊：偵測器 →監測→ 通用節點
+		const g = {
+			nodes: [
+				{ id: 'src', type: '偵測器', name: '偵測器', props: {} },
+				...Array.from({ length: 51 }, (_, i) => ({
+					id: `g-${pad(i)}`,
+					type: '通用節點',
+					name: `節點 ${pad(i)}`,
+					props: {}
+				}))
+			],
+			edges: Array.from({ length: 51 }, (_, i) => ({
+				id: `m-${pad(i)}`,
+				type: '監測',
+				from: 'src',
+				to: `g-${pad(i)}`,
+				bidirectional: false,
+				props: {}
+			}))
+		};
+		const e = new Editor(g);
+		e.addToWork(g.nodes.map((n) => n.id));
+		e.setPage('edit');
+		e.select({ kind: 'node', id: 'src' });
+		render(DetailPanel, { editor: e });
+		const out = page.getByRole('region', { name: '連出' });
+		await out.getByRole('button', { name: '下一頁' }).click();
+		await expect.element(out.getByText('第 2 / 2 頁')).toBeInTheDocument();
+		for (const edge of g.edges.slice(1))
+			expect(e.execute({ kind: 'deleteEdge', id: edge.id })).toBe(true);
+		await expect.element(out.getByText('連出（1）')).toBeInTheDocument();
+		await expect.element(out.getByRole('navigation')).not.toBeInTheDocument();
+		for (const edge of g.edges.slice(1)) expect(e.execute({ kind: 'addEdge', edge })).toBe(true);
+		await expect.element(out.getByText('連出（51）')).toBeInTheDocument();
+		await expect.element(out.getByText('第 1 / 2 頁')).toBeInTheDocument();
+		await expect.poll(() => out.getByRole('listitem').elements().length).toBe(50);
+		e.search.dispose();
+	});
+
 	it('從追查點一條關係：單獨選取、追查保留；兩端加入受 200 預算限制，失敗什麼都不改', async () => {
 		const e = new Editor(fan(3, 199));
 		e.addToWork(Array.from({ length: 199 }, (_, i) => `x-${pad(i)}`));
 		e.findCustomers('src');
 		render(DetailPanel, { editor: e });
-		await trace().getByText('沿途關係（3）・已亮起').click();
+		await trace().getByText('沿途關係（3）').click();
 		const rels = trace().getByRole('list', { name: '沿途關係' });
 		await rels
 			.getByRole('button', { name: /同名客戶/ })
