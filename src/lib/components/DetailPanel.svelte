@@ -176,7 +176,12 @@
 	</section>
 	{#if !ro}
 		<div class="flex justify-end gap-1.5 border-t border-white/6 px-5 py-3">
-			{#if dirty}<span class="mr-auto self-center text-[11px] text-amber-300">尚未儲存</span>{/if}
+			{#if dirty}<span
+					role="status"
+					aria-label="草稿狀態"
+					class="mr-auto self-center text-[11px] text-amber-300"
+					>尚未儲存：切換選取或離開會捨棄（不會自動保存）</span
+				>{/if}
 			<button class="btn-ghost px-2.5 py-1 text-xs" disabled={!dirty} onclick={cancel}
 				>取消變更</button
 			>

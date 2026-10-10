@@ -69,10 +69,36 @@ export type UniverseLayersOptions = {
 const STATS_MS = 250;
 
 export function createUniverseLayers(o: UniverseLayersOptions) {
+	// 建構中途失敗（GPU 資源、標籤 DOM）：已建的全部倒序收回，不留場景物件／hook／DOM
+	const undo: (() => void)[] = [];
+	try {
+		return buildLayers(o, undo);
+	} catch (e) {
+		for (const f of undo.reverse()) {
+			try {
+				f();
+			} catch {
+				// 收回失敗不蓋掉原始錯誤
+			}
+		}
+		throw e;
+	}
+}
+
+function buildLayers(o: UniverseLayersOptions, undo: (() => void)[]) {
 	const { THREE, scene, runtime: rt } = o;
 	const R = LOD.nodeRadius;
 	const disposables: { dispose(): void }[] = [];
-	const own = <T extends { dispose(): void }>(x: T) => (disposables.push(x), x);
+	const own = <T extends { dispose(): void }>(x: T) => (
+		disposables.push(x),
+		undo.push(() => x.dispose()),
+		x
+	);
+	const add = <T extends THREE_NS.Object3D>(x: T) => (
+		scene.add(x),
+		undo.push(() => x.removeFromParent()),
+		x
+	);
 
 	// ---- 狀態（非 Svelte） ----
 	let ids: readonly string[] = [];
@@ -134,9 +160,10 @@ export function createUniverseLayers(o: UniverseLayersOptions) {
 		})
 	);
 	let pointGeom = new THREE.BufferGeometry();
+	undo.push(() => pointGeom.dispose());
 	const points = new THREE.Points(pointGeom, pointMat);
 	points.frustumCulled = false;
-	scene.add(points);
+	add(points);
 
 	// ---- 近景 detail（固定容量） ----
 	const sphere = own(new THREE.SphereGeometry(R, 12, 10));
@@ -146,7 +173,8 @@ export function createUniverseLayers(o: UniverseLayersOptions) {
 	detailMesh.setColorAt(0, new THREE.Color());
 	detailMesh.count = 0;
 	detailMesh.frustumCulled = false;
-	scene.add(detailMesh);
+	add(detailMesh);
+	undo.push(() => detailMesh.dispose());
 
 	// ---- 邊（固定容量的 LineSegments） ----
 	const lines = (cap: number, mat: THREE_NS.LineBasicMaterial) => {
@@ -162,7 +190,7 @@ export function createUniverseLayers(o: UniverseLayersOptions) {
 		g.setDrawRange(0, 0);
 		const l = new THREE.LineSegments(g, mat);
 		l.frustumCulled = false;
-		scene.add(l);
+		add(l);
 		return l;
 	};
 	const localMat = own(
@@ -185,7 +213,8 @@ export function createUniverseLayers(o: UniverseLayersOptions) {
 	arrows.setColorAt(0, new THREE.Color());
 	arrows.count = 0;
 	arrows.frustumCulled = false;
-	scene.add(arrows);
+	add(arrows);
+	undo.push(() => arrows.dispose());
 
 	// ---- 標籤池（DOM，最多 maxLabels 個，建立一次） ----
 	const pool = Array.from({ length: LOD.maxLabels }, () => {
@@ -196,6 +225,7 @@ export function createUniverseLayers(o: UniverseLayersOptions) {
 			`height:${LOD.labelHeightPx}px;line-height:${LOD.labelHeightPx}px;font-size:${LOD.labelFontPx}px;padding:0 4px;` +
 			'border-radius:4px;font-weight:400;outline:none;color:#e2e8f0;background:rgba(11,16,32,.72);pointer-events:none;will-change:transform';
 		o.labelHost.appendChild(el);
+		undo.push(() => el.remove());
 		// DOM 狀態快取：只在真的變了才寫 DOM；gen 落後＝名稱刷新過，要重寫字與寬度
 		return { el, node: -1, shown: false, sel: false, w: -1, gen: 0 };
 	});
@@ -517,7 +547,9 @@ export function createUniverseLayers(o: UniverseLayersOptions) {
 			prev.apply(scene, args);
 			update();
 		};
-		return () => (scene.onBeforeRender = prev);
+		const restore = () => (scene.onBeforeRender = prev);
+		undo.push(restore);
+		return restore;
 	})();
 	syncIds();
 
