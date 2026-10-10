@@ -327,7 +327,8 @@
 			// down：按著中的手勢（期間不做滑過）；ended：剛在畫布上放開的手勢，留給緊接的 click 判斷拖曳
 			let down: { x: number; y: number } | null = null;
 			let travel = 0;
-			let ended: { travel: number } | null = null;
+			// at：放開時的座標（pointerup 保留小數；Chrome 的 click 事件會截成整數，小點重疊時差 1px 就選錯）
+			let ended: { travel: number; at: { clientX: number; clientY: number } } | null = null;
 			const onDown = (e: PointerEvent) => {
 				down = { x: e.clientX, y: e.clientY };
 				travel = 0;
@@ -339,7 +340,10 @@
 				if (!d) return;
 				down = null;
 				travel = Math.max(travel, Math.hypot(e.clientX - d.x, e.clientY - d.y));
-				ended = e.target === canvas && e.button === 0 ? { travel } : null;
+				ended =
+					e.target === canvas && e.button === 0
+						? { travel, at: { clientX: e.clientX, clientY: e.clientY } }
+						: null;
 			};
 			const onCancel = () => {
 				down = null;
@@ -362,12 +366,12 @@
 				layers.setHover(null);
 				canvas.style.cursor = '';
 			};
-			const onClick = (e: MouseEvent) => {
+			const onClick = () => {
 				const g = ended;
 				ended = null;
 				if (!ready || !g) return;
 				if (g.travel > CLICK_SLOP) return;
-				const id = layers.pick(...local(e));
+				const id = layers.pick(...local(g.at));
 				editor.select(id ? { kind: 'node', id } : null);
 			};
 			const onLost = (e: Event) => {

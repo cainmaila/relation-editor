@@ -201,6 +201,32 @@ describe('GraphView（P6 LOD 整合）', () => {
 		await expectDomMatchesFrame(el);
 	});
 
+	it('點選用放開時的精確（小數）座標，不用 click 事件被截成整數的座標', async () => {
+		// Chrome 的 click 事件 clientX/Y 會截成整數，pointerup 保留小數；重疊小點時差 1px 就換人
+		const e = new Editor(graph(4));
+		const el = await mount(e);
+		const canvas = el.querySelector('canvas')!;
+		const p = hooks()!.project('n1')!;
+		const init = (type: string, x: number, y: number, extra: PointerEventInit = {}) =>
+			new PointerEvent(type, {
+				pointerId: 1,
+				pointerType: 'mouse',
+				isPrimary: true,
+				clientX: x,
+				clientY: y,
+				button: 0,
+				bubbles: true,
+				cancelable: true,
+				composed: true,
+				...extra
+			});
+		canvas.dispatchEvent(init('pointerdown', p.x, p.y, { buttons: 1 }));
+		canvas.dispatchEvent(init('pointerup', p.x, p.y, { buttons: 0 }));
+		// click 的座標刻意偏離到空白處（模擬截斷造成的偏差，放大到必然失準）
+		canvas.dispatchEvent(init('click', 1, 1));
+		await expect.poll(() => e.selected).toEqual({ kind: 'node', id: 'n1' });
+	});
+
 	for (const end of ['pointercancel', 'pointerup-outside'] as const)
 		it(`按下後 ${end}：放棄的手勢不會永久關掉滑過`, async () => {
 			const e = new Editor(graph(4));
