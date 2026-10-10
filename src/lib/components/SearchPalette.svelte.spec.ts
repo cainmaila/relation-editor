@@ -1,4 +1,4 @@
-import { page } from 'vitest/browser';
+import { page, userEvent } from 'vitest/browser';
 import { afterEach, describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { Editor } from '#lib/editor.svelte.js';
@@ -93,5 +93,25 @@ describe('SearchPalette 系統／類型篩選', () => {
 		await total(125);
 		await expect.element(system()).toHaveValue('');
 		await expect.element(type()).toHaveValue('');
+	});
+});
+
+describe('SearchPalette 鍵盤選取', () => {
+	it('更新中滑鼠停在舊結果的列上（游標不動、列在底下換掉）：不改作用列，新結果回來後 Enter 定位第一筆', async () => {
+		editor = new Editor(graph());
+		render(SearchPalette, { editor });
+		await total(125);
+		const box = dialog().getByRole('textbox', { name: '搜尋節點' }).element() as HTMLInputElement;
+		box.focus();
+		// 同一個 tick：輸入（變成更新中、舊的 50 列還在）後，瀏覽器對游標底下的舊列發 pointerenter
+		box.value = '攝影機 003';
+		box.dispatchEvent(new Event('input', { bubbles: true }));
+		expect(editor.palette.status).toBe('pending');
+		const stale = document.querySelectorAll('[role=dialog] button[data-id]');
+		expect(stale).toHaveLength(50);
+		stale[7].dispatchEvent(new PointerEvent('pointerenter'));
+		await total(1);
+		await userEvent.keyboard('{Enter}');
+		await expect.poll(() => editor.selected).toEqual({ kind: 'node', id: 'cam-003' });
 	});
 });

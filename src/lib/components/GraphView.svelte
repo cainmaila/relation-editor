@@ -1,5 +1,5 @@
 <script lang="ts" module>
-	import { ImportReloadRequired, retryableImport } from '#lib/universe/retry-import.js';
+	import { ImportReloadRequired, importAll, retryableImport } from '#lib/universe/retry-import.js';
 	type ForceGraphModule = typeof import('3d-force-graph');
 	type ThreeModule = typeof import('three');
 	// 可重抓的只有本站的 build 資產：production＝與本模組同一個 _app/immutable/ 目錄（同源）；dev＝同源
@@ -173,7 +173,8 @@
 	const fmt = (n: number) => n.toLocaleString('en-US');
 
 	async function init(isDead: () => boolean): Promise<{ api: Api; off: () => void }> {
-		const [{ default: ForceGraph3D }, three] = await Promise.all([loadForceGraph(), loadThree()]);
+		// 等兩個載入都結束才回報失敗（重試不會和原本的載入重疊；無法恢復的原因優先）
+		const [{ default: ForceGraph3D }, three] = await importAll([loadForceGraph(), loadThree()]);
 		const noop = { api: { build: () => {}, paint: () => {}, refresh: () => {} }, off: () => {} };
 		// 卸載後才載入完成：不建立任何 GPU 資源
 		if (isDead()) return noop;

@@ -122,7 +122,9 @@
 					]}
 					onclick={() => onpick(n.id)}
 					onpointerenter={() => {
-						active = k;
+						// 更新中畫的是舊結果：游標不動、列在底下換掉也會觸發 pointerenter，
+						// 不能讓舊列的索引變成新結果的作用列（新結果較少時 Enter 會落空）
+						if (!pending) active = k;
 						onhover?.(n.id);
 					}}
 					onpointerleave={() => onhover?.(null)}

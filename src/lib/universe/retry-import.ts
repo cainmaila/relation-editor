@@ -99,3 +99,20 @@ export function retryableImport<T>(
 		return check(m, failedUrl);
 	};
 }
+
+/**
+ * 平行載入多個 retryableImport：等「全部」結束才回報。
+ * Promise.all 會在第一個失敗時就回報，其他載入還在進行、尚未記下自己的失敗 URL；
+ * 這時按重試，那個 loader 仍走原本的 import()（瀏覽器回傳同一個進行中／已失敗的 module）→ 重試被浪費成普通錯誤。
+ * 多個都失敗時以 ImportReloadRequired 優先：無法恢復的原因不能被普通錯誤蓋掉（否則畫面又給一個不會成功的重試）。
+ */
+export async function importAll<const P extends readonly Promise<unknown>[]>(
+	loads: P
+): Promise<{ -readonly [K in keyof P]: Awaited<P[K]> }> {
+	const rs = await Promise.allSettled(loads);
+	const failed = rs.flatMap((r) => (r.status === 'rejected' ? [r.reason as unknown] : []));
+	if (failed.length) throw failed.find((e) => e instanceof ImportReloadRequired) ?? failed[0];
+	return rs.map((r) => (r as PromiseFulfilledResult<unknown>).value) as {
+		-readonly [K in keyof P]: Awaited<P[K]>;
+	};
+}
