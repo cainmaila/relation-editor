@@ -86,19 +86,26 @@
 	--xy-handle-border-color: var(--color-ink-950);
 	--xy-connectionline-stroke-default: #38bdf8;
 }
-/* P8 實測：200 節點／1,000 邊平移時 viewport 沒有獨立合成層，每幀重 raster 全部卡片與邊
-   （GPU DoRasterCHROMIUM，frame p95 116 ms）。給 viewport 自己的合成層後平移只做合成（16.8 ms）；
-   縮放停下後 Chrome 會以新比例重新 raster，文字不糊。 */
+/* viewport 自己一層：平移只做合成；縮放停下後 Chrome 以新比例重新 raster，文字不糊 */
 .svelte-flow__viewport {
 	will-change: transform;
 }
-/* 只有卡片淡入淡出；邊不加 transition。P8 實測：200 節點／1,000 邊時 hover／選取一換焦點，
-   上千條邊的 opacity／stroke-width 同時動畫，動畫期間每幀都重新 Layerize，連線拖曳 frame p95 116 ms；
-   邊直接切換後同一操作降到 16.8–33.4 ms。 */
+/* 只有卡片淡入淡出；邊不加 transition（暗化見下方邊容器） */
 .svelte-flow__node-graph {
 	transition:
 		opacity 200ms,
 		stroke-width 200ms;
+}
+/* 暗化整個邊容器（自己一層），不逐條改樣式；亮起的邊另畫在 FocusEdge 的副本。
+   P8 量測（200／1,000、縮放 0.87）：逐條改樣式時一次 hover 的 GPU raster 約 350ms，改為整層後 16.8ms */
+.svelte-flow__edges {
+	will-change: opacity;
+}
+.svelte-flow.dim-edges .svelte-flow__edges {
+	opacity: 0.107;
+}
+.svelte-flow.dim-edges-soft .svelte-flow__edges {
+	opacity: 0.4;
 }
 .svelte-flow__node-graph .svelte-flow__handle.easy {
 	/* 整張卡片當把手：看不見，拖曳就連線；邊仍接在上緣／下緣中點 */

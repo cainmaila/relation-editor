@@ -225,17 +225,18 @@ describe('workspaceVerdict（2D 工作區）', () => {
 		ws: { nodes: 200, edges: 1000 },
 		set: { nodes: 200, edges: 1000 },
 		dom: { cards: 200, edges: 1000 },
-		pan: [f(16.7), f(16.7), f(16.7)],
-		panZoomed: [f(16.7), f(16.7)],
-		zoom: 0.1,
+		readable: { zoom: 0.86, cardPx: 138, namePx: 10.3, targets: 12 },
+		problems: [],
+		pan: Array.from({ length: 5 }, () => ({ frames: f(16.7), zoom: 0.86 })),
 		connect: [0, 1, 2].map((i) => ({
 			from: `a${i}`,
 			to: `b${i}`,
 			frames: f(16.8),
 			menuMs: 40,
-			pair: true
+			pair: true,
+			zoom: 0.86
 		})),
-		commits: Array.from({ length: 10 }, (_, i) => ({ id: `c${i}`, ms: 50 })),
+		commits: Array.from({ length: 10 }, (_, i) => ({ id: `c${i}`, ms: 50, zoom: 0.9 })),
 		consoleErrors: []
 	});
 	const three = (patch?: (x: WorkspaceSample, k: number) => void) =>
@@ -271,7 +272,7 @@ describe('workspaceVerdict（2D 工作區）', () => {
 			'FAIL'
 		);
 		expect(by(wv(three((x, k) => k === 0 && x.commits!.pop())), 'edit commit').status).toBe('FAIL');
-		expect(by(wv(three((x, k) => k === 0 && (x.panZoomed = []))), '2D pan').status).toBe('FAIL');
+		expect(by(wv(three((x, k) => k === 0 && x.pan!.pop())), '2D pan').status).toBe('FAIL');
 	});
 	it('沒有收進 200／1000（被拒或規模不同、畫出來不是 200／1000）→ 每列 FAIL', () => {
 		for (const patch of [
@@ -291,5 +292,36 @@ describe('workspaceVerdict（2D 工作區）', () => {
 	it('frame 超標仍 FAIL（33.4 > 33.3）', () => {
 		const v = wv(three((x, k) => k === 0 && (x.connect![0].frames = f(33.4))));
 		expect(by(v, '2D connection-drag')).toMatchObject({ status: 'FAIL', value: 33.4 });
+	});
+	it('縮放 0.1（整張入鏡、讀不到字）即使數字很快 → 每列 FAIL', () => {
+		const v = wv(
+			three((x) => {
+				x.readable = { zoom: 0.1, cardPx: 16, namePx: 1.2, targets: 200 };
+				for (const p of x.pan!) p.zoom = 0.1;
+				for (const c of x.connect!) c.zoom = 0.1;
+				for (const c of x.commits!) c.zoom = 0.1;
+			})
+		);
+		expect(v.every((r) => r.status === 'FAIL')).toBe(true);
+		expect(by(v, '2D pan').problems.join()).toMatch(/zoom 0\.1/);
+	});
+	it('沒記錄可讀縮放（舊產物）、卡片太窄、字太小、縮太大 → FAIL', () => {
+		for (const patch of [
+			(x: WorkspaceSample) => delete x.readable,
+			(x: WorkspaceSample) => (x.readable!.cardPx = 100),
+			(x: WorkspaceSample) => (x.readable!.namePx = 7),
+			(x: WorkspaceSample) => (x.readable!.zoom = 1.8)
+		])
+			expect(wv(three((x, k) => k === 2 && patch(x))).every((r) => r.status === 'FAIL')).toBe(true);
+	});
+	it('任一操作不在可讀縮放（例：提交時被縮回去）→ FAIL', () => {
+		const v = wv(three((x, k) => k === 1 && (x.commits![3].zoom = 0.5)));
+		expect(v.every((r) => r.status === 'FAIL')).toBe(true);
+		expect(by(v, 'edit commit').problems.join()).toMatch(/commit c3 at zoom 0\.5/);
+	});
+	it('harness 找不到可見卡片／平移點（problems）→ FAIL', () => {
+		const v = wv(three((x, k) => k === 0 && x.problems!.push('only 1 in-pane target card(s)')));
+		expect(v.every((r) => r.status === 'FAIL')).toBe(true);
+		expect(by(v, '2D pan').readable).toEqual([0.86, 0.86, 0.86]);
 	});
 });

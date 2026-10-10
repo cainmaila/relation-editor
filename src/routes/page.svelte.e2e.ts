@@ -648,12 +648,14 @@ test.describe('編輯（編輯頁）', () => {
 		await pick(page, '空調箱 AHU-2F-1');
 		await pickEdge(page, '冷卻：2F');
 		await detail(page).getByRole('button', { name: '刪除邊' }).click();
+		await detail(page).getByRole('button', { name: '確認刪除' }).click();
 		await expect(node(page, '空調箱 AHU-2F-1')).toBeVisible();
 		await expect(node(page, '2F')).toBeVisible();
 
 		await pick(page, '攝影機 CAM-03');
 		await pickEdge(page, `監測：${G}`);
 		await detail(page).getByRole('button', { name: '刪除邊' }).click();
+		await detail(page).getByRole('button', { name: '確認刪除' }).click();
 		await expect(badge(page, '攝影機 CAM-03', '未處理')).toHaveCount(1);
 		await expect(badge(page, '空調箱 AHU-2F-1', '未處理')).toHaveCount(0);
 
@@ -706,6 +708,7 @@ test.describe('編輯（編輯頁）', () => {
 		await pick(page, 'ToR Switch A-04');
 		await pickEdge(page, '連線：主機 H-05');
 		await detail(page).getByRole('button', { name: '刪除邊' }).click();
+		await detail(page).getByRole('button', { name: '確認刪除' }).click();
 		await pick(page, 'ToR Switch A-04');
 		await expect(detail(page).getByRole('button', { name: '連線：主機 H-05' })).toHaveCount(0);
 		await addEdge(page, 'ToR Switch A-04', '主機 H-05', '連線');
@@ -804,6 +807,7 @@ test.describe('找客戶（全圖）', () => {
 		await pick(page, '機櫃 PDU A-04-A');
 		await pickEdge(page, '供電：機櫃 A-04');
 		await detail(page).getByRole('button', { name: '刪除邊' }).click();
+		await detail(page).getByRole('button', { name: '確認刪除' }).click();
 		await toGraph(page);
 		await issueCount(page, '無客戶路徑', 1);
 		await expect(await issueList(page, '只列無客戶路徑')).toHaveText(['機櫃 PDU A-04-A']);
@@ -1086,29 +1090,89 @@ test.describe('編輯器操作', () => {
 		await expect(graphNodes(page)).toHaveCount(1);
 	});
 
-	test('刪除規則一致：會連帶刪邊的節點（詳情／右鍵／鍵盤）都要二次確認；沒有邊的節點、單一條邊直接刪', async ({
+	test('刪除規則一致：節點與邊（詳情／右鍵／工具列／鍵盤）一律先確認；取消什麼都不做', async ({
 		page
 	}) => {
-		await toEdit(page, ['偵測器 SD-02', G]);
+		await toEdit(page, ['偵測器 SD-02', G, '機櫃 A-01']);
 		await addNode(page, '攝影機', '攝影機 CAM-04');
-		await expect(graphNodes(page)).toHaveCount(3);
-		// 鍵盤：有邊的節點先問
+		await expect(graphNodes(page)).toHaveCount(4);
+		const edges = await graphEdges(page).count();
+		const confirm = () => detail(page).getByRole('alertdialog', { name: '確認刪除' });
+		// 鍵盤：有邊的節點列出連帶的邊數
 		await pick(page, '偵測器 SD-02');
 		await page.keyboard.press('Delete');
-		await expect(detail(page)).toContainText('連同 1 條邊一起刪除？');
-		await expect(graphNodes(page)).toHaveCount(3);
-		await detail(page).getByRole('button', { name: '取消', exact: true }).click();
-		// 鍵盤：沒有邊的節點與詳情、右鍵一樣直接刪
+		await expect(confirm()).toContainText('連同 1 條邊一起刪除？');
+		await expect(graphNodes(page)).toHaveCount(4);
+		await confirm().getByRole('button', { name: '取消', exact: true }).click();
+		await expect(confirm()).toHaveCount(0);
+		await expect(graphNodes(page)).toHaveCount(4);
+		// 鍵盤：沒有邊的節點也要確認；取消不刪、Esc 也取消，確認才刪
 		await pick(page, '攝影機 CAM-04');
 		await page.keyboard.press('Delete');
+		await expect(confirm()).toContainText('沒有相連的邊');
+		await confirm().getByRole('button', { name: '取消', exact: true }).click();
+		await expect(node(page, '攝影機 CAM-04')).toHaveCount(1);
+		await page.keyboard.press('Backspace');
+		await expect(confirm()).toBeVisible();
+		await page.keyboard.press('Escape');
+		await expect(confirm()).toHaveCount(0);
+		await expect(node(page, '攝影機 CAM-04')).toHaveCount(1);
+		await page.keyboard.press('Delete');
+		await confirm().getByRole('button', { name: '確認刪除' }).click();
 		await expect(node(page, '攝影機 CAM-04')).toHaveCount(0);
-		await expect(graphNodes(page)).toHaveCount(2);
-		// 單一條邊：鍵盤直接刪，兩端節點留著
+		await expect(graphNodes(page)).toHaveCount(3);
+		// 單一條邊：鍵盤也要確認；取消不刪，確認才刪，兩端節點留著
 		await pick(page, '偵測器 SD-02');
 		await pickEdge(page, `監測：${G}`);
 		await page.keyboard.press('Delete');
-		await expect(graphEdges(page)).toHaveCount(0);
-		await expect(graphNodes(page)).toHaveCount(2);
+		await expect(confirm()).toContainText('永久刪除這條邊？');
+		await confirm().getByRole('button', { name: '取消', exact: true }).click();
+		await expect(graphEdges(page)).toHaveCount(edges);
+		await page.keyboard.press('Delete');
+		await confirm().getByRole('button', { name: '確認刪除' }).click();
+		await expect(graphEdges(page)).toHaveCount(edges - 1);
+		await expect(graphNodes(page)).toHaveCount(3);
+		// 右鍵沒有邊的節點：第一次只換成確認字樣，選單外點掉就不刪
+		await node(page, '偵測器 SD-02').click({ button: 'right' });
+		await menu(page).getByRole('menuitem', { name: '刪除節點' }).click();
+		await expect(
+			menu(page).getByRole('menuitem', { name: /確認刪除（連同 0 條邊）/ })
+		).toBeVisible();
+		await page.keyboard.press('Escape');
+		await expect(node(page, '偵測器 SD-02')).toHaveCount(1);
+		// 浮動工具列的刪除開同一個選單，同樣兩段
+		await node(page, '偵測器 SD-02').hover();
+		await page.getByRole('button', { name: '刪除（⌫）' }).click();
+		await menu(page).getByRole('menuitem', { name: '刪除節點' }).click();
+		await expect(node(page, '偵測器 SD-02')).toHaveCount(1);
+		await menu(page)
+			.getByRole('menuitem', { name: /確認刪除/ })
+			.click();
+		await expect(node(page, '偵測器 SD-02')).toHaveCount(0);
+		// 唯讀（IDC 守門）：鍵盤不出現確認，說明原因
+		await pick(page, '機櫃 A-01');
+		await page.keyboard.press('Delete');
+		await expect(confirm()).toHaveCount(0);
+		await expect(node(page, '機櫃 A-01')).toHaveCount(1);
+		await expect(page.getByRole('status')).toContainText('IDC 資料');
+	});
+
+	test('右鍵刪除邊也要確認', async ({ page }) => {
+		await toEdit(page, ['偵測器 SD-02', G]);
+		const edges = await graphEdges(page).count();
+		await pick(page, '偵測器 SD-02');
+		await pickEdge(page, `監測：${G}`);
+		const mid = await page
+			.locator('.svelte-flow__edge[data-id^="監測:"] path.svelte-flow__edge-path')
+			.evaluate((p: SVGPathElement) => {
+				const q = p.getPointAtLength(p.getTotalLength() / 2).matrixTransform(p.getScreenCTM()!);
+				return { x: q.x, y: q.y };
+			});
+		await page.mouse.click(mid.x, mid.y, { button: 'right' });
+		await menu(page).getByRole('menuitem', { name: '刪除邊' }).click();
+		await expect(graphEdges(page)).toHaveCount(edges);
+		await menu(page).getByRole('menuitem', { name: '確認刪除這條邊' }).click();
+		await expect(graphEdges(page)).toHaveCount(edges - 1);
 	});
 });
 
@@ -1407,6 +1471,7 @@ test.describe('全圖追查（P7）', () => {
 		await pick(page, '機櫃 PDU A-04-A');
 		await pickEdge(page, '供電：機櫃 A-04');
 		await detail(page).getByRole('button', { name: '刪除邊' }).click();
+		await detail(page).getByRole('button', { name: '確認刪除' }).click();
 		await toGraph(page);
 		// 追查仍在：結果依刪邊後的拓撲重算，明講已變更
 		await expect(trace(page)).toContainText('走不到任何客戶');

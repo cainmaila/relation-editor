@@ -1,8 +1,6 @@
 <script lang="ts">
-	// 拉線預覽：畫在 viewport 外的螢幕座標層（Svelte Flow 子元件，不跟著 viewport 變形）。
-	// P8 實測：內建連線 SVG 在 viewport 裡、夾在上千條邊與卡片之間，每移動一下就要重畫整個 viewport
-	// （200 節點／1,000 邊時每幀約 14ms Paint＋7ms Layerize，拉線 p95 33.4ms）。
-	// 這裡用同一條貝茲曲線（flow 座標算路徑，再套 viewport 的平移／縮放），外觀、起訖點與原本一致。
+	// 拉線預覽：畫在 viewport 外、自己一層的螢幕座標 SVG，外觀與內建連線相同（同一條貝茲曲線）。
+	// P8 量測（200／1,000、縮放 0.87）：拉線 frame p95 16.8ms
 	import { getBezierPath, useConnection, useViewport } from '@xyflow/svelte';
 
 	const connection = useConnection();

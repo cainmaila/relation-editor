@@ -91,10 +91,9 @@
 	/** 加入編輯頁：整批 admission，訊息由 Editor 給（新增節點與帶入邊數） */
 	const addWork = (ids: string[]) => editor.addToWork(ids);
 
-	function removeNode(id: string) {
-		if (nodeEdges && editor.armDelete !== id) editor.armDelete = id;
-		else editor.deleteNode(id);
-	}
+	/** 這個實體正等著確認刪除 */
+	const armed = (kind: 'node' | 'edge', id: string) =>
+		editor.armDelete?.kind === kind && editor.armDelete.id === id;
 
 	const TIPS = $derived(
 		graph
@@ -136,6 +135,23 @@
 		title={tip}
 		onclick={run}><Icon name={icon} /></button
 	>
+{/snippet}
+
+{#snippet confirmDelete(text: string)}
+	<div
+		role="alertdialog"
+		aria-label="確認刪除"
+		class="mx-5 mb-3 flex animate-rise items-center gap-2 rounded-md border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-xs text-rose-100"
+	>
+		{text}
+		<button class="ml-auto btn-ghost px-2 py-0.5 text-xs" onclick={() => editor.cancelDelete()}
+			>取消</button
+		>
+		<button
+			class="btn bg-rose-500 px-2 py-0.5 text-xs text-white hover:bg-rose-400"
+			onclick={() => editor.confirmDelete()}>確認刪除</button
+		>
+	</div>
 {/snippet}
 
 {#snippet section(title: string)}
@@ -301,13 +317,13 @@
 					title="只從工作區拿掉，不刪除資料"
 					onclick={() => editor.removeFromWork([node.id])}>移出工作區</button
 				>
-				{#if editor.armDelete !== node.id}
+				{#if !armed('node', node.id)}
 					<button
 						class="grid size-8 place-items-center rounded-md text-rose-300 transition-colors hover:bg-rose-500/15 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent"
 						aria-label="刪除節點"
 						title={block ? `無法刪除：${block}` : '刪除節點（⌫）'}
 						disabled={!!block}
-						onclick={() => removeNode(node.id)}><Icon name="trash" /></button
+						onclick={() => editor.requestDelete('node', node.id)}><Icon name="trash" /></button
 					>
 				{/if}
 			{/if}
@@ -315,24 +331,14 @@
 		{#if outsideNode}
 			<p class="mx-5 mb-3 text-[11px] text-slate-400">不在編輯頁：先加入編輯頁才能修改</p>
 		{/if}
-		{#if editor.armDelete === node.id && !graph && !outsideNode}
-			<div
-				role="alertdialog"
-				aria-label="確認刪除"
-				class="mx-5 mb-3 flex animate-rise items-center gap-2 rounded-md border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-xs text-rose-100"
-			>
-				永久刪除資料，連同 {nodeEdges} 條邊{hiddenEdges
-					? `（含工作區外 ${hiddenEdges} 條）`
-					: ''}一起刪除？
-				<button
-					class="ml-auto btn-ghost px-2 py-0.5 text-xs"
-					onclick={() => (editor.armDelete = null)}>取消</button
-				>
-				<button
-					class="btn bg-rose-500 px-2 py-0.5 text-xs text-white hover:bg-rose-400"
-					onclick={() => editor.deleteNode(node.id)}>確認刪除</button
-				>
-			</div>
+		{#if armed('node', node.id) && !graph && !outsideNode}
+			{@render confirmDelete(
+				`永久刪除「${node.name}」${
+					nodeEdges
+						? `，連同 ${nodeEdges} 條邊${hiddenEdges ? `（含工作區外 ${hiddenEdges} 條）` : ''}一起刪除`
+						: '（沒有相連的邊）'
+				}？無法復原`
+			)}
 		{:else if block && !ro}
 			<p class="mx-5 mb-3 text-[11px] leading-relaxed text-slate-400">無法刪除：{block}</p>
 		{/if}
@@ -395,14 +401,16 @@
 				>
 			</div>
 		{/if}
-		{#if !graph}
+		{#if !graph && armed('edge', edge.id) && !ro}
+			{@render confirmDelete('永久刪除這條邊？無法復原')}
+		{:else if !graph}
 			<div class="flex px-5 py-3">
 				<button
 					class="ml-auto grid size-8 place-items-center rounded-md text-rose-300 transition-colors hover:bg-rose-500/15 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent"
 					aria-label="刪除邊"
 					title={ro ? IDC_MESSAGE : '刪除邊（⌫）'}
 					disabled={ro}
-					onclick={() => editor.deleteEdge(edge.id)}><Icon name="trash" /></button
+					onclick={() => editor.requestDelete('edge', edge.id)}><Icon name="trash" /></button
 				>
 			</div>
 		{/if}

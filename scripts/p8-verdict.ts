@@ -267,30 +267,46 @@ export type WorkspaceSample = {
 	ws: { nodes: number; edges: number };
 	set: { nodes: number; edges: number };
 	dom: { cards: number; edges: number } | null;
-	pan?: Frames[];
-	panZoomed?: Frames[] | null;
-	zoom?: number;
-	connect?: { from: string; to: string; frames: Frames; menuMs: number; pair?: boolean }[];
-	commits?: { id: string; ms: number; error?: string }[];
+	/** 量測前真滾輪放大後的狀態：縮放、最窄目標卡片寬、名稱實際字級、可見目標數 */
+	readable?: { zoom: number; cardPx: number; namePx: number; targets?: number };
+	/** harness 做不到的事（滾輪點不在容器內、可見卡片不足、找不到空白處…）＝FAIL */
+	problems?: string[];
+	pan?: { frames: Frames; zoom: number }[];
+	connect?: {
+		from: string;
+		to: string;
+		frames: Frames;
+		menuMs: number;
+		pair?: boolean;
+		zoom?: number;
+	}[];
+	commits?: { id: string; ms: number; error?: string; zoom?: number }[];
 	consoleErrors: unknown[];
 };
 export type WorkspacePlan = {
 	samples: number;
 	nodes: number;
 	edges: number;
-	/** 每樣本：全圖平移＋放大後平移 */
+	/** 每樣本平移次數（全部在可讀縮放） */
 	pans: number;
 	connects: number;
 	commits: number;
+	readable: typeof READABLE;
 };
-/** 正式工作區：3 樣本 × (3+2 平移、3 次連線、10 次提交) = 15／9／30 */
+/**
+ * 可讀編輯縮放：卡片 160px、名稱 12px（GraphNode w-40／text-xs）。
+ * 0.75 時卡片 120px、名稱 9px；整張入鏡的 0.1（16px 細帶）不算編輯驗收
+ */
+export const READABLE = { minZoom: 0.75, maxZoom: 1.5, minCardPx: 120, minNamePx: 9 };
+/** 正式工作區：3 樣本 × (5 平移、3 次連線、10 次提交) = 15／9／30，全部在可讀縮放 */
 export const WORKSPACE_FORMAL = {
 	samples: 3,
 	nodes: 200,
 	edges: 1000,
 	pans: 5,
 	connects: 3,
-	commits: 10
+	commits: 10,
+	readable: READABLE
 };
 
 export function workspaceVerdict(xs: WorkspaceSample[], plan: WorkspacePlan): Row[] {
@@ -312,12 +328,29 @@ export function workspaceVerdict(xs: WorkspaceSample[], plan: WorkspacePlan): Ro
 				p.push(
 					`${x.name}: rendered ${x.dom ? `${x.dom.cards}/${x.dom.edges}` : 'nothing'}, expected ${plan.nodes}/${plan.edges}`
 				);
+			const R = plan.readable;
+			const z = x.readable;
+			const inRange = (v: unknown) => ok(v) && v >= R.minZoom && v <= R.maxZoom;
+			if (!z) p.push(`${x.name}: readable edit scale not recorded`);
+			else {
+				if (!inRange(z.zoom))
+					p.push(`${x.name}: zoom ${r1(z.zoom * 100) / 100} outside ${R.minZoom}–${R.maxZoom}`);
+				if (!ok(z.cardPx) || z.cardPx < R.minCardPx)
+					p.push(`${x.name}: card ${z.cardPx}px < ${R.minCardPx}px`);
+				if (!ok(z.namePx) || z.namePx < R.minNamePx)
+					p.push(`${x.name}: name ${z.namePx}px < ${R.minNamePx}px`);
+			}
+			// 每一次操作都要在可讀縮放（數字快但縮到 0.1 不算）
+			const at = (what: string, v: unknown) =>
+				inRange(v) ? [] : [`${x.name}: ${what} at zoom ${ok(v) ? Math.round(v * 100) / 100 : v}`];
+			(x.pan ?? []).forEach((f, i) => p.push(...at(`pan ${i}`, f?.zoom)));
+			(x.connect ?? []).forEach((c) => p.push(...at(`connect ${c.from} → ${c.to}`, c.zoom)));
+			(x.commits ?? []).forEach((c) => p.push(...at(`commit ${c.id}`, c.zoom)));
+			p.push(...(x.problems ?? []).map((q) => `${x.name}: ${q}`));
 			return p;
 		})
 	];
-	const pan = xs.flatMap((x) =>
-		[...(x.pan ?? []), ...(x.panZoomed ?? [])].map((f) => f?.intervalMs?.p95 ?? NaN)
-	);
+	const pan = xs.flatMap((x) => (x.pan ?? []).map((f) => f?.frames?.intervalMs?.p95 ?? NaN));
 	const con = xs.flatMap((x) => x.connect ?? []);
 	const commits = xs.flatMap((x) => x.commits ?? []);
 	const wrongPair = con
@@ -326,14 +359,18 @@ export function workspaceVerdict(xs: WorkspaceSample[], plan: WorkspacePlan): Ro
 	const errors = xs.flatMap((x) => x.consoleErrors).length;
 	return [
 		row(
-			'2D pan frame p95 (worst drag; fit-all ×3 + after wheel ×2)',
+			'2D pan frame p95 (worst drag; all at readable zoom)',
 			pan,
 			S * plan.pans,
 			BUDGET.frameP95Ms,
 			max,
 			{
 				problems: base,
-				extra: { zoom: xs.map((x) => x.zoom ?? null) }
+				extra: {
+					readable: xs.map((x) => x.readable?.zoom ?? null),
+					cardPx: xs.map((x) => x.readable?.cardPx ?? null),
+					namePx: xs.map((x) => x.readable?.namePx ?? null)
+				}
 			}
 		),
 		row(

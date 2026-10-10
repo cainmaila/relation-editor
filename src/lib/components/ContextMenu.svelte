@@ -23,8 +23,13 @@
 	const m = $derived(editor.menu!);
 	let el = $state<HTMLElement>();
 	let pos = $state({ x: 0, y: 0, flip: false });
-	/** 刪節點兩段式：第一次點只換成確認字樣 */
-	let armed = $state(false);
+	/** 刪除兩段式：第一次點只提出（Editor 武裝），項目換成確認字樣；選取一變就作廢 */
+	const armed = (kind: 'node' | 'edge', id: string) =>
+		editor.armDelete?.kind === kind && editor.armDelete.id === id;
+	const confirmItem = (kind: 'node' | 'edge', id: string) => () => {
+		if (!armed(kind, id)) editor.requestDelete(kind, id);
+		else done(() => editor.confirmDelete())();
+	};
 
 	const nameOf = (id: string) => editor.node(id)?.name ?? id;
 	const sysOf = (type: string) => nodeType(type).system ?? '通用';
@@ -89,7 +94,8 @@
 	const items = $derived.by((): Item[] => {
 		if (m.kind === 'node') {
 			const n = editor.node(m.id)!;
-			const count = editor.incidentEdges(n.id).length;
+			const all = editor.incidentEdges(n.id);
+			const hidden = all.filter((e) => !editor.inWork(e.from) || !editor.inWork(e.to)).length;
 			const block = editor.deleteBlock(n.id);
 			const k = editor.stacking ? editor.stackOf(n.id) : undefined;
 			return [
@@ -128,15 +134,14 @@
 						]
 					: []),
 				{
-					label: armed ? `確認刪除（連同 ${count} 條邊）` : '刪除節點',
+					label: armed('node', n.id)
+						? `確認刪除（連同 ${all.length} 條邊${hidden ? `，含工作區外 ${hidden} 條` : ''}）`
+						: '刪除節點',
 					icon: 'trash',
 					keys: '⌫',
 					danger: true,
 					why: ro ? IDC_MESSAGE : block,
-					run: () => {
-						if (count && !armed) armed = true;
-						else done(() => editor.deleteNode(n.id))();
-					}
+					run: confirmItem('node', n.id)
 				}
 			];
 		}
@@ -152,12 +157,12 @@
 				{ label: '前往起點', icon: 'chevron', run: done(() => editor.locate(e.from)) },
 				{ label: '前往終點', icon: 'chevron', run: done(() => editor.locate(e.to)) },
 				{
-					label: '刪除邊',
+					label: armed('edge', e.id) ? '確認刪除這條邊' : '刪除邊',
 					icon: 'trash',
 					keys: '⌫',
 					danger: true,
 					why: ro ? IDC_MESSAGE : null,
-					run: done(() => editor.deleteEdge(e.id))
+					run: confirmItem('edge', e.id)
 				}
 			];
 		}
@@ -205,7 +210,6 @@
 	// 開啟或換位置後：貼齊視窗邊界；右側放不下子選單就往左開
 	$effect(() => {
 		const { x, y } = m;
-		armed = false;
 		tick().then(() => {
 			if (!el) return;
 			const r = el.getBoundingClientRect();

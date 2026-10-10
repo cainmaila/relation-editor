@@ -39,8 +39,10 @@
 		} else if (e.key === 'Escape') {
 			if (editor.menu) editor.menu = null;
 			else if (editor.dialog) editor.dialog = null;
-			else if (editor.connecting || editor.armDelete) editor.connecting = editor.armDelete = null;
-			else if (editor.legend) editor.legend = false;
+			else if (editor.connecting || editor.armDelete) {
+				editor.connecting = null;
+				editor.cancelDelete();
+			} else if (editor.legend) editor.legend = false;
 			else if (editor.result) editor.clearTrace();
 			else editor.select(null);
 		} else {
@@ -58,15 +60,8 @@
 			} else if (k === 'f' && graph && s?.kind === 'node') editor.findCustomers(s.id);
 			else if (e.code === 'Digit1' && e.shiftKey) editor.fit();
 			else if ((e.key === 'Delete' || e.key === 'Backspace') && s && !graph) {
-				// 與詳情、右鍵同一規則：會連帶刪邊的節點才二次確認；單一條邊、沒有邊的節點直接刪
-				// （被擋的節點交給 deleteNode 顯示原因）
-				if (s.kind === 'edge') editor.deleteEdge(s.id);
-				else if (editor.deleteBlock(s.id) || !editor.incidentEdges(s.id).length)
-					editor.deleteNode(s.id);
-				else {
-					editor.armDelete = s.id;
-					editor.panels.right = true;
-				}
+				// 與詳情、右鍵同一規則：刪資料一律在詳情欄確認（被擋的由 Editor 說明原因）
+				if (editor.requestDelete(s.kind, s.id)) editor.panels.right = true;
 			} else return;
 		}
 		e.preventDefault();

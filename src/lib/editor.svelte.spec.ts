@@ -1133,3 +1133,108 @@ describe('P7 全圖追查與跨視圖一致性', () => {
 		expect(e.traceRevision).toBe(e.topologyRevision);
 	});
 });
+
+describe('刪除資料一律先確認（requestDelete → confirmDelete）', () => {
+	const n = (id: string, readonly = false) => ({
+		id,
+		type: '通用節點',
+		name: id,
+		props: {},
+		...(readonly && { readonly })
+	});
+	const g = () => ({
+		nodes: [n('a'), n('b'), n('lone'), n('out')],
+		edges: [
+			{ id: 'ab', type: '連線', from: 'a', to: 'b', bidirectional: false, props: {} },
+			{ id: 'b-out', type: '連線', from: 'b', to: 'out', bidirectional: false, props: {} }
+		]
+	});
+	const edit = () => {
+		const e = new Editor(g());
+		e.working = ['a', 'b', 'lone'];
+		e.setPage('edit');
+		return e;
+	};
+
+	it('沒有邊的節點：提出只武裝、取消什麼都不做、確認才刪', () => {
+		const e = edit();
+		const rev = e.revision;
+		expect(e.requestDelete('node', 'lone')).toBe(true);
+		expect(e.armDelete).toMatchObject({ kind: 'node', id: 'lone' });
+		expect(e.node('lone')).toBeDefined();
+		expect(e.revision).toBe(rev);
+		e.cancelDelete();
+		expect(e.armDelete).toBeNull();
+		expect(e.node('lone')).toBeDefined();
+		expect(e.revision).toBe(rev);
+		e.requestDelete('node', 'lone');
+		expect(e.confirmDelete()).toBe(true);
+		expect(e.node('lone')).toBeUndefined();
+		expect(e.working).not.toContain('lone');
+		expect(e.armDelete).toBeNull();
+	});
+
+	it('單一條邊：取消不刪，確認才刪', () => {
+		const e = edit();
+		expect(e.requestDelete('edge', 'ab')).toBe(true);
+		expect(e.armDelete).toMatchObject({ kind: 'edge', id: 'ab' });
+		e.cancelDelete();
+		expect(e.edge('ab')).toBeDefined();
+		e.requestDelete('edge', 'ab');
+		expect(e.confirmDelete()).toBe(true);
+		expect(e.edge('ab')).toBeUndefined();
+		expect(e.node('a')).toBeDefined();
+	});
+
+	it('節點連同工作區外的邊：確認後一起刪', () => {
+		const e = edit();
+		expect(e.requestDelete('node', 'b')).toBe(true);
+		expect(e.confirmDelete()).toBe(true);
+		expect(e.edge('ab')).toBeUndefined();
+		expect(e.edge('b-out')).toBeUndefined();
+	});
+
+	it('唯讀（IDC）、根節點、工作區外：不武裝並說明原因', () => {
+		const e = new Editor();
+		e.addToWork(['主機 H-02']);
+		e.setPage('edit');
+		expect(e.requestDelete('node', '主機 H-02')).toBe(false);
+		expect(e.armDelete).toBeNull();
+		expect(e.message).toBe('由 IDC機櫃配置管理維護');
+		const idcEdge = e.graph.edges.find((x) => x.readonly)!;
+		expect(e.requestDelete('edge', idcEdge.id)).toBe(false);
+		expect(e.armDelete).toBeNull();
+		const x = edit();
+		expect(x.requestDelete('node', 'out')).toBe(false);
+		expect(x.message).toBe('節點不在編輯頁：先加入編輯頁才能修改');
+		expect(x.requestDelete('edge', 'b-out')).toBe(false);
+		expect(x.armDelete).toBeNull();
+	});
+
+	it('全圖只讀：不能提出刪除', () => {
+		const e = new Editor(g());
+		expect(e.requestDelete('edge', 'ab')).toBe(false);
+		expect(e.armDelete).toBeNull();
+	});
+
+	it('武裝後圖已換版：確認作廢，不刪任何東西', () => {
+		const e = edit();
+		e.requestDelete('edge', 'ab');
+		const arm = e.armDelete;
+		e.updateNode('lone', { name: 'renamed' });
+		e.armDelete = arm;
+		expect(e.confirmDelete()).toBe(false);
+		expect(e.edge('ab')).toBeDefined();
+		expect(e.armDelete).toBeNull();
+		expect(e.message).toContain('資料已變更');
+	});
+
+	it('選取改變就取消武裝', () => {
+		const e = edit();
+		e.requestDelete('node', 'lone');
+		e.select({ kind: 'node', id: 'a' });
+		expect(e.armDelete).toBeNull();
+		expect(e.confirmDelete()).toBe(false);
+		expect(e.node('lone')).toBeDefined();
+	});
+});

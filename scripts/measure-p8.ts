@@ -65,6 +65,21 @@ type P8 = {
 	workers: { created: number; terminated: number; live: number };
 	listeners: () => Record<string, number>;
 	until: (src: string, ms: number) => Promise<{ seen: number; painted: number }>;
+	flow: Flow;
+};
+type Card = { id: string; x: number; y: number; w: number };
+/** 編輯頁（Svelte Flow）頁內定位：只認真的在 flow 容器內、沒被面板／控制項蓋住、點得到的位置 */
+type Flow = {
+	zoom: () => number;
+	pane: () => { x: number; y: number; w: number; h: number; cx: number; cy: number };
+	inFlow: (x: number, y: number) => boolean;
+	/** 整張卡片都在容器內、中心點 elementFromPoint 打到它自己 */
+	cards: () => Card[];
+	/** 離 (x,y) 最近、打到 pane 空白處的點 */
+	empty: (x: number, y: number) => { x: number; y: number } | null;
+	/** 往最近一張不可見卡片平移的真拖曳：空白起點與位移 */
+	toward: () => { x: number; y: number; dx: number; dy: number } | null;
+	readability: (t: Card[]) => { zoom: number; cardPx: number; namePx: number; names: string[] };
 };
 
 /** 導航前注入：輸入事件時間戳、Worker 生滅、window／document 監聽數、「成立後下一幀」等待 */
@@ -128,7 +143,102 @@ const P8_INIT = () => {
 			};
 			requestAnimationFrame(step);
 		});
-	w.__p8 = { last, workers, listeners, until };
+	const root = () => document.querySelector<HTMLElement>('.svelte-flow');
+	const OVER = '.svelte-flow__panel, .svelte-flow__node-toolbar, [role=menu], [role=dialog]';
+	const flow: Flow = {
+		zoom: () => {
+			const v = document.querySelector('.svelte-flow__viewport');
+			return v ? new DOMMatrix(getComputedStyle(v).transform).a : NaN;
+		},
+		pane: () => {
+			const r = root()!.getBoundingClientRect();
+			return {
+				x: r.x,
+				y: r.y,
+				w: r.width,
+				h: r.height,
+				cx: r.x + r.width / 2,
+				cy: r.y + r.height / 2
+			};
+		},
+		inFlow: (x, y) => {
+			const f = root();
+			const el = document.elementFromPoint(x, y);
+			return !!f && !!el && f.contains(el) && !el.closest(OVER);
+		},
+		cards: () => {
+			const f = root();
+			if (!f) return [];
+			const p = f.getBoundingClientRect();
+			return [...f.querySelectorAll<HTMLElement>('.svelte-flow__node-graph')].flatMap((el) => {
+				const r = el.getBoundingClientRect();
+				const c = { id: el.dataset.id!, x: r.x + r.width / 2, y: r.y + r.height / 2, w: r.width };
+				const inside =
+					r.left >= p.left + 8 &&
+					r.right <= p.right - 8 &&
+					r.top >= p.top + 8 &&
+					r.bottom <= p.bottom - 8;
+				const hit = document.elementFromPoint(c.x, c.y);
+				return inside &&
+					flow.inFlow(c.x, c.y) &&
+					hit?.closest('.svelte-flow__node-graph')?.getAttribute('data-id') === c.id
+					? [c]
+					: [];
+			});
+		},
+		empty: (x, y) => {
+			const p = flow.pane();
+			const pts: { x: number; y: number; d: number }[] = [];
+			for (let yy = p.y + 40; yy < p.y + p.h - 40; yy += 13)
+				for (let xx = p.x + 40; xx < p.x + p.w - 40; xx += 17)
+					pts.push({ x: xx, y: yy, d: Math.hypot(xx - x, yy - y) });
+			pts.sort((a, b) => a.d - b.d);
+			for (const q of pts) {
+				const el = document.elementFromPoint(q.x, q.y);
+				if (el?.classList.contains('svelte-flow__pane') && flow.inFlow(q.x, q.y))
+					return { x: q.x, y: q.y };
+			}
+			return null;
+		},
+		toward: () => {
+			const p = flow.pane();
+			const seen = new Set(flow.cards().map((c) => c.id));
+			let best: { x: number; y: number; d: number } | null = null;
+			for (const el of document.querySelectorAll<HTMLElement>('.svelte-flow__node-graph')) {
+				if (seen.has(el.dataset.id!)) continue;
+				const r = el.getBoundingClientRect();
+				const q = { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+				const dd = Math.hypot(q.x - p.cx, q.y - p.cy);
+				if (!best || dd < best.d) best = { ...q, d: dd };
+			}
+			if (!best) return null;
+			const lim = (v: number, m: number) => Math.max(-m, Math.min(m, v));
+			const dx = lim(p.cx - best.x, p.w / 2 - 80);
+			const dy = lim(p.cy - best.y, p.h / 2 - 80);
+			const s = flow.empty(p.cx - dx / 2, p.cy - dy / 2);
+			return s && { ...s, dx, dy };
+		},
+		readability: (t) => {
+			const z = flow.zoom();
+			const names: string[] = [];
+			let namePx = Infinity;
+			for (const c of t) {
+				const el = document.querySelector(
+					`.svelte-flow__node-graph[data-id="${CSS.escape(c.id)}"] .truncate`
+				);
+				if (!el) continue;
+				namePx = Math.min(namePx, parseFloat(getComputedStyle(el).fontSize) * z);
+				if (names.length < 4) names.push(el.textContent ?? '');
+			}
+			return {
+				zoom: z,
+				cardPx: t.length ? Math.min(...t.map((c) => c.w)) : NaN,
+				namePx: Number.isFinite(namePx) ? namePx : NaN,
+				names
+			};
+		}
+	};
+	w.__p8 = { last, workers, listeners, until, flow };
 };
 
 /** 先在頁內掛好等待（避免來回延遲吃掉），再做動作，最後取結果；起點用指定事件的 timeStamp */
@@ -1165,109 +1275,97 @@ async function workspaceSample(
 		edges: document.querySelectorAll('.svelte-flow__edge').length
 	}));
 	if (o.shots) await page.screenshot({ path: path.join(d.OUT, `${o.name}-workspace.png`) });
-	const pane = (await page.locator('.svelte-flow').first().boundingBox())!;
-	// 空白處（pane 本身）
-	const empty = await page.evaluate((b) => {
-		for (let y = b.y + 40; y < b.y + b.height - 120; y += 17)
-			for (let x = b.x + 40; x < b.x + b.width - 200; x += 23) {
-				const el = document.elementFromPoint(x, y);
-				if (el?.classList.contains('svelte-flow__pane')) return { x, y };
-			}
-		return null;
-	}, pane);
-	const pan = [];
-	for (let k = 0; k < 3 && empty; k++)
-		pan.push(
-			await d.frames(page, async () => {
-				await page.mouse.move(empty.x, empty.y);
-				await page.mouse.down();
-				for (let i = 1; i <= 60; i++) {
-					await page.mouse.move(
-						empty.x + Math.sin(i / 10) * 160,
-						empty.y + Math.cos(i / 15) * 90 - 90
-					);
-					await page.waitForTimeout(16);
-				}
-				await page.mouse.up();
-			})
-		);
-	await settle(page, 400);
-	// 入場是整張入鏡（200 張卡片很小）；真滾輪放大到卡片接近原尺寸，再量一次平移，之後在此縮放做連線與編輯
-	await page.locator('.svelte-flow__controls-fitview').click();
-	await settle(page, 600);
-	const band = await page.evaluate(() => {
-		const r = [...document.querySelectorAll('.svelte-flow__node-graph')].map((el) =>
-			el.getBoundingClientRect()
-		);
-		const ys = r.map((x) => x.y + x.height / 2).sort((a, b) => a - b);
-		const xs = r.map((x) => x.x + x.width / 2).sort((a, b) => a - b);
-		return { x: xs[xs.length >> 1], y: ys[ys.length >> 1], w: r[0]?.width ?? 0 };
+	// 入場是整張入鏡（200 張卡片在 0.1 縮放下是一條細帶，讀不到字）。正式量測一律在可讀縮放：
+	// 真滾輪在「確認落在 Svelte Flow 容器內」的點放大，必要時真拖曳平移把卡片帶進可見範圍；
+	// 做不到就記 problem（判定 FAIL），不改相機 API、不硬塞
+	const problems: string[] = [];
+	const zoomNow = () => ev(page, (w) => w.__p8.flow.zoom());
+	const anchor = await ev(page, (w) => {
+		const c = w.__p8.flow.pane();
+		const t = w.__p8.flow
+			.cards()
+			.sort((a, b) => Math.hypot(a.x - c.cx, a.y - c.cy) - Math.hypot(b.x - c.cx, b.y - c.cy))[0];
+		return t ? { x: t.x, y: t.y, card: t.id } : w.__p8.flow.empty(c.cx, c.cy);
 	});
-	await page.mouse.move(band.x, band.y);
-	const zoomNow = () =>
-		page.evaluate(
-			() =>
-				new DOMMatrix(getComputedStyle(document.querySelector('.svelte-flow__viewport')!).transform)
-					.a
-		);
-	for (let k = 0; k < 60 && (await zoomNow()) < 0.75; k++) {
-		await page.mouse.wheel(0, -120);
-		await page.waitForTimeout(60);
+	let wheels = 0;
+	if (!anchor) problems.push('no in-pane point to zoom at');
+	else {
+		await page.mouse.move(anchor.x, anchor.y);
+		for (; wheels < 40 && (await zoomNow()) < WORKSPACE_FORMAL.readable.minZoom; wheels++) {
+			if (!(await ev(page, (w, a) => w.__p8.flow.inFlow(a.x, a.y), anchor))) {
+				problems.push(`wheel point ${Math.round(anchor.x)},${Math.round(anchor.y)} left the flow`);
+				break;
+			}
+			await page.mouse.wheel(0, -120);
+			await page.waitForTimeout(60);
+		}
 	}
 	await settle(page, 800);
-	const zoom = await page.evaluate(() => {
-		const t = getComputedStyle(document.querySelector('.svelte-flow__viewport')!).transform;
-		return new DOMMatrix(t).a;
-	});
-	if (o.shots) await page.screenshot({ path: path.join(d.OUT, `${o.name}-workspace-zoomed.png`) });
-	const emptyZ = await page.evaluate((b) => {
-		for (let y = b.y + 40; y < b.y + b.height - 120; y += 17)
-			for (let x = b.x + 40; x < b.x + b.width - 200; x += 23) {
-				const el = document.elementFromPoint(x, y);
-				if (el?.classList.contains('svelte-flow__pane')) return { x, y };
+	// 可讀範圍內至少要有 4 張完整可見、真的點得到的卡片（3 次拉線要不同的對）；不夠就真拖曳平移過去
+	const bring = async (need: number) => {
+		for (let k = 0; k < 8; k++) {
+			const t = await ev(page, (w) => w.__p8.flow.cards());
+			if (t.length >= need) return t;
+			const step = await ev(page, (w) => w.__p8.flow.toward());
+			if (!step) break;
+			await page.mouse.move(step.x, step.y);
+			await page.mouse.down();
+			for (let i = 1; i <= 20; i++) {
+				await page.mouse.move(step.x + (step.dx * i) / 20, step.y + (step.dy * i) / 20);
+				await page.waitForTimeout(16);
 			}
-		return null;
-	}, pane);
-	const panZoomed = [];
-	for (let k = 0; k < 2 && emptyZ; k++)
-		panZoomed.push(
-			await d.frames(page, async () => {
-				await page.mouse.move(emptyZ.x, emptyZ.y);
-				await page.mouse.down();
-				for (let i = 1; i <= 60; i++) {
-					await page.mouse.move(
-						emptyZ.x + Math.sin(i / 10) * 120,
-						emptyZ.y + Math.sin(i / 15) * 40
-					);
-					await page.waitForTimeout(16);
-				}
-				await page.mouse.up();
-			})
-		);
-	await settle(page, 400);
-	// 連線拖曳：卡片中心拖到另一張卡片（真滑鼠），量拖曳期間 frame；放開 → 建立邊選單出現
-	const cards = await page.evaluate(() =>
-		[...document.querySelectorAll<HTMLElement>('.svelte-flow__node-graph')]
-			.map((el) => {
-				const r = el.getBoundingClientRect();
-				return { id: el.dataset.id!, x: r.x + r.width / 2, y: r.y + r.height / 2, w: r.width };
-			})
-			.filter(
-				(c) =>
-					c.x > 60 &&
-					c.y > 80 &&
-					c.x < innerWidth - 420 &&
-					c.y < innerHeight - 140 &&
-					document
-						.elementFromPoint(c.x, c.y)
-						?.closest('.svelte-flow__node-graph')
-						?.getAttribute('data-id') === c.id
-			)
-	);
+			await page.mouse.up();
+			await settle(page, 300);
+		}
+		return ev(page, (w) => w.__p8.flow.cards());
+	};
+	let targets = await bring(4);
+	const readable = await ev(page, (w, t) => w.__p8.flow.readability(t), targets);
+	if (targets.length < 4) problems.push(`only ${targets.length} in-pane target card(s) after pans`);
+	if (o.shots) await page.screenshot({ path: path.join(d.OUT, `${o.name}-workspace-zoomed.png`) });
+	// 平移：全部在可讀縮放、從確認在容器內的空白處拖
+	const pan = [];
+	for (let k = 0; k < 5; k++) {
+		const p = await ev(page, (w) => {
+			const c = w.__p8.flow.pane();
+			return w.__p8.flow.empty(c.cx, c.cy);
+		});
+		if (!p) {
+			problems.push(`pan ${k}: no empty in-pane point`);
+			continue;
+		}
+		const zoom = await zoomNow();
+		const frames = await d.frames(page, async () => {
+			await page.mouse.move(p.x, p.y);
+			await page.mouse.down();
+			for (let i = 1; i <= 60; i++) {
+				await page.mouse.move(p.x + Math.sin(i / 10) * 120, p.y + Math.sin(i / 15) * 40);
+				await page.waitForTimeout(16);
+			}
+			await page.mouse.up();
+		});
+		pan.push({ frames, zoom });
+		await settle(page, 300);
+	}
+	targets = await bring(4);
+	if (targets.length < 4)
+		problems.push(`only ${targets.length} in-pane target card(s) before connection drags`);
+	// 連線拖曳：可見卡片中心拖到另一張可見卡片（真滑鼠），量拖曳期間 frame；放開 → 建立邊選單出現
 	const connect = [];
-	for (let k = 0; k < 3 && cards.length > 4; k++) {
-		const a = cards[(k * 7) % cards.length];
-		const b = cards[(k * 7 + Math.floor(cards.length / 2)) % cards.length];
+	for (let k = 0; k < 3 && targets.length >= 2; k++) {
+		const a = targets[k % targets.length];
+		const b = targets[(k + 1 + Math.floor(targets.length / 2)) % targets.length];
+		if (a.id === b.id) continue;
+		const zoom = await zoomNow();
+		const hit = await ev(
+			page,
+			(w, ids) => ids.every((id) => w.__p8.flow.cards().some((c) => c.id === id)),
+			[a.id, b.id]
+		);
+		if (!hit) {
+			problems.push(`connect ${a.id} → ${b.id}: endpoint not in pane`);
+			continue;
+		}
 		const f = await d.frames(page, async () => {
 			await page.evaluate(() => {
 				const w = window as unknown as { __p8: P8; __wait?: Promise<unknown> };
@@ -1306,23 +1404,22 @@ async function workspaceSample(
 			},
 			{ from: a.id, to: b.id }
 		);
-		connect.push({ from: a.id, to: b.id, frames: f, menuMs, pair });
+		connect.push({ from: a.id, to: b.id, frames: f, menuMs, pair, zoom });
 		await page.keyboard.press('Escape');
 		await settle(page, 300);
 	}
 	// 編輯提交 → 畫面回饋：點卡片選取、改名、按儲存 → 卡片顯示新名稱
 	const commits = [];
-	for (let k = 0; k < o.commits && cards.length; k++) {
-		const c = cards[(k * 11 + 3) % cards.length];
-		const pos = await page.evaluate((id) => {
-			const el = document.querySelector<HTMLElement>(
-				`.svelte-flow__node-graph[data-id="${CSS.escape(id)}"]`
-			);
-			if (!el) return null;
-			const r = el.getBoundingClientRect();
-			return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
-		}, c.id);
-		if (!pos) continue;
+	for (let k = 0; k < o.commits; k++) {
+		// 每次重新找：選取可能移動視野，只點此刻真的在容器內、點得到的卡片
+		const now = await ev(page, (w) => w.__p8.flow.cards());
+		const pos = now[(k * 7 + 3) % Math.max(1, now.length)];
+		if (!pos) {
+			commits.push({ id: `#${k}`, ms: NaN, seenMs: NaN, zoom: NaN, error: 'no in-pane card' });
+			continue;
+		}
+		const c = { id: pos.id };
+		const zoom = await zoomNow();
 		await page.mouse.click(pos.x, pos.y);
 		const name = page
 			.getByRole('complementary', { name: '詳情' })
@@ -1343,12 +1440,16 @@ async function workspaceSample(
 		).catch((e: Error) => ({ ms: NaN, seenMs: NaN, start: NaN, error: e.message }));
 		commits.push({
 			id: c.id,
+			zoom,
 			ms: r.ms,
 			seenMs: r.seenMs,
 			...('error' in r ? { error: r.error } : {})
 		});
 		await settle(page, 120);
 	}
+	// 最後一次提交後仍選取著：可讀縮放下的亮起／暗化畫面（目視確認用）
+	if (o.shots)
+		await page.screenshot({ path: path.join(d.OUT, `${o.name}-workspace-selected.png`) });
 	return {
 		name: o.name,
 		admitted,
@@ -1356,9 +1457,9 @@ async function workspaceSample(
 		ws,
 		dom,
 		toEditMs: toEdit.ms,
+		readable: { ...readable, wheels, anchor, targets: targets.length },
+		problems,
 		pan,
-		zoom,
-		panZoomed,
 		connect,
 		commits,
 		consoleErrors: [...s.errors]
@@ -1401,9 +1502,9 @@ async function workspace(d: Deps) {
 						ws: r.ws,
 						set: r.set,
 						dom: 'dom' in r ? r.dom : null,
-						pan: 'pan' in r ? r.pan.map((p) => p.intervalMs.p95) : null,
-						zoom: 'zoom' in r ? r.zoom : null,
-						panZoomed: 'panZoomed' in r ? r.panZoomed?.map((p) => p.intervalMs.p95) : null,
+						readable: 'readable' in r ? r.readable : null,
+						problems: 'problems' in r ? r.problems : null,
+						pan: 'pan' in r ? r.pan.map((p) => [p.frames.intervalMs.p95, d.r1(p.zoom)]) : null,
 						connect:
 							'connect' in r
 								? r.connect.map((c) => [c.frames.intervalMs.p95, d.r1(c.menuMs)])
@@ -1420,7 +1521,9 @@ async function workspace(d: Deps) {
 		return xs;
 	};
 	const formalWs = await run('workspace200', 200, 1000, false, samples, 10);
-	const stress500 = await run('workspace500-stress', 500, 5000, true, 1, 10);
+	// --skip-stress：只重跑正式 200／1000（500 觀察沿用先前產物，不在每輪除錯重跑）
+	const skipStress = d.flag('skip-stress');
+	const stress500 = skipStress ? [] : await run('workspace500-stress', 500, 5000, true, 1, 10);
 	// 正式：3 樣本、恰好 200／1000、15 平移、9 連線（選單是那一對）、30 提交；少一筆、壞一筆都 FAIL
 	const plan = { ...WORKSPACE_FORMAL, samples };
 	// 500 壓力只是觀察：規模以實際挑到的集合為準（dense 上限 5000，不一定剛好）
@@ -1435,19 +1538,24 @@ async function workspace(d: Deps) {
 		env,
 		budget: BUDGET,
 		formal: { plan, verdict: workspaceVerdict(formalWs, plan), samples: formalWs },
-		stress500: {
-			note: 'measurement-only forceWorkspace; product admission (200/1000) unchanged',
-			plan: stressPlan,
-			verdict: workspaceVerdict(stress500, stressPlan),
-			samples: stress500
-		}
+		stress500: skipStress
+			? { note: 'not rerun (--skip-stress); see earlier artifact' }
+			: {
+					note: 'measurement-only forceWorkspace; product admission (200/1000) unchanged',
+					plan: stressPlan,
+					verdict: workspaceVerdict(stress500, stressPlan),
+					samples: stress500
+				}
 	};
 	await writeFile(path.join(d.OUT, `workspace-${edges}.json`), JSON.stringify(out, null, 2));
 	console.log(
 		JSON.stringify(
 			{
 				workspace: out.formal.verdict.map(line),
-				stress500: out.stress500.verdict.map((v) => `observation ${line(v)}`)
+				stress500:
+					'verdict' in out.stress500
+						? out.stress500.verdict.map((v) => `observation ${line(v)}`)
+						: out.stress500.note
 			},
 			null,
 			1

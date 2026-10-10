@@ -43,10 +43,12 @@
 	import Icon from './Icon.svelte';
 	import ViewSync from './ViewSync.svelte';
 	import ConnectionPreview from './ConnectionPreview.svelte';
+	import FocusEdge, { type FocusEdgeData } from './FocusEdge.svelte';
 
 	let { editor }: { editor: Editor } = $props();
 
 	const nodeTypes = { graph: GraphNode };
+	const edgeTypes = { focus: FocusEdge };
 
 	const view = $derived(editor.canvas);
 	// 版面與位置由 Editor 保存：切到 3D 卸載畫布再回來，卡片不搬動；改名不重排
@@ -157,8 +159,23 @@
 					// 用排版的層級判斷（不用保留的位置），編輯後一般邊不會被當成反向
 					const back = lay.pos.get(e.from)!.x > lay.pos.get(e.to)!.x;
 					const animated = e.members.some((id) => editor.result?.edges.has(id));
+					const dash = e.props['確認狀態'] === '推定' ? 'stroke-dasharray: 5 4' : '';
+					const data: FocusEdgeData = {
+						lit: lit
+							? [
+									`stroke: ${color}`,
+									'stroke-width: 2.75',
+									dash,
+									`filter: drop-shadow(0 0 4px ${color})`,
+									'opacity: 0.75'
+								].join(';')
+							: null,
+						animated
+					};
 					return {
 						id: e.id,
+						type: 'focus',
+						data,
 						// 沒有包含可合併的承載邊只在相關時畫出
 						hidden: e.type === '承載' && !lit && !animated,
 						...(back
@@ -177,19 +194,17 @@
 									markerStart: e.bidirectional ? marker : undefined
 								}),
 						interactionWidth: 24,
-						animated,
-						style: [
-							`stroke: ${color}`,
-							`stroke-width: ${lit ? 2.75 : 1.25}`,
-							e.props['確認狀態'] === '推定' ? 'stroke-dasharray: 5 4' : '',
-							lit ? `filter: drop-shadow(0 0 4px ${color})` : '',
-							focus && !lit
-								? `opacity: ${editor.selected || editor.result ? 0.08 : 0.3}`
-								: 'opacity: 0.75'
-						].join(';')
+						// 流動虛線只畫在亮起的副本，底層不必每幀重畫
+						// 底層樣式與亮暗無關（亮起的副本在 FocusEdge、暗化在邊容器），選取／滑過不重畫上千條邊
+						style: [`stroke: ${color}`, 'stroke-width: 1.25', dash, 'opacity: 0.75'].join(';')
 					};
 				})
 		)
+	);
+
+	/** 沒亮的邊整層暗化（0.75 × 0.107 ≈ 0.08；滑過 0.75 × 0.4 = 0.3） */
+	const dimEdges = $derived(
+		focus ? (editor.selected || editor.result ? 'dim-edges' : 'dim-edges-soft') : null
 	);
 
 	/** 這一下點擊展開了疊卡（雙擊的後半不該再選取／縮放重排後的卡片） */
@@ -298,6 +313,7 @@
 		{nodes}
 		{edges}
 		{nodeTypes}
+		{edgeTypes}
 		fitView={!editor.canvasViewport}
 		initialViewport={editor.canvasViewport ?? undefined}
 		fitViewOptions={{ padding: 0.06 }}
@@ -308,7 +324,7 @@
 		zoomOnDoubleClick={false}
 		deleteKey={null}
 		colorMode="dark"
-		class={[editor.connecting && 'connecting', linking && 'linking']}
+		class={[editor.connecting && 'connecting', linking && 'linking', dimEdges]}
 		clickConnect={false}
 		connectionDragThreshold={6}
 		connectionLineContainerStyle="display: none"

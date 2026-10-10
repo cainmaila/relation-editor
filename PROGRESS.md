@@ -3,13 +3,16 @@
 ## P8 端到端與效能驗收、文件收斂（分支 cainmaila/main-3-3）
 
 - **Goal:** 在真 GPU 上實跑正式效能矩陣、補殘留情境 e2e、README 收斂；計畫 `.superpowers/sdd/plan/task-8-brief.md`，報告 `task-8-report.md`，產物 `artifacts/p8`
-- **Status:** agent-tested，**待 parent QA**（P0–P7 已交付、已自本檔移除）
+- **Status:** fix round 2 完成（agent-tested），**待 parent QA**（P0–P7 已交付、已自本檔移除）
 - **Done:**
   - `scripts/measure-p8.ts`：formal／workspace／stability／stress／selftest，頁內事件→畫出延遲、真滑鼠點選、PASS／FAIL 判定
   - 正式 10k／20k、10k／100k 各 5 冷樣本全數 PASS（含 25／25 真點選）；20 輪穩定性 PASS；50k／100k 壓力可操作
-  - 修正：3D 點選改用 pointerup 小數座標（click 被截成整數，重疊點選錯）；2D 平移 116.7→16.8ms、提交 196→29.6ms、拉線 116→33.4ms；3D 程式庫載入失敗後「重試」真的重新下載
-- **Blocker（未達門檻，保留 FAIL）:** 編輯頁 200／1,000 拉線幀間隔 p95 33.4ms ＞ 33.3ms（Chrome 合成分層，詳見報告）
-- **Todo:** parent QA 與人工操作確認（全圖／工作集辨識、找到省略關係、移出≠刪除）
+  - fix2：workspace 量測改在可讀縮放（真滾輪、容器內 hit-test，判定檢查 zoom 0.75–1.5／卡寬／字級，zoom 0.1 一律 FAIL）；
+    舊 fix1 數字只在 zoom 0.1 成立。可讀縮放下 hover／選取逐條改 1,000 條邊樣式造成 GPU 重 raster（~350ms），
+    改為邊容器整層暗化＋亮起副本（`FocusEdge.svelte`）後 3 樣本：平移／拉線 p95 16.8、提交 27.8、選單 55.9 全 PASS（`artifacts/p8/fix2`）
+  - fix2：節點／邊刪除在詳情、右鍵、工具列、⌫ 一律確認（`requestDelete`／`confirmDelete`，圖換版即作廢）
+- **Todo:** parent QA 與人工操作確認（全圖／工作集辨識、找到省略關係、移出≠刪除、可讀縮放下的亮起外觀）
+- **Notes:** 500 節點壓力產物仍是 fix2 之前的；3D 正式矩陣未重跑（路徑未改）
 
 ## 上萬節點渲染實驗（spike，不合併 main）
 

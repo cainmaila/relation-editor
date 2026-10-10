@@ -47,6 +47,9 @@ import {
 } from './search/search-client.svelte';
 import { UniverseRuntime, type LayoutWorkerLike, type Topology } from './universe/runtime';
 
+/** 等待確認的刪除 */
+export type DeleteRequest = { kind: 'node' | 'edge'; id: string; graph: Graph };
+
 /** 勾選系統的節點＋通用節點；邊兩端都在才留 */
 function visibleIn(g: Graph, systems: readonly System[]): Graph {
 	const nodes = g.nodes.filter((n) => {
@@ -102,8 +105,8 @@ export class Editor {
 	dialog = $state<'node' | 'edge' | 'search' | null>(null);
 	/** 連線模式起點：之後點的節點即終點 */
 	connecting = $state<string | null>(null);
-	/** 等待確認刪除的節點 */
-	armDelete = $state<string | null>(null);
+	/** 等待確認的刪除（節點或邊）；graph＝提出時的標準圖，確認時已換版就作廢 */
+	armDelete = $state.raw<DeleteRequest | null>(null);
 	/** 檢視器清單滑過的邊，畫布上高亮 */
 	hoverEdge = $state<string | null>(null);
 	/** 滑過的節點，畫布上亮它的直接相連 */
@@ -318,7 +321,7 @@ export class Editor {
 		if (gone(this.connecting)) this.connecting = null;
 		if (gone(this.hoverNode)) this.hoverNode = null;
 		if (gone(this.fresh)) this.fresh = null;
-		if (gone(this.armDelete)) this.armDelete = null;
+		if (this.armDelete?.kind === 'node' && gone(this.armDelete.id)) this.armDelete = null;
 		if (this.menu?.kind === 'node' && gone(this.menu.id)) this.menu = null;
 		this.loose = this.loose.filter((id) => !out.has(id));
 	}
@@ -659,6 +662,40 @@ export class Editor {
 		if (!this.#guardEdge(id) || !this.execute({ kind: 'deleteEdge', id })) return false;
 		this.select(null);
 		return true;
+	}
+
+	/**
+	 * 刪除資料一律兩步：先提出（守門不過就說明原因、不武裝），畫面顯示確認後才 confirmDelete。
+	 * 編輯頁限定；移出工作區不是刪資料，不走這裡
+	 */
+	requestDelete(kind: DeleteRequest['kind'], id: string): boolean {
+		this.armDelete = null;
+		if (this.page !== 'edit') return this.fail('全圖只讀：到編輯頁才能刪除');
+		if (kind === 'node') {
+			if (!this.#guardNode(id)) return false;
+			const block = this.deleteBlock(id);
+			if (block) return this.fail(block);
+		} else {
+			const e = this.edge(id);
+			if (!e) return this.fail(`邊已不存在：${id}`);
+			if (!this.#guardEdge(id)) return false;
+			if (e.readonly) return this.fail(IDC_MESSAGE);
+		}
+		this.armDelete = { kind, id, graph: this.graph };
+		return true;
+	}
+
+	cancelDelete() {
+		this.armDelete = null;
+	}
+
+	/** 執行已確認的刪除；武裝後圖已換版（別處改過）就作廢、要求重新確認 */
+	confirmDelete(): boolean {
+		const a = this.armDelete;
+		this.armDelete = null;
+		if (!a) return false;
+		if (a.graph !== this.graph) return this.fail('資料已變更，請重新確認刪除');
+		return a.kind === 'node' ? this.deleteNode(a.id) : this.deleteEdge(a.id);
 	}
 
 	/** 一次寫入節點草稿；base＝草稿開始時的節點，已被改過就拒絕 */
