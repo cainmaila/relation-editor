@@ -3,6 +3,8 @@
 //   pnpm measure:universe analysis [--edges 20000,100000] [--seed 1] [--samples 7] [--out dir]
 //   pnpm measure:universe browser [--edges 20000] [--init zero|d3] [--samples 5] [--url http://localhost:4173]
 //                                 [--channel chrome] [--headed] [--angle swiftshader] [--p6] [--out dir]
+//   pnpm measure:universe formal|workspace|stability|stress|selftest [--channel chrome] [--out dir]
+//     P8 正式驗收（見 scripts/measure-p8.ts）：頁內事件→畫出的延遲、真滑鼠點選、門檻判定
 // --p6：另外記錄 LOD／繪製計數、真滾輪拉近與真滑鼠點選（P6 煙霧，不是正式驗收）
 // browser 模式需先 `pnpm build && pnpm preview`（production build）。結果寫到 --out（預設 .superpowers/sdd/plan/artifacts/p1）。
 // 只記錄數據，不判定門檻；門檻以計畫 §5 為準。
@@ -693,7 +695,29 @@ await mkdir(OUT, { recursive: true });
 if (mode === 'analysis') await analysis();
 else if (mode === 'layout') await layout();
 else if (mode === 'browser') await browser();
-else {
-	console.error('usage: measure-universe.ts analysis|layout|browser [options]');
+else if (['formal', 'workspace', 'stability', 'stress', 'selftest'].includes(mode)) {
+	// P8 正式驗收：共用本檔的注入腳本、frame／拖曳／滾輪／搜尋 helper 與環境記錄
+	const { p8 } = await import('./measure-p8.ts');
+	await p8(mode, {
+		OUT,
+		SEED,
+		EDGES,
+		opt,
+		flag,
+		int,
+		summary,
+		r1,
+		environment,
+		INIT,
+		hasMark,
+		frames,
+		drag,
+		wheel,
+		search
+	});
+} else {
+	console.error(
+		'usage: measure-universe.ts analysis|layout|browser|formal|workspace|stability|stress|selftest [options]'
+	);
 	process.exit(1);
 }

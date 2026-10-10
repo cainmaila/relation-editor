@@ -38,6 +38,7 @@
 	import type { Editor } from '#lib/editor.svelte.js';
 	import { nodeType } from '#lib/model/config.js';
 	import { NODE_H, NODE_W } from '#lib/model/graph.js';
+	import { StableById } from '#lib/model/stable.js';
 	import GraphNode from './GraphNode.svelte';
 	import Icon from './Icon.svelte';
 	import ViewSync from './ViewSync.svelte';
@@ -80,37 +81,45 @@
 		};
 	});
 
-	const nodes = $derived<Node[]>([
-		...view.nodes.map((n) => {
-			const ids = members(n.id);
-			const any = (set: ReadonlySet<string>) => ids.some((id) => set.has(id));
-			const stack = ids.length > 1;
-			const active = !!editor.selected && ids.includes(editor.selected.id);
-			return {
-				id: n.id,
-				connectable: !stack,
-				type: 'graph',
-				position: pos.get(n.id)!,
-				width: NODE_W,
-				height: NODE_H,
-				data: {
-					name: n.name,
-					type: n.type,
-					system: nodeType(n.type).system ?? '通用',
-					color: SYSTEM_COLORS[nodeType(n.type).system ?? '通用'],
-					readonly: !!n.readonly,
-					stack: stack ? ids.length : 0,
-					unprocessed: any(editor.unprocessed),
-					unreachable: any(editor.unreachable),
-					dim: !!focus && !any(focus.nodes),
-					soft: !editor.selected && !editor.result && !editor.matched,
-					active,
-					origin: editor.result !== null && active,
-					fresh: editor.fresh === n.id
-				}
-			};
-		})
-	]);
+	// 內容沒變的卡片／邊沿用上一次的物件：改一張卡片的名稱不讓 Svelte Flow 重新採用、量測全部（P8 實測）
+	const stableNodes = new StableById<Node>();
+	const stableEdges = new StableById<Edge>();
+
+	const nodes = $derived<Node[]>(
+		stableNodes.take(
+			view.nodes.map((n) => {
+				const ids = members(n.id);
+				const any = (set: ReadonlySet<string>) => ids.some((id) => set.has(id));
+				const stack = ids.length > 1;
+				const active = !!editor.selected && ids.includes(editor.selected.id);
+				return {
+					id: n.id,
+					connectable: !stack,
+					type: 'graph',
+					position: pos.get(n.id)!,
+					width: NODE_W,
+					height: NODE_H,
+					// 卡片尺寸固定：先給量測值，Svelte Flow 重新採用卡片時沿用把手位置，不必整批重量、邊不會整批重建
+					measured: { width: NODE_W, height: NODE_H },
+					data: {
+						name: n.name,
+						type: n.type,
+						system: nodeType(n.type).system ?? '通用',
+						color: SYSTEM_COLORS[nodeType(n.type).system ?? '通用'],
+						readonly: !!n.readonly,
+						stack: stack ? ids.length : 0,
+						unprocessed: any(editor.unprocessed),
+						unreachable: any(editor.unreachable),
+						dim: !!focus && !any(focus.nodes),
+						soft: !editor.selected && !editor.result && !editor.matched,
+						active,
+						origin: editor.result !== null && active,
+						fresh: editor.fresh === n.id
+					}
+				};
+			})
+		)
+	);
 
 	// 只有主機：機框→主機（包含）與主機→機框（承載）畫成一條雙向線（資料仍是兩條邊）
 	const hostPair = $derived.by(() => {
@@ -132,52 +141,54 @@
 	const merged = $derived(new Set([...hostPair.values()].map((b) => b.id)));
 
 	const edges = $derived<Edge[]>(
-		view.edges
-			.filter((e) => !merged.has(e.id))
-			.map((e) => {
-				const pair = hostPair.get(e.id);
-				if (pair) e = { ...e, bidirectional: true, members: [...e.members, ...pair.members] };
-				const color = EDGE_COLORS[e.type] ?? '#94a3b8';
-				const marker = { type: MarkerType.ArrowClosed, color, width: 14, height: 14 };
-				const lit =
-					e.members.some((id) => focus?.edges.has(id) || editor.hoverEdge === id) ||
-					editor.hoverEdge === e.id;
-				// 反向邊（例：承載 主機→機框）改由左畫到右、箭頭放起點，走卡片下方的 back 把手，不和同對節點的邊疊在一起
-				// 用排版的層級判斷（不用保留的位置），編輯後一般邊不會被當成反向
-				const back = lay.pos.get(e.from)!.x > lay.pos.get(e.to)!.x;
-				const animated = e.members.some((id) => editor.result?.edges.has(id));
-				return {
-					id: e.id,
-					// 沒有包含可合併的承載邊只在相關時畫出
-					hidden: e.type === '承載' && !lit && !animated,
-					...(back
-						? {
-								source: e.to,
-								target: e.from,
-								sourceHandle: 'back',
-								targetHandle: 'back',
-								markerStart: marker,
-								markerEnd: e.bidirectional ? marker : undefined
-							}
-						: {
-								source: e.from,
-								target: e.to,
-								markerEnd: marker,
-								markerStart: e.bidirectional ? marker : undefined
-							}),
-					interactionWidth: 24,
-					animated,
-					style: [
-						`stroke: ${color}`,
-						`stroke-width: ${lit ? 2.75 : 1.25}`,
-						e.props['確認狀態'] === '推定' ? 'stroke-dasharray: 5 4' : '',
-						lit ? `filter: drop-shadow(0 0 4px ${color})` : '',
-						focus && !lit
-							? `opacity: ${editor.selected || editor.result ? 0.08 : 0.3}`
-							: 'opacity: 0.75'
-					].join(';')
-				};
-			})
+		stableEdges.take(
+			view.edges
+				.filter((e) => !merged.has(e.id))
+				.map((e) => {
+					const pair = hostPair.get(e.id);
+					if (pair) e = { ...e, bidirectional: true, members: [...e.members, ...pair.members] };
+					const color = EDGE_COLORS[e.type] ?? '#94a3b8';
+					const marker = { type: MarkerType.ArrowClosed, color, width: 14, height: 14 };
+					const lit =
+						e.members.some((id) => focus?.edges.has(id) || editor.hoverEdge === id) ||
+						editor.hoverEdge === e.id;
+					// 反向邊（例：承載 主機→機框）改由左畫到右、箭頭放起點，走卡片下方的 back 把手，不和同對節點的邊疊在一起
+					// 用排版的層級判斷（不用保留的位置），編輯後一般邊不會被當成反向
+					const back = lay.pos.get(e.from)!.x > lay.pos.get(e.to)!.x;
+					const animated = e.members.some((id) => editor.result?.edges.has(id));
+					return {
+						id: e.id,
+						// 沒有包含可合併的承載邊只在相關時畫出
+						hidden: e.type === '承載' && !lit && !animated,
+						...(back
+							? {
+									source: e.to,
+									target: e.from,
+									sourceHandle: 'back',
+									targetHandle: 'back',
+									markerStart: marker,
+									markerEnd: e.bidirectional ? marker : undefined
+								}
+							: {
+									source: e.from,
+									target: e.to,
+									markerEnd: marker,
+									markerStart: e.bidirectional ? marker : undefined
+								}),
+						interactionWidth: 24,
+						animated,
+						style: [
+							`stroke: ${color}`,
+							`stroke-width: ${lit ? 2.75 : 1.25}`,
+							e.props['確認狀態'] === '推定' ? 'stroke-dasharray: 5 4' : '',
+							lit ? `filter: drop-shadow(0 0 4px ${color})` : '',
+							focus && !lit
+								? `opacity: ${editor.selected || editor.result ? 0.08 : 0.3}`
+								: 'opacity: 0.75'
+						].join(';')
+					};
+				})
+		)
 	);
 
 	/** 這一下點擊展開了疊卡（雙擊的後半不該再選取／縮放重排後的卡片） */

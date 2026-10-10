@@ -34,6 +34,7 @@
 			isolated: s.isolated
 		};
 		probe.mark('fixture:done', stats);
+		const editor = new Editor(graph);
 		const hook = {
 			options,
 			meta,
@@ -43,9 +44,19 @@
 			/** 瀏覽器實際的起始座標：決定性 phyllotaxis 種子（init 參數只供 layout 模式對照） */
 			seed: 'phyllotaxis',
 			renderInfo: probe.renderInfo,
-			gpu: probe.gpu
+			gpu: probe.gpu,
+			/** P8 harness 準備樣本用（例如挑 200 節點／1,000 條邊的工作區）；量測本身走真滑鼠鍵盤 */
+			editor,
+			/**
+			 * 500 節點 2D 壓力觀察專用：直接設定工作區，明確繞過產品 admission（200／1,000）。
+			 * 只存在於 /measure；正式頁面與 Editor 的上限不變。
+			 */
+			forceWorkspace(ids: string[]) {
+				editor.working = [...new Set(ids)].filter((id) => editor.node(id));
+				return editor.working.length;
+			}
 		};
-		return { editor: new Editor(graph), probe, hook };
+		return { editor, probe, hook };
 	}
 
 	// 只在載入時讀一次 URL（量測入口不隨 query 重建大圖）
