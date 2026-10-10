@@ -1169,7 +1169,9 @@ async function stress(d: Deps) {
 						stress: r.label,
 						fixture: v.fixture,
 						verdict: v.verdict.map(
-							(x) => `${x.pass ? 'PASS' : 'FAIL'} ${x.metric}: ${x.value}/${x.budget}`
+							// 縮減觀察（例如 dpr2 50k 不跑分析／hub）沒量到的項目標 SKIP，不冒充 FAIL 或 PASS
+							(x) =>
+								`${x.n === 0 ? 'SKIP(not measured)' : x.pass ? 'PASS' : 'FAIL'} ${x.metric}: ${x.value}/${x.budget}`
 						)
 					},
 					null,

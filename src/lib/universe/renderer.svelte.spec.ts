@@ -31,9 +31,13 @@ function setup(three: Three, labelHost = document.createElement('div')) {
 /** 記下每個 GPU 資源（geometry／material）是否被 dispose */
 function tracked(failAt: { cls: 'InstancedMesh'; nth: number } | null) {
 	const made: { disposed: boolean }[] = [];
-	const track = <T extends new (...a: never[]) => { dispose(): void }>(C: T) =>
+	// TS mixin 規則：建構子必須是 (...a: any[])
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	type Ctor = new (...a: any[]) => { dispose(): void };
+	const track = <T extends Ctor>(C: T) =>
 		class extends C {
-			constructor(...a: never[]) {
+			// eslint-disable-next-line @typescript-eslint/no-explicit-any
+			constructor(...a: any[]) {
 				super(...a);
 				const rec = { disposed: false };
 				made.push(rec);

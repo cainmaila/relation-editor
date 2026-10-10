@@ -246,6 +246,69 @@ test.describe('正式 mock（2,066 節點）', () => {
 	});
 });
 
+/**
+ * 3D 繪圖程式庫是動態載入的 chunk（hash 每次 build 不同），以內容辨識：3d-force-graph 的 DOM class。
+ * mode：abort＝第一次載入失敗；hold＝卡住直到 release()。
+ */
+async function routeRendererChunk(page: Page, mode: 'abort' | 'hold') {
+	let hits = 0;
+	let release!: () => void;
+	const held = new Promise<void>((r) => (release = r));
+	await page.route('**/_app/immutable/**/*.js', async (route) => {
+		const res = await route.fetch();
+		const body = await res.text();
+		if (!body.includes('scene-nav-info')) return route.fulfill({ response: res, body });
+		hits++;
+		if (mode === 'abort' && hits === 1) return route.abort('failed');
+		if (mode === 'hold') await held;
+		return route.fulfill({ response: res, body });
+	});
+	return { hits: () => hits, release };
+}
+
+test.describe('3D 程式庫載入（P8 殘留情境）', () => {
+	test('動態載入失敗：明確錯誤，搜尋仍可用；按重試後真的載入成功', async ({ page }) => {
+		const errors: string[] = [];
+		page.on('pageerror', (e) => errors.push(e.message));
+		const r = await routeRendererChunk(page, 'abort');
+		await page.goto('/');
+		const alert = page.getByRole('alert').filter({ hasText: '3D 宇宙載入失敗' });
+		await expect(alert).toBeVisible({ timeout: 30_000 });
+		expect(r.hits()).toBe(1);
+		await page.keyboard.press('ControlOrMeta+k');
+		await page.getByRole('textbox', { name: '搜尋節點' }).fill('機櫃 A-03');
+		await page.keyboard.press('Enter');
+		await expect(
+			page.getByRole('complementary', { name: '詳情' }).getByLabel('名稱', { exact: true })
+		).toHaveValue('機櫃 A-03');
+		await alert.getByRole('button', { name: '重試' }).click();
+		await ready(page);
+		await expect(alert).toHaveCount(0);
+		// 重試真的重新抓了那個 chunk（瀏覽器記住失敗的 module，同 URL 不會再抓）
+		expect(r.hits()).toBe(2);
+		expect(await gv(page, (h) => h.nodeCount())).toBe(2066);
+		expect(errors).toEqual([]);
+	});
+
+	test('載入中切到編輯頁：載入完成後不建立殘留畫布，回全圖正常', async ({ page }) => {
+		const errors: string[] = [];
+		page.on('pageerror', (e) => errors.push(e.message));
+		const r = await routeRendererChunk(page, 'hold');
+		await page.goto('/');
+		await expect.poll(() => r.hits(), { timeout: 30_000 }).toBe(1);
+		await tab(page, 'edit').click();
+		await expect(page.locator('.svelte-flow__pane')).toBeVisible();
+		r.release();
+		// 等舊的 import 在卸載後完成（給足夠時間讓它跑完）
+		await page.waitForTimeout(1500);
+		await expect(page.locator('main canvas')).toHaveCount(0);
+		await toGraph(page);
+		await expect(page.locator('main canvas')).toHaveCount(1);
+		expect(await gv(page, (h) => h.nodeCount())).toBe(2066);
+		expect(errors).toEqual([]);
+	});
+});
+
 test.describe('代表性大圖（10k／20k）', () => {
 	const URL = '/measure?edges=20000&seed=1';
 

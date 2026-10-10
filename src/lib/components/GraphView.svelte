@@ -1,3 +1,10 @@
+<script lang="ts" module>
+	import { retryableImport } from '#lib/universe/retry-import.js';
+	// 文件層級：瀏覽器記住失敗的動態載入是整份文件共用，重掛元件後重試也要換 URL
+	const loadForceGraph = retryableImport(() => import('3d-force-graph'));
+	const loadThree = retryableImport(() => import('three'));
+</script>
+
 <script lang="ts">
 	// 全圖（只讀）：3d-force-graph 只提供相機／場景／控制（不給它 graphData，不跑它的模擬）。
 	// 繪製分層在 universe/renderer.ts：遠景 Points（可見系統全部節點）、近景 detail（依每個節點的投影半徑、
@@ -132,10 +139,7 @@
 	const fmt = (n: number) => n.toLocaleString('en-US');
 
 	async function init(isDead: () => boolean): Promise<{ api: Api; off: () => void }> {
-		const [{ default: ForceGraph3D }, three] = await Promise.all([
-			import('3d-force-graph'),
-			import('three')
-		]);
+		const [{ default: ForceGraph3D }, three] = await Promise.all([loadForceGraph(), loadThree()]);
 		const noop = { api: { build: () => {}, paint: () => {}, refresh: () => {} }, off: () => {} };
 		// 卸載後才載入完成：不建立任何 GPU 資源
 		if (isDead()) return noop;
