@@ -428,12 +428,15 @@ test.describe('編輯（編輯頁）', () => {
 		await detail(page).getByLabel('屬性名稱').fill('品牌');
 		await detail(page).getByLabel('屬性值').fill('示意');
 		await detail(page).getByRole('button', { name: '新增屬性' }).click();
+		await detail(page).getByRole('button', { name: '儲存' }).click();
+		await expect(detail(page).getByRole('button', { name: '儲存' })).toBeDisabled();
 		await expect(detail(page).getByLabel('額定電流')).toHaveValue('16A');
 		await expect(detail(page).getByLabel('品牌')).toHaveValue('示意');
 
 		await pick(page, 'Core Switch-1');
 		await pickEdge(page, '連線：匯聚 Switch AGG-A');
 		await detail(page).getByLabel('方向').selectOption('雙向');
+		await detail(page).getByRole('button', { name: '儲存' }).click();
 		await expect(detail(page).getByLabel('方向')).toHaveValue('雙向');
 		const edge = page
 			.locator('.svelte-flow__edge[data-id="連線:Core Switch-1>匯聚 Switch AGG-A"] path')
@@ -442,6 +445,7 @@ test.describe('編輯（編輯頁）', () => {
 
 		await pick(page, '空調箱 AHU-2F-1');
 		await detail(page).getByLabel('名稱', { exact: true }).fill('空調箱 AHU-2F-01');
+		await detail(page).getByRole('button', { name: '儲存' }).click();
 		await expect(node(page, '空調箱 AHU-2F-01')).toBeVisible();
 		await expect(detail(page).getByLabel('名稱', { exact: true })).toHaveValue('空調箱 AHU-2F-01');
 	});
@@ -941,6 +945,41 @@ test.describe('手測回報', () => {
 		const path = page.locator('.svelte-flow__edge[data-id^="e-"] path').first();
 		await expect(path).toHaveAttribute('style', /stroke-dasharray/);
 		await s.selectOption('已確認');
+		await detail(page).getByRole('button', { name: '儲存' }).click();
 		await expect(path).not.toHaveAttribute('style', /stroke-dasharray/);
+	});
+
+	test('詳情草稿：未儲存不改圖，取消還原，儲存一次寫回', async ({ page }) => {
+		await toEdit(page, ['空調箱 AHU-2F-1']);
+		await pick(page, '空調箱 AHU-2F-1');
+		const name = detail(page).getByLabel('名稱', { exact: true });
+		const save = detail(page).getByRole('button', { name: '儲存' });
+		await expect(save).toBeDisabled();
+		await name.fill('空調箱 草稿');
+		await detail(page).getByLabel('屬性名稱').fill('品牌');
+		await detail(page).getByLabel('屬性值').fill('示意');
+		await detail(page).getByRole('button', { name: '新增屬性' }).click();
+		// 草稿只在詳情欄，畫布仍是原名
+		await expect(node(page, '空調箱 AHU-2F-1')).toBeVisible();
+		await expect(detail(page)).toContainText('尚未儲存');
+		await detail(page).getByRole('button', { name: '取消變更' }).click();
+		await expect(name).toHaveValue('空調箱 AHU-2F-1');
+		await expect(detail(page).getByLabel('品牌')).toHaveCount(0);
+		await expect(save).toBeDisabled();
+
+		await name.fill('空調箱 已存');
+		await detail(page).getByLabel('屬性名稱').fill('品牌');
+		await detail(page).getByLabel('屬性值').fill('示意');
+		await detail(page).getByRole('button', { name: '新增屬性' }).click();
+		await save.click();
+		await expect(node(page, '空調箱 已存')).toBeVisible();
+		await expect(detail(page).getByLabel('品牌')).toHaveValue('示意');
+		await expect(save).toBeDisabled();
+
+		// 不合法欄位整筆不寫入，畫布維持已儲存的名稱
+		await name.fill('');
+		await save.click();
+		await expect(page.getByText('名稱不可空白')).toBeVisible();
+		await expect(node(page, '空調箱 已存')).toBeVisible();
 	});
 });

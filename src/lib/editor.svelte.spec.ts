@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { flushSync } from 'svelte';
+import { describe, expect, it, vi } from 'vitest';
 import { Editor, WORK_LIMIT } from './editor.svelte';
 
 describe('Editor.addNode', () => {
@@ -139,5 +140,78 @@ describe('Editor 初始圖', () => {
 		const e = new Editor(g);
 		expect(e.graph).toBe(g);
 		expect(e.unprocessed.size).toBe(0);
+	});
+});
+
+describe('Editor 命令與 revision', () => {
+	const AHU = '空調箱 AHU-2F-1';
+	const LINK = '連線:Core Switch-1>匯聚 Switch AGG-A';
+
+	it('節點查詢走共用索引', () => {
+		const e = new Editor();
+		expect(e.node(AHU)).toBe(e.index.nodeById.get(AHU));
+		expect(e.edge(LINK)).toBe(e.index.edgeById.get(LINK));
+	});
+
+	it('updateNode 一次寫入名稱與屬性；只增 revision', () => {
+		const e = new Editor();
+		const base = e.node(AHU)!;
+		const top = e.topologyRevision;
+		expect(e.updateNode(AHU, { name: '空調箱 AHU-2F-01', props: { 型號: 'X' } }, base)).toBe(true);
+		expect(e.node(AHU)).toMatchObject({ name: '空調箱 AHU-2F-01', props: { 型號: 'X' } });
+		expect(e.revision).toBe(1);
+		expect(e.topologyRevision).toBe(top);
+		expect(e.lastChange?.upsertNodes.map((n) => n.id)).toEqual([AHU]);
+	});
+
+	it('任一欄位不合法時整筆不寫入，並顯示原因', () => {
+		const e = new Editor();
+		const before = e.graph;
+		expect(e.updateEdge(LINK, { bidirectional: true, props: { 確認狀態: '亂填' } })).toBe(false);
+		expect(e.graph).toBe(before);
+		expect(e.revision).toBe(0);
+		expect(e.message).toBe('確認狀態只能是：已確認、推定');
+	});
+
+	it('過期草稿拒絕寫入', () => {
+		const e = new Editor();
+		const base = e.node(AHU)!;
+		e.updateNode(AHU, { name: 'A' }, base);
+		expect(e.updateNode(AHU, { name: 'B' }, base)).toBe(false);
+		expect(e.node(AHU)!.name).toBe('A');
+	});
+
+	it('改名不重算拓撲分析；改方向才重算', () => {
+		const e = new Editor();
+		const u = e.unprocessed;
+		const r = e.unreachable;
+		e.updateNode(AHU, { name: '改名' });
+		expect(e.unprocessed).toBe(u);
+		expect(e.unreachable).toBe(r);
+		e.updateEdge(LINK, { bidirectional: true });
+		expect(e.unprocessed).not.toBe(u);
+	});
+
+	it('改名／屬性不讓 3D 版面輸入失效（spy）', () => {
+		const e = new Editor();
+		const spy = vi.fn();
+		const stop = $effect.root(() => {
+			$effect(() => spy(e.layoutGraph));
+		});
+		flushSync();
+		expect(spy).toHaveBeenCalledTimes(1);
+		e.updateNode(AHU, { name: '改名', props: { 型號: 'X' } });
+		e.updateEdge(LINK, { props: { 確認狀態: '推定' } });
+		flushSync();
+		expect(spy).toHaveBeenCalledTimes(1);
+		// 版面輸入不帶舊名稱以外的影響；搜尋仍讀最新名稱
+		expect(e.graphVisible.nodes.find((n) => n.id === AHU)!.name).toBe('改名');
+		e.updateEdge(LINK, { bidirectional: true });
+		flushSync();
+		expect(spy).toHaveBeenCalledTimes(2);
+		e.solo('電力');
+		flushSync();
+		expect(spy).toHaveBeenCalledTimes(3);
+		stop();
 	});
 });

@@ -1,7 +1,6 @@
 <script lang="ts">
 	import type { Editor } from '#lib/editor.svelte.js';
 	import { CONFIRM_STATES, IDC_MESSAGE, UNREACHABLE_LABEL, nodeType } from '#lib/model/config.js';
-	import type { Props } from '#lib/model/types.js';
 	import { EDGE_COLORS, SYSTEM_COLORS } from './Canvas.svelte';
 	import Icon from './Icon.svelte';
 
@@ -17,11 +16,9 @@
 	const graph = $derived(editor.page === 'graph');
 	const idc = $derived(!!(node ?? edge)?.readonly);
 	const ro = $derived(idc || graph);
-	const incoming = $derived(node ? editor.graph.edges.filter((e) => e.to === node.id) : []);
-	const outgoing = $derived(node ? editor.graph.edges.filter((e) => e.from === node.id) : []);
-	const nodeEdges = $derived(
-		node ? editor.graph.edges.filter((e) => e.from === node.id || e.to === node.id).length : 0
-	);
+	const incoming = $derived(node ? editor.incomingEdges(node.id) : []);
+	const outgoing = $derived(node ? editor.outgoingEdges(node.id) : []);
+	const nodeEdges = $derived(node ? editor.incidentEdges(node.id).length : 0);
 	const block = $derived(node ? editor.deleteBlock(node.id) : null);
 	const nameOf = (id: string) => editor.node(id)?.name ?? id;
 	const colorOf = (id: string) =>
@@ -30,11 +27,50 @@
 	let propKey = $state('');
 	let propValue = $state('');
 
-	function addProp(kind: 'node' | 'edge', id: string) {
-		if (!propKey.trim()) return;
-		if (propKey.trim() === '確認狀態' && !CONFIRM_STATES.includes(propValue))
+	type Draft = { name: string; bidirectional: boolean; props: { key: string; value: string }[] };
+	const fromEntity = (): Draft => ({
+		name: node?.name ?? '',
+		bidirectional: edge?.bidirectional ?? false,
+		props: Object.entries((node ?? edge)?.props ?? {}).map(([key, value]) => ({ key, value }))
+	});
+	/** 本地草稿：選取或標準資料換新物件時重建；儲存才經命令一次寫回，標準圖不直接 bind */
+	const draft = $derived.by(() => {
+		const d = $state(fromEntity());
+		return d;
+	});
+	const draftProps = () => Object.fromEntries(draft.props.map((p) => [p.key, p.value]));
+	const same = (a: Record<string, string>, b: Record<string, string>) =>
+		Object.keys(a).length === Object.keys(b).length && Object.keys(a).every((k) => a[k] === b[k]);
+	const dirty = $derived(
+		node
+			? draft.name !== node.name || !same(draftProps(), node.props)
+			: edge
+				? draft.bidirectional !== edge.bidirectional || !same(draftProps(), edge.props)
+				: false
+	);
+
+	function save() {
+		if (!dirty) return;
+		const props = draftProps();
+		if (node) editor.updateNode(node.id, { name: draft.name, props }, node);
+		else if (edge) editor.updateEdge(edge.id, { bidirectional: draft.bidirectional, props }, edge);
+	}
+
+	function cancel() {
+		Object.assign(draft, fromEntity());
+		propKey = propValue = '';
+		editor.message = '';
+	}
+
+	/** 只加到草稿；按儲存才寫回 */
+	function addProp() {
+		const key = propKey.trim();
+		if (!key) return;
+		if (key === '確認狀態' && !CONFIRM_STATES.includes(propValue))
 			return void (editor.message = `確認狀態只能是：${CONFIRM_STATES.join('、')}`);
-		editor.setProp(kind, id, propKey.trim(), propValue);
+		const hit = draft.props.find((p) => p.key === key);
+		if (hit) hit.value = propValue;
+		else draft.props.push({ key, value: propValue });
 		propKey = propValue = '';
 	}
 
@@ -93,31 +129,19 @@
 	<h3 class="mb-2 eyebrow">{title}</h3>
 {/snippet}
 
-{#snippet propsEditor(kind: 'node' | 'edge', id: string, props: Props)}
+{#snippet propsEditor()}
 	<section class="border-t border-white/6 px-5 py-4">
 		{@render section('屬性')}
 		<dl class="grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-1.5 text-sm">
-			{#each Object.keys(props) as k (k)}
-				<dt class="text-xs text-slate-400">{k}</dt>
+			{#each draft.props as p (p.key)}
+				<dt class="text-xs text-slate-400">{p.key}</dt>
 				<dd>
-					{#if k === '確認狀態'}
-						<select
-							aria-label={k}
-							value={props[k]}
-							onchange={(e) => editor.setProp(kind, id, k, e.currentTarget.value)}
-							disabled={ro}
-							class="field py-1"
-						>
+					{#if p.key === '確認狀態'}
+						<select aria-label={p.key} bind:value={p.value} disabled={ro} class="field py-1">
 							{#each CONFIRM_STATES as v (v)}<option>{v}</option>{/each}
 						</select>
 					{:else}
-						<input
-							aria-label={k}
-							value={props[k]}
-							oninput={(e) => editor.setProp(kind, id, k, e.currentTarget.value)}
-							disabled={ro}
-							class="field py-1"
-						/>
+						<input aria-label={p.key} bind:value={p.value} disabled={ro} class="field py-1" />
 					{/if}
 				</dd>
 			{:else}
@@ -132,11 +156,20 @@
 					class="btn-ghost shrink-0 px-2"
 					aria-label="新增屬性"
 					title="新增屬性"
-					onclick={() => addProp(kind, id)}><Icon name="node-plus" /></button
+					onclick={addProp}><Icon name="node-plus" /></button
 				>
 			</div>
 		{/if}
 	</section>
+	{#if !ro}
+		<div class="flex justify-end gap-1.5 border-t border-white/6 px-5 py-3">
+			{#if dirty}<span class="mr-auto self-center text-[11px] text-amber-300">尚未儲存</span>{/if}
+			<button class="btn-ghost px-2.5 py-1 text-xs" disabled={!dirty} onclick={cancel}
+				>取消變更</button
+			>
+			<button class="btn-primary px-2.5 py-1 text-xs" disabled={!dirty} onclick={save}>儲存</button>
+		</div>
+	{/if}
 {/snippet}
 
 {#snippet edgeList(title: string, list: typeof incoming, other: 'from' | 'to')}
@@ -210,14 +243,11 @@
 				位客戶
 			</p>
 			<ul class="flex flex-wrap gap-1.5 px-4 pt-2 pb-3">
-				{#each editor.result.customers as c (c)}
+				{#each editor.result.customerIds as id, i (id)}
 					<li>
 						<button
 							class="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-2.5 py-0.5 text-xs text-emerald-200 hover:bg-emerald-400/20"
-							onclick={() => {
-								const id = editor.graph.nodes.find((n) => n.name === c)?.id;
-								if (id) editor.fit([id]);
-							}}>{c}</button
+							onclick={() => editor.fit([id])}>{editor.result?.customers[i]}</button
 						>
 					</li>
 				{:else}
@@ -246,8 +276,8 @@
 			</p>
 			<input
 				aria-label="名稱"
-				value={node.name}
-				oninput={(e) => editor.edit('node', node.id, { name: e.currentTarget.value })}
+				bind:value={draft.name}
+				onkeydown={(e) => e.key === 'Enter' && save()}
 				disabled={ro}
 				class="-mx-1.5 mt-1.5 field border-transparent bg-transparent px-1.5 text-lg font-semibold hover:border-white/10 disabled:mx-0 disabled:px-0"
 			/>
@@ -347,7 +377,7 @@
 			<p class="mx-5 mb-3 text-[11px] leading-relaxed text-slate-400">無法刪除：{block}</p>
 		{/if}
 
-		{@render propsEditor('node', node.id, node.props)}
+		{@render propsEditor()}
 		{@render edgeList('連入', incoming, 'from')}
 		{@render edgeList('連出', outgoing, 'to')}
 	{:else if edge}
@@ -380,9 +410,8 @@
 				<dd>
 					<select
 						aria-label="方向"
-						value={edge.bidirectional ? '雙向' : '單向'}
-						onchange={(e) =>
-							editor.edit('edge', edge.id, { bidirectional: e.currentTarget.value === '雙向' })}
+						value={draft.bidirectional ? '雙向' : '單向'}
+						onchange={(e) => (draft.bidirectional = e.currentTarget.value === '雙向')}
 						disabled={ro}
 						class="field w-28 py-1"
 					>
@@ -404,7 +433,7 @@
 				>
 			</div>
 		{/if}
-		{@render propsEditor('edge', edge.id, edge.props)}
+		{@render propsEditor()}
 	{:else}
 		<div class="flex flex-1 flex-col px-5 py-6">
 			<p class="eyebrow">檢視器</p>

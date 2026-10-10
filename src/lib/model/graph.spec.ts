@@ -11,6 +11,7 @@ import {
 	unreachable,
 	validateEdge
 } from './graph';
+import { buildGraphIndex } from './graph-index';
 import { graphMock, idcMock } from './mock';
 import { nodeType, type System } from './config';
 import type { Graph } from './types';
@@ -292,4 +293,51 @@ it('pin：既有節點沿用舊位置，新節點重疊時排到該欄最下方'
 			['d', { x: 512, y: 0 }]
 		])
 	);
+});
+
+describe('共用索引', () => {
+	it('查詢可接受預先建好的索引，結果與自行建索引相同', () => {
+		const g = full();
+		const idx = buildGraphIndex(g);
+		expect(unprocessed(g, idx)).toEqual(unprocessed(g));
+		expect(unreachable(g, idx)).toEqual(unreachable(g));
+		expect(findCustomers(g, 'UPS-1', idx)).toEqual(findCustomers(g, 'UPS-1'));
+		expect(validateEdge(g, '偵測器 SD-01', '機櫃 A-03', '監測', idx)).toBe(
+			validateEdge(g, '偵測器 SD-01', '機櫃 A-03', '監測')
+		);
+		expect(checkDeleteNode(g, '機櫃 A-01', idx)).toBe(checkDeleteNode(g, '機櫃 A-01'));
+	});
+
+	it('找客戶同時回傳客戶 ID，與名稱一一對應', () => {
+		const g = full();
+		const r = findCustomers(g, 'UPS-1');
+		expect(r.customerIds.map((id) => g.nodes.find((n) => n.id === id)!.name)).toEqual(r.customers);
+	});
+
+	it('雙向邊、有向環與相連邊刪除後的走訪', () => {
+		const node = (id: string, type = '通用節點') => ({ id, type, name: id, props: {} });
+		const edge = (id: string, from: string, to: string, bidirectional = false) => ({
+			id,
+			type: '包含',
+			from,
+			to,
+			bidirectional,
+			props: {}
+		});
+		const g: Graph = {
+			nodes: [node('TPKC 大樓', '大樓'), node('a'), node('b'), node('c', '客戶')],
+			edges: [
+				edge('r', 'TPKC 大樓', 'a'),
+				edge('ab', 'a', 'b'),
+				edge('ba', 'b', 'a'),
+				edge('cb', 'c', 'b', true)
+			]
+		};
+		// 環不會無限走；雙向邊讓 b 走得到客戶 c
+		expect(findCustomers(g, 'a').customers).toEqual(['c']);
+		expect(unreachable(g).size).toBe(0);
+		const cut: Graph = { ...g, edges: g.edges.filter((e) => e.id !== 'cb') };
+		expect(unprocessed(cut, buildGraphIndex(cut))).toEqual(new Set(['c']));
+		expect(unreachable(cut, buildGraphIndex(cut))).toEqual(new Set(['TPKC 大樓', 'a', 'b']));
+	});
 });

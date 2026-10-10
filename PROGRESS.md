@@ -1,9 +1,21 @@
 # PROGRESS
 
+## P2 共用索引、命令與 revision（分支 cainmaila/main-3-3）
+
+- **Goal:** 兩個視圖共用的圖核心：`GraphIndex`、typed commands／`GraphChange`、`revision`／`topologyRevision`；詳情欄改本地草稿＋儲存／取消。計畫 `.superpowers/sdd/plan/task-2-brief.md`
+- **Done（agent-tested，待 parent QA）:**
+  - `graph-index.ts`：`buildGraphIndex()` 一次 O(V+E) 建 `nodeById／edgeById／incoming／outgoing／incident`（只記 EdgeId）；`graph.ts` 的 `unprocessed／unreachable／findCustomers／validateEdge／checkDeleteNode` 改吃選用的預建索引（舊呼叫照舊）；`findCustomers` 多回 `customerIds`
+  - `graph-change.ts`：`applyCommand()` 先驗完所有欄位才產生新狀態；IDC 唯讀、根節點、連接限制、不存在／過期（`base`）實體明確拒絕；改名／屬性只增 `revision`，增刪與方向改變才增 `topologyRevision`；回傳變更 ID 集合
+  - `Editor.execute()` 是唯一寫入口；`updateNode／updateEdge` 取代 `edit／setProp`；`node()／edge()` 走索引；`unprocessed／unreachable` 只看 `topologyRevision`；新 `layoutGraph` 供 3D 版面（改名不重建，spy 驗證）
+  - `DetailPanel` 本地草稿（名稱、方向、屬性、新增屬性）＋「儲存」「取消變更」，不 bind 標準圖；`ContextMenu` 方向切換走命令；`GraphView` 改吃 `layoutGraph`
+  - check 0、lint 綠、unit 104、e2e 57 全過（含新增「詳情草稿」）
+- **Todo:** P3 起依 `revision`／`lastChange` 接搜尋；P4 起 2D `editVisible`／`stacks` 仍隨任何 graph 變更重算
+- **Notes:** 切換選取會丟棄未儲存草稿（無提示）；報告 `.superpowers/sdd/plan/task-2-report.md`
+
 ## P1 代表性 10k 資料與量測基線（分支 cainmaila/main-3-3）
 
 - **Goal:** 建立唯一 root、domain-valid、可重現的 10k 規模資料（20k／100k 邊）與 production 量測入口，記錄現況基線（不修效能、不改門檻）。計畫 `.superpowers/sdd/plan/task-1-brief.md`
-- **Done（agent-tested，待 controller QA）:**
+- **Done（controller 已檢視 diff，独立通過 fixture/layout 46 tests、量測入口 13 e2e；基線效能未達標）:**
   - `scaleFixture()`（`src/lib/model/scale-fixture.ts`）：seed 化；10,000 節點，hub 度 1001、ToR 環（有向 cycle）、20 個孤立節點、同名不同 id、8 系統、雙向邊、props 各自獨立；`graphStats()` 算 N／E／最大度／連通塊
   - `/measure?edges=&seed=&init=` opt-in 量測頁：僅此路由掛 `window.__measure`（卸載即刪）；預設首頁仍是 mock（e2e 驗證）
   - `GraphView` 加選用 `probe`：`graph:init`、`layout:start`、`layout:worker-done`、`layout:ready`、`camera:interactive`；worker 改用共用 `runLayout`（init 預設仍 zero）
@@ -12,6 +24,7 @@
 - **基線（M2、headless Chromium、真 Metal GPU、zero init、5 次冷啟）:** 20k 邊可操作相機 p50 11.56s、100k 10.86s（worker 版面 ~10–10.8s）；拖曳／滾輪 frame p95 ~16.7ms；heap(GC 後) 71／85MB；DOM 44.7k 元素。SwiftShader 軟體繪製拖曳 p95 433ms（不可用，不可與 GPU 數字混用）
 - **版面實驗:** d3 初始位置比 zero 少首 tick 尖峰（~630→~100ms）、移除 ~450k 離群點、分布正常；但總時仍 ~9–10s，熱點是 many-body charge（非 link）
 - **Todo:** P5 修冷啟動（≤2s 門檻目前未達）；搜尋 `slice(0,8)` 不完整；大綱一次渲染全部節點
+- **QA 修正:** `3418931` 增加 fixture／URL 有限整數與規模驗證、補邊嘗試上限、量測逾時與程序清理；拒絕錯誤參數，不默默改成有效資料。
 - **Notes:** 量測時工作樹未提交；d3 只跑 2 次、headed 1 次；layout cpuprofile 來自 Node 而非瀏覽器 worker。報告 `.superpowers/sdd/plan/task-1-report.md`，原始產物 `.superpowers/sdd/plan/artifacts/p1`（不 commit）
 
 ## P0 接回 v0.4 雙頁基線（分支 cainmaila/main-3-3）

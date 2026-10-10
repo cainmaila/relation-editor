@@ -1,37 +1,13 @@
 // 圖的純邏輯：未處理、找客戶、到不了客戶、連接限制、刪除檢查、分層排版。
 import { CUSTOMER_TYPE, IDC_MESSAGE, ROOT_ID, edgeType, nodeType } from './config';
+import { buildGraphIndex, edgesOf, type GraphIndex } from './graph-index';
 import type { GEdge, GNode, Graph } from './types';
 
-/** 每個節點相連的邊（兩端都記）：走訪只看相連的邊，不掃全部 */
-const incident = (g: Graph) => {
-	const m = new Map<string, GEdge[]>();
-	const push = (id: string, e: GEdge) => {
-		const list = m.get(id);
-		if (list) list.push(e);
-		else m.set(id, [e]);
-	};
-	for (const e of g.edges) {
-		push(e.from, e);
-		push(e.to, e);
-	}
-	return m;
-};
-
 /** 不看方向連不到根節點的節點 */
-export function unprocessed(g: Graph): Set<string> {
-	const seen = new Set([ROOT_ID]);
-	const queue = [ROOT_ID];
-	const inc = incident(g);
-	for (let i = 0; i < queue.length; i++) {
-		const id = queue[i];
-		for (const e of inc.get(id) ?? []) {
-			const other = e.from === id ? e.to : e.to === id ? e.from : null;
-			if (other && !seen.has(other)) {
-				seen.add(other);
-				queue.push(other);
-			}
-		}
-	}
+export function unprocessed(g: Graph, idx: GraphIndex = buildGraphIndex(g)): Set<string> {
+	const seen = walk(idx, idx.nodeById.has(ROOT_ID) ? [ROOT_ID] : [], (e, id) =>
+		e.from === id ? e.to : e.to === id ? e.from : null
+	);
 	return new Set(g.nodes.filter((n) => !seen.has(n.id)).map((n) => n.id));
 }
 
@@ -41,13 +17,13 @@ const next = (e: GEdge, id: string) =>
 const prev = (e: GEdge, id: string) =>
 	e.to === id ? e.from : e.bidirectional && e.from === id ? e.to : null;
 
-function walk(g: Graph, starts: string[], step: (e: GEdge, id: string) => string | null) {
+/** 由 starts 沿 incident 鄰接表 BFS，O(V+E) */
+function walk(idx: GraphIndex, starts: string[], step: (e: GEdge, id: string) => string | null) {
 	const seen = new Set(starts);
 	const queue = [...starts];
-	const inc = incident(g);
 	for (let i = 0; i < queue.length; i++) {
 		const id = queue[i];
-		for (const e of inc.get(id) ?? []) {
+		for (const e of edgesOf(idx, idx.incident.get(id))) {
 			const other = step(e, id);
 			if (other && !seen.has(other)) {
 				seen.add(other);
@@ -59,41 +35,48 @@ function walk(g: Graph, starts: string[], step: (e: GEdge, id: string) => string
 }
 
 /** 沿方向走得到客戶的節點（含客戶本身） */
-const reachesCustomer = (g: Graph) =>
+const reachesCustomer = (g: Graph, idx: GraphIndex) =>
 	walk(
-		g,
+		idx,
 		g.nodes.filter((n) => n.type === CUSTOMER_TYPE).map((n) => n.id),
 		prev
 	);
 
 /** 沿方向走不到任何客戶的節點（客戶除外） */
-export function unreachable(g: Graph): Set<string> {
-	const ok = reachesCustomer(g);
+export function unreachable(g: Graph, idx: GraphIndex = buildGraphIndex(g)): Set<string> {
+	const ok = reachesCustomer(g, idx);
 	return new Set(g.nodes.filter((n) => !ok.has(n.id)).map((n) => n.id));
 }
 
 export interface CustomerResult {
+	/** 客戶名稱（顯示用） */
 	customers: string[];
+	/** 與 customers 同序的客戶 ID */
+	customerIds: string[];
 	/** 沿途節點：走得到、且再往下走得到客戶 */
 	nodes: Set<string>;
 	edges: Set<string>;
 }
 
 /** 從 start 沿邊方向找走得到的客戶 */
-export function findCustomers(g: Graph, start: string): CustomerResult {
-	const ok = reachesCustomer(g);
-	const nodes = new Set([...walk(g, [start], next)].filter((id) => ok.has(id)));
+export function findCustomers(
+	g: Graph,
+	start: string,
+	idx: GraphIndex = buildGraphIndex(g)
+): CustomerResult {
+	const ok = reachesCustomer(g, idx);
+	const nodes = new Set([...walk(idx, [start], next)].filter((id) => ok.has(id)));
 	nodes.add(start);
-	const edges = new Set(
-		g.edges
-			.filter((e) => nodes.has(e.from) && nodes.has(e.to) && e.from !== e.to)
-			.filter((e) => e.to !== start || e.bidirectional)
-			.map((e) => e.id)
+	// 只看沿途節點連出的邊，不掃全部邊
+	const edges = new Set<string>();
+	for (const id of nodes)
+		for (const e of edgesOf(idx, idx.outgoing.get(id)))
+			if (nodes.has(e.to) && e.from !== e.to && (e.to !== start || e.bidirectional))
+				edges.add(e.id);
+	const found = g.nodes.filter(
+		(n) => n.id !== start && nodes.has(n.id) && n.type === CUSTOMER_TYPE
 	);
-	const customers = g.nodes
-		.filter((n) => n.id !== start && nodes.has(n.id) && n.type === CUSTOMER_TYPE)
-		.map((n) => n.name);
-	return { customers, nodes, edges };
+	return { customers: found.map((n) => n.name), customerIds: found.map((n) => n.id), nodes, edges };
 }
 
 /** 通用節點不受連接限制（PRD §3） */
@@ -109,10 +92,18 @@ const matches = (list: string[] | undefined, n: GNode) => {
 };
 
 /** 新增邊前檢查；回傳錯誤訊息或 null */
-export function validateEdge(g: Graph, from: string, to: string, type: string): string | null {
+export function validateEdge(
+	g: Graph,
+	from: string,
+	to: string,
+	type: string,
+	idx: GraphIndex = buildGraphIndex(g)
+): string | null {
 	const t = edgeType(type);
-	const a = g.nodes.find((n) => n.id === from)!;
-	const b = g.nodes.find((n) => n.id === to)!;
+	const a = idx.nodeById.get(from);
+	const b = idx.nodeById.get(to);
+	if (!a) return `節點不存在：${from}`;
+	if (!b) return `節點不存在：${to}`;
 	if (t.idc) return IDC_MESSAGE;
 	if (from === to) return '起點與終點不可相同';
 	if (!matches(t.from, a)) return `「${t.name}」只能由${t.fromLabel}連出`;
@@ -123,11 +114,16 @@ export function validateEdge(g: Graph, from: string, to: string, type: string): 
 }
 
 /** 刪除節點前檢查；回傳錯誤訊息或 null */
-export function checkDeleteNode(g: Graph, id: string): string | null {
-	const n = g.nodes.find((x) => x.id === id)!;
+export function checkDeleteNode(
+	g: Graph,
+	id: string,
+	idx: GraphIndex = buildGraphIndex(g)
+): string | null {
+	const n = idx.nodeById.get(id);
+	if (!n) return `節點不存在：${id}`;
 	if (n.readonly) return IDC_MESSAGE;
 	if (id === ROOT_ID) return '根節點不可刪除';
-	if (g.edges.some((e) => e.readonly && (e.from === id || e.to === id)))
+	if (edgesOf(idx, idx.incident.get(id)).some((e) => e.readonly))
 		return `${n.type}底下有 IDC 資料，請先在 IDC機櫃配置管理移除機框`;
 	return null;
 }

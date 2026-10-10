@@ -67,7 +67,7 @@
 	const items = $derived.by((): Item[] => {
 		if (m.kind === 'node') {
 			const n = editor.node(m.id)!;
-			const count = editor.graph.edges.filter((e) => e.from === n.id || e.to === n.id).length;
+			const count = editor.incidentEdges(n.id).length;
 			const block = editor.deleteBlock(n.id);
 			const k = editor.stacking ? editor.stackOf(n.id) : undefined;
 			return [
@@ -120,7 +120,7 @@
 					label: e.bidirectional ? '改為單向' : '改為雙向',
 					icon: 'swap',
 					why: ro ? IDC_MESSAGE : null,
-					run: done(() => editor.edit('edge', e.id, { bidirectional: !e.bidirectional }))
+					run: done(() => editor.updateEdge(e.id, { bidirectional: !e.bidirectional }, e))
 				},
 				{ label: '前往起點', icon: 'chevron', run: done(() => editor.reveal(e.from)) },
 				{ label: '前往終點', icon: 'chevron', run: done(() => editor.reveal(e.to)) },

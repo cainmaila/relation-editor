@@ -48,10 +48,10 @@
 		};
 	});
 
-	// 系統勾選改變才重建資料、重算版面
+	// 只有拓撲（topologyRevision）或系統勾選改變才重建資料、重算版面；改名／屬性不觸發
 	$effect(() => {
 		const a = api;
-		const g = editor.graphVisible;
+		const g = editor.layoutGraph;
 		if (a) untrack(() => a.build(g));
 	});
 
