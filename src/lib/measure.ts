@@ -44,3 +44,10 @@ export function createProbe(init: LayoutInit) {
 		}
 	} satisfies GraphProbe & Record<string, unknown>;
 }
+
+/** /measure 的 init 參數：缺省為 zero；其他值明確拒絕，不靜默退回 */
+export function parseInit(raw: string | null): LayoutInit {
+	if (raw === null || raw === 'zero') return 'zero';
+	if (raw === 'd3') return 'd3';
+	throw new RangeError(`init must be "zero" or "d3", got "${raw}"`);
+}

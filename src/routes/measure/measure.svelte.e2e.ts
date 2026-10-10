@@ -46,3 +46,27 @@ test('/measure 載入 10k／20k 代表性圖，marker 依序出現', async ({ pa
 		)
 	).toBe(10_000);
 });
+
+// QA fix：不支援的大小／參數要立即顯示錯誤，不靜默改值、不卡主執行緒、不掛 App
+for (const query of [
+	'nodes=Infinity',
+	'nodes=NaN',
+	'nodes=10000.5',
+	'nodes=1e4',
+	'nodes=100',
+	'nodes=50001&edges=100000',
+	'edges=100',
+	'edges=100001',
+	'edges=Infinity',
+	'seed=-1',
+	'init=bogus'
+])
+	test(`/measure?${query} 立即顯示錯誤`, async ({ page }) => {
+		await page.goto(`/measure?${query}`);
+		await expect(page.getByRole('alert')).toContainText('不支援的量測參數', { timeout: 5_000 });
+		const h = await page.evaluate(
+			() => (window as unknown as { __measure?: { error?: string } }).__measure
+		);
+		expect(h?.error).toBeTruthy();
+		expect(await page.locator('canvas').count()).toBe(0);
+	});

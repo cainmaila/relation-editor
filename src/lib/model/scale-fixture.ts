@@ -49,10 +49,65 @@ function rng(seed: number) {
 
 const pad = (i: number, w = 2) => String(i).padStart(w, '0');
 
-export function scaleFixture({ nodes: N = 10_000, edges: E, seed = 1 }: ScaleOptions): {
+/** 固定骨架節點數：根、市電、hub、每層（樓層／UPS／2 Core／通用／AHU＋每列 3＋每櫃 6）、客戶、孤立 */
+export const FIXED_NODES =
+	3 + FLOORS * (5 + AHU_PER_FLOOR + ROWS.length * (3 + CABS_PER_ROW * 6)) + CUSTOMERS + ISOLATES;
+/** 骨架邊數（不含每個 sensor 一條的監測邊） */
+const BASE_EDGES = 1 + FLOORS * (15 + ROWS.length * (5 + CABS_PER_ROW * 13 + CABS_PER_ROW));
+
+/**
+ * 支援的 fixture 大小：涵蓋計畫的 10k／20k、10k／100k 與 50k／100k。
+ * 超出範圍（或太密）一律在任何迴圈前丟 RangeError，不靜默改值。
+ */
+export const SCALE_LIMITS = {
+	/** 至少要有一個 sensor（補邊會從 sensors 抽） */
+	minNodes: FIXED_NODES + 1,
+	maxNodes: 50_000,
+	maxEdges: 500_000,
+	/** 平均每節點最多幾條邊（太密的需求補不滿，拒絕） */
+	maxEdgesPerNode: 10,
+	maxSeed: 0xffff_ffff
+} as const;
+
+/** N 個節點時骨架＋每個 sensor 一條監測邊的最低邊數 */
+export const minEdges = (nodes: number) => BASE_EDGES + (nodes - FIXED_NODES);
+
+function intIn(name: string, v: number, min: number, max: number) {
+	if (!Number.isSafeInteger(v) || v < min || v > max)
+		throw new RangeError(`scaleFixture: ${name} must be an integer in [${min}, ${max}], got ${v}`);
+	return v;
+}
+
+/** 驗證大小；不合法丟 RangeError（有限、安全整數、支援範圍、密度） */
+export function validateScaleOptions({ nodes = 10_000, edges, seed = 1 }: ScaleOptions) {
+	const L = SCALE_LIMITS;
+	intIn('nodes', nodes, L.minNodes, L.maxNodes);
+	intIn('seed', seed, 0, L.maxSeed);
+	intIn('edges', edges, minEdges(nodes), Math.min(L.maxEdges, nodes * L.maxEdgesPerNode));
+	return { nodes, edges, seed };
+}
+
+/** 從 URL 讀 nodes／edges／seed：只接受十進位數字字串，不用 Number() 寬鬆轉換 */
+export function parseScaleQuery(q: URLSearchParams) {
+	const num = (k: string, d: number) => {
+		const raw = q.get(k);
+		if (raw === null) return d;
+		if (!/^\d{1,15}$/.test(raw))
+			throw new RangeError(`scaleFixture: ${k} must be a decimal integer, got "${raw}"`);
+		return Number(raw);
+	};
+	return validateScaleOptions({
+		nodes: num('nodes', 10_000),
+		edges: num('edges', 20_000),
+		seed: num('seed', 1)
+	});
+}
+
+export function scaleFixture(options: ScaleOptions): {
 	graph: Graph;
 	meta: ScaleMeta;
 } {
+	const { nodes: N, edges: E, seed } = validateScaleOptions(options);
 	const rand = rng(seed);
 	const pick = <T>(xs: T[]) => xs[Math.floor(rand() * xs.length)];
 	const nodes: GNode[] = [];
@@ -156,7 +211,8 @@ export function scaleFixture({ nodes: N = 10_000, edges: E, seed = 1 }: ScaleOpt
 	);
 	const fixed = nodes.length;
 	const sensorCount = N - fixed;
-	if (sensorCount < 0) throw new Error(`scaleFixture needs at least ${fixed} nodes`);
+	if (fixed !== FIXED_NODES || sensorCount < 1)
+		throw new Error(`scaleFixture: skeleton has ${fixed} nodes, expected ${FIXED_NODES}`);
 	const sensors: { id: string; floor: Floor }[] = [];
 	for (let i = 0; i < sensorCount; i++) {
 		const floor = floors[i % FLOORS];
@@ -217,10 +273,15 @@ export function scaleFixture({ nodes: N = 10_000, edges: E, seed = 1 }: ScaleOpt
 			確認狀態: EST
 		});
 
-	if (edges.length > E) throw new Error(`scaleFixture needs at least ${edges.length} edges`);
+	if (edges.length !== minEdges(N))
+		throw new Error(`scaleFixture: base has ${edges.length} edges, expected ${minEdges(N)}`);
 
 	// ---- 補邊到指定數量：仍依領域規則（監測、跨櫃連線、ToR→主機） ----
+	// 候選空間遠大於上限（ToR×主機就 100 萬），重複只會偶發；仍設嘗試上限，補不滿就明確失敗。
+	let budget = (E - edges.length) * 20 + 1000;
 	while (edges.length < E) {
+		if (budget-- <= 0)
+			throw new Error(`scaleFixture: could not reach ${E} unique edges (stuck at ${edges.length})`);
 		const r = rand();
 		if (r < 0.5) edge('監測', pick(sensors).id, pick(space), { 確認狀態: EST });
 		else if (r < 0.8) edge('連線', pick(tors), pick(tors), { 確認狀態: EST });

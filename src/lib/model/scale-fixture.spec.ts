@@ -1,7 +1,15 @@
 import { describe, expect, test } from 'vitest';
 import { ROOT_ID, edgeType, nodeType } from './config';
 import { findCustomers, unprocessed, validateEdge } from './graph';
-import { graphStats, scaleFixture } from './scale-fixture';
+import {
+	FIXED_NODES,
+	SCALE_LIMITS,
+	graphStats,
+	minEdges,
+	parseScaleQuery,
+	scaleFixture,
+	validateScaleOptions
+} from './scale-fixture';
 
 describe.each([20_000, 100_000])('scaleFixture 10k nodes / %i edges', (edges) => {
 	const { graph, meta } = scaleFixture({ edges, seed: 7 });
@@ -88,4 +96,82 @@ test('props are independent objects (no shared references)', () => {
 
 test('rejects impossible edge budgets', () => {
 	expect(() => scaleFixture({ edges: 100, seed: 1 })).toThrow();
+});
+
+describe('size validation (QA fix: reject before any loop)', () => {
+	test('supported bounds cover the planned 10k/20k, 10k/100k and 50k/100k matrix', () => {
+		expect(SCALE_LIMITS.maxNodes).toBeGreaterThanOrEqual(50_000);
+		expect(SCALE_LIMITS.minNodes).toBe(FIXED_NODES + 1);
+		expect(minEdges(10_000)).toBeLessThanOrEqual(20_000);
+		expect(minEdges(50_000)).toBeLessThanOrEqual(100_000);
+		for (const [nodes, edges] of [
+			[10_000, 20_000],
+			[10_000, 100_000],
+			[50_000, 100_000]
+		])
+			expect(validateScaleOptions({ nodes, edges, seed: 1 })).toEqual({ nodes, edges, seed: 1 });
+	});
+
+	test('exact minimum sizes build (at least one sensor, base edge count matches)', () => {
+		const n = SCALE_LIMITS.minNodes;
+		const { graph } = scaleFixture({ nodes: n, edges: minEdges(n), seed: 1 });
+		expect(graph.nodes.length).toBe(n);
+		expect(graph.edges.length).toBe(minEdges(n));
+		const g = scaleFixture({ nodes: n, edges: minEdges(n) + 50, seed: 1 }).graph;
+		expect(g.edges.length).toBe(minEdges(n) + 50);
+	});
+
+	test.each([
+		['nodes Infinity', { nodes: Infinity, edges: 20_000 }],
+		['nodes NaN', { nodes: NaN, edges: 20_000 }],
+		['nodes fractional', { nodes: 10_000.5, edges: 20_000 }],
+		['nodes negative', { nodes: -1, edges: 20_000 }],
+		['nodes fixed minimum leaves no sensors', { nodes: FIXED_NODES, edges: 20_000 }],
+		['nodes above max', { nodes: 50_001, edges: 100_000 }],
+		['nodes unsafe integer', { nodes: 2 ** 53, edges: 20_000 }],
+		['edges Infinity', { nodes: 10_000, edges: Infinity }],
+		['edges NaN', { nodes: 10_000, edges: NaN }],
+		['edges fractional', { nodes: 10_000, edges: 20_000.5 }],
+		['edges below base', { nodes: 10_000, edges: 100 }],
+		['edges too dense', { nodes: 10_000, edges: 100_001 }],
+		['50k nodes with only 20k edges', { nodes: 50_000, edges: 20_000 }],
+		['seed NaN', { nodes: 10_000, edges: 20_000, seed: NaN }],
+		['seed fractional', { nodes: 10_000, edges: 20_000, seed: 1.5 }],
+		['seed negative', { nodes: 10_000, edges: 20_000, seed: -1 }],
+		['seed above uint32', { nodes: 10_000, edges: 20_000, seed: 2 ** 32 }]
+	])('rejects %s immediately', (_, o) => {
+		const t = performance.now();
+		expect(() => validateScaleOptions(o)).toThrow(RangeError);
+		expect(() => scaleFixture(o)).toThrow(RangeError);
+		expect(performance.now() - t).toBeLessThan(50);
+	});
+});
+
+describe('parseScaleQuery (strict URL parsing, no Number() coercion)', () => {
+	const q = (s: string) => parseScaleQuery(new URLSearchParams(s));
+
+	test('defaults and valid values', () => {
+		expect(q('')).toEqual({ nodes: 10_000, edges: 20_000, seed: 1 });
+		expect(q('nodes=50000&edges=100000&seed=0')).toEqual({
+			nodes: 50_000,
+			edges: 100_000,
+			seed: 0
+		});
+	});
+
+	test.each([
+		'nodes=Infinity',
+		'nodes=NaN',
+		'nodes=1e4',
+		'nodes=10000.0',
+		'nodes=',
+		'nodes=%2010000',
+		'nodes=0x2710',
+		'edges=-20000',
+		'edges=abc',
+		'seed=1.5',
+		'nodes=99999999999999999999'
+	])('rejects %s', (s) => {
+		expect(() => q(s)).toThrow(RangeError);
+	});
 });
