@@ -1,6 +1,7 @@
 <script lang="ts">
-	import { WORK_LIMIT, type Editor } from '#lib/editor.svelte.js';
+	import type { Editor } from '#lib/editor.svelte.js';
 	import { SYSTEMS, UNREACHABLE_LABEL, nodeType } from '#lib/model/config.js';
+	import { WORKSPACE_EDGE_LIMIT, WORKSPACE_NODE_LIMIT } from '#lib/model/workspace.js';
 	import { SYSTEM_COLORS } from './Canvas.svelte';
 	import Icon from './Icon.svelte';
 
@@ -65,7 +66,7 @@
 		role="group"
 		aria-label="畫面"
 	>
-		{#each [['graph', '全圖'], ['edit', `編輯頁 ${editor.working.length}/${WORK_LIMIT}`]] as const as [p, label] (p)}
+		{#each [['graph', '全圖'], ['edit', `編輯頁 ${editor.working.length}/${WORKSPACE_NODE_LIMIT}`]] as const as [p, label] (p)}
 			<button
 				class={[
 					'rounded-md px-2.5 py-1.5 text-xs transition-colors',
@@ -157,6 +158,18 @@
 					>{editor.unreachable.size}</b
 				>
 			</button>
+		{:else}
+			<span
+				class="px-2 text-slate-400"
+				title="工作區預算：最多 {WORKSPACE_NODE_LIMIT} 個節點、{WORKSPACE_EDGE_LIMIT} 條原始關係（收疊不降低計數）"
+				>節點 {editor.working.length}/{WORKSPACE_NODE_LIMIT} · 關係 {editor.workspaceEdgeCount}/{WORKSPACE_EDGE_LIMIT}</span
+			>
+			<button
+				class="rounded-md px-2 py-1.5 font-sans text-slate-400 hover:bg-white/5 hover:text-slate-200 disabled:opacity-40"
+				title="把所有節點移出工作區（不刪任何資料）"
+				disabled={!editor.working.length}
+				onclick={() => editor.clearWorkspace()}>清空工作區</button
+			>
 		{/if}
 	</div>
 

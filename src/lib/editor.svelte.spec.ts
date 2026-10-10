@@ -1,6 +1,7 @@
 import { flushSync } from 'svelte';
 import { describe, expect, it, vi } from 'vitest';
-import { Editor, WORK_LIMIT } from './editor.svelte';
+import { Editor } from './editor.svelte';
+import { WORKSPACE_NODE_LIMIT } from './model/workspace';
 import { handleSearchMessage, type SearchRequest } from './search/protocol';
 import type { SearchController, WorkerLike } from './search/search-client.svelte';
 import { SearchStore } from './search/search-index';
@@ -23,8 +24,11 @@ describe('Editor.addNode', () => {
 });
 
 describe('編輯後的收疊', () => {
-	// 編輯頁只畫 working，這裡讓整張圖都在編輯頁（直接指定，繞過 500 上限）
-	const full = (e: Editor) => (e.working = e.graph.nodes.map((n) => n.id));
+	// 編輯頁只畫 working，這裡讓整張圖都在編輯頁（直接指定，繞過預算）；收疊是手動開啟的輔助
+	const full = (e: Editor) => {
+		e.working = e.graph.nodes.map((n) => n.id);
+		e.stacking = true;
+	};
 	const cards = (e: Editor) => e.canvas.nodes.map((n) => n.id);
 
 	it('編輯湊成新的一疊時，畫面上的卡片不收起；重新排版後才收', () => {
@@ -40,9 +44,8 @@ describe('編輯後的收疊', () => {
 	it('新節點加入已收起的疊卡時留在外面', () => {
 		const e = new Editor();
 		const key = 'stack:機櫃 PDU:樓層 PDU 2F-A';
-		full(e);
 		const id = e.addNode('機櫃 PDU')!;
-		e.working = [...e.working, id];
+		full(e);
 		e.addEdge('樓層 PDU 2F-A', id, '供電');
 		expect(e.stackOf(id)).toBe(key);
 		expect(cards(e)).toContain(id);
@@ -52,33 +55,56 @@ describe('編輯後的收疊', () => {
 
 describe('編輯頁 working', () => {
 	const ids = (e: Editor, n: number) => e.graph.nodes.slice(0, n).map((x) => x.id);
+	/** 互不相連的節點（避免碰到邊預算） */
+	const isolated = (e: Editor, n: number) => {
+		const out: string[] = [];
+		const taken = new Set<string>();
+		for (const x of e.graph.nodes) {
+			if (out.length === n) break;
+			if (e.incidentEdges(x.id).some((y) => taken.has(y.from === x.id ? y.to : y.from))) continue;
+			out.push(x.id);
+			taken.add(x.id);
+		}
+		return out;
+	};
+	const snapshot = (e: Editor) => ({
+		graph: e.graph,
+		revision: e.revision,
+		working: [...e.working]
+	});
 
-	it('加入、去重、忽略不存在的節點', () => {
+	it('加入、去重；不存在的節點整批拒絕', () => {
 		const e = new Editor();
 		const [a, b] = ids(e, 2);
-		expect(e.addToWork([a, a, 'nope'])).toBe(true);
+		expect(e.addToWork([a, a])).toBe(true);
 		expect(e.addToWork([a, b])).toBe(true);
+		expect(e.working).toEqual([a, b]);
+		expect(e.addToWork(['nope'])).toBe(false);
 		expect(e.working).toEqual([a, b]);
 	});
 
-	it('剛好 500 可，501 整批擋下且 working 不變', () => {
+	it('剛好 200 可，201 整批擋下且 working 不變；訊息含需求與可用數', () => {
 		const e = new Editor();
-		const all = ids(e, WORK_LIMIT + 1);
-		expect(e.addToWork(all.slice(0, WORK_LIMIT))).toBe(true);
-		expect(e.working).toHaveLength(WORK_LIMIT);
-		expect(e.addToWork(all.slice(WORK_LIMIT))).toBe(false);
-		expect(e.working).toHaveLength(WORK_LIMIT);
-		expect(e.message).toContain(String(WORK_LIMIT));
+		const all = isolated(e, WORKSPACE_NODE_LIMIT + 1);
+		expect(e.addToWork(all.slice(0, 150))).toBe(true);
+		const before = snapshot(e);
+		expect(e.addToWork(all.slice(100))).toBe(false);
+		expect(snapshot(e)).toEqual(before);
+		expect(e.message).toBe('工作區最多 200 個節點：要新增 51 個，只剩 50 個名額');
+		expect(e.addToWork(all.slice(150, 200))).toBe(true);
+		expect(e.working).toHaveLength(WORKSPACE_NODE_LIMIT);
 	});
 
-	it('已在畫面的節點重複加入不佔上限', () => {
+	it('已在畫面的節點重複加入不佔上限；成功訊息含實際新增與帶入的邊數', () => {
 		const e = new Editor();
-		const all = ids(e, WORK_LIMIT);
-		e.addToWork(all);
-		expect(e.addToWork(all)).toBe(true);
+		const edge = e.graph.edges[0];
+		expect(e.addToWork([edge.from, edge.to])).toBe(true);
+		expect(e.message).toMatch(/^已加入編輯頁：新增 2 個節點、帶入 \d+ 條邊$/);
+		expect(e.addToWork([edge.from])).toBe(true);
+		expect(e.message).toBe('已加入編輯頁：新增 0 個節點、帶入 0 條邊');
 	});
 
-	it('editVisible 的邊只留兩端都在 working 的', () => {
+	it('editVisible 是索引取得的誘導子圖：只留兩端都在 working 的邊', () => {
 		const e = new Editor();
 		const edge = e.graph.edges[0];
 		e.addToWork([edge.from]);
@@ -86,9 +112,10 @@ describe('編輯頁 working', () => {
 		e.addToWork([edge.to]);
 		expect(e.editVisible.nodes.map((n) => n.id).sort()).toEqual([edge.from, edge.to].sort());
 		expect(e.editVisible.edges.map((x) => x.id)).toContain(edge.id);
-		expect(
-			e.editVisible.edges.every((x) => e.working.includes(x.from) && e.working.includes(x.to))
-		).toBe(true);
+		const set = new Set(e.working);
+		const expected = e.graph.edges.filter((x) => set.has(x.from) && set.has(x.to)).map((x) => x.id);
+		expect(e.editVisible.edges.map((x) => x.id).sort()).toEqual(expected.sort());
+		expect(e.workspaceEdgeCount).toBe(expected.length);
 	});
 
 	it('addNode 自動加入 working；deleteNode 同步移出', () => {
@@ -99,13 +126,105 @@ describe('編輯頁 working', () => {
 		expect(e.working).toEqual([]);
 	});
 
-	it('working 已滿時 addNode 仍建立節點，但不自動加入', () => {
+	it('working 已滿時 addNode 先拒絕：圖、revision、working 完全不變', () => {
 		const e = new Editor();
-		e.addToWork(ids(e, WORK_LIMIT));
-		const id = e.addNode('攝影機')!;
-		expect(e.node(id)).toBeTruthy();
-		expect(e.working).not.toContain(id);
-		expect(e.message).toContain(String(WORK_LIMIT));
+		e.addToWork(isolated(e, WORKSPACE_NODE_LIMIT));
+		const before = snapshot(e);
+		expect(e.addNode('攝影機')).toBeNull();
+		expect(snapshot(e)).toEqual(before);
+		expect(e.message).toBe('工作區最多 200 個節點：要新增 1 個，只剩 0 個名額');
+	});
+
+	it('移出工作區只改 membership，不刪資料；清掉失效的選取與暫態', () => {
+		const e = new Editor();
+		const edge = e.graph.edges.find((x) => !x.readonly && x.from !== x.to)!;
+		e.addToWork([edge.from, edge.to]);
+		e.setPage('edit');
+		e.select({ kind: 'edge', id: edge.id });
+		e.connecting = edge.from;
+		e.hoverNode = edge.from;
+		e.fresh = edge.from;
+		const before = e.graph;
+		e.removeFromWork([edge.from]);
+		expect(e.graph).toEqual(before);
+		expect(e.graph).toBe(before);
+		expect(e.revision).toBe(0);
+		expect(e.working).toEqual([edge.to]);
+		expect(e.selected).toBeNull();
+		expect(e.connecting).toBeNull();
+		expect(e.hoverNode).toBeNull();
+		expect(e.fresh).toBeNull();
+		// 還在的節點選取保留
+		e.select({ kind: 'node', id: edge.to });
+		e.removeFromWork([edge.from]);
+		expect(e.selected).toEqual({ kind: 'node', id: edge.to });
+		e.clearWorkspace();
+		expect(e.working).toEqual([]);
+		expect(e.selected).toBeNull();
+		expect(e.graph).toBe(before);
+	});
+
+	it('跨工作區建邊：缺少的端點與新邊一起 admission，一次提交', () => {
+		const e = new Editor();
+		e.setPage('edit');
+		const from = '偵測器 SD-01';
+		const to = '機櫃 A-03';
+		e.addToWork([from]);
+		expect(e.addEdge(from, to, '監測')).toBe(true);
+		expect(e.working).toEqual([from, to]);
+		expect(e.editVisible.edges.some((x) => x.from === from && x.to === to)).toBe(true);
+	});
+
+	it('跨工作區建邊：滿額或連接規則不符時，圖與 working 都不變', () => {
+		const e = new Editor();
+		e.setPage('edit');
+		const pool = isolated(e, WORKSPACE_NODE_LIMIT + 5).filter(
+			(id) => id !== '偵測器 SD-01' && id !== '機櫃 A-03'
+		);
+		e.addToWork(['偵測器 SD-01', ...pool.slice(0, WORKSPACE_NODE_LIMIT - 1)]);
+		const before = snapshot(e);
+		expect(e.addEdge('偵測器 SD-01', '機櫃 A-03', '監測')).toBe(false);
+		expect(snapshot(e)).toEqual(before);
+		expect(e.message).toContain('工作區最多 200 個節點');
+		e.clearWorkspace();
+		e.addToWork(['偵測器 SD-01']);
+		const before2 = snapshot(e);
+		// 監測不能連到客戶以外…這裡用 IDC 才能建的類型：被拒時不把終點加入
+		expect(e.addEdge('偵測器 SD-01', '機櫃 A-03', '服務')).toBe(false);
+		expect(snapshot(e)).toEqual(before2);
+	});
+
+	it('拖到空白處：新節點＋邊原子提交；不合法或滿額時什麼都不建', () => {
+		const e = new Editor();
+		e.setPage('edit');
+		const from = 'A 排';
+		e.addToWork([from]);
+		const before = snapshot(e);
+		// 選單只列可建立的：A 排 包含 列 可以，供電不行；新節點還不存在
+		expect(e.newEdgeErrors(from, '列').get('包含')).toBeNull();
+		expect(e.newEdgeErrors(from, '列').get('供電')).toBeTruthy();
+		expect(e.newEdgeErrors(from, '攝影機', true).get('監測')).toBeNull();
+		expect(e.graph).toBe(before.graph);
+		expect(e.addNodeWithEdge('列', from, '供電')).toBeNull();
+		expect(snapshot(e)).toEqual(before);
+		const id = e.addNodeWithEdge('列', from, '包含')!;
+		expect(e.node(id)?.type).toBe('列');
+		expect(e.working).toEqual([from, id]);
+		expect(e.revision).toBe(2);
+		expect(e.selected?.kind).toBe('edge');
+		expect(e.edge(e.selected!.id)).toMatchObject({ from, to: id, type: '包含' });
+		// 反向：新節點為起點
+		const back = e.addNodeWithEdge('攝影機', '機櫃 A-01', '監測', true)!;
+		expect(e.working.slice(-2)).toEqual(['機櫃 A-01', back]);
+		expect(e.edge(e.selected!.id)).toMatchObject({ from: back, to: '機櫃 A-01', type: '監測' });
+		// 滿額：新節點＋缺少的端點放不下時什麼都不建
+		e.working = isolated(e, WORKSPACE_NODE_LIMIT)
+			.filter((x) => x !== '機櫃 A-02')
+			.slice(0, 199);
+		const full = snapshot(e);
+		expect(e.addNodeWithEdge('攝影機', '機櫃 A-02', '監測', true)).toBeNull();
+		expect(snapshot(e)).toEqual(full);
+		expect(e.message).toBe('工作區最多 200 個節點：要新增 2 個，只剩 1 個名額');
 	});
 });
 
@@ -130,6 +249,66 @@ describe('Editor.setPage', () => {
 		e.select({ kind: 'node', id: e.graph.nodes[0].id });
 		e.setPage('edit');
 		expect(e.selected).toBeNull();
+	});
+
+	it('收疊預設關閉；手動收疊時切頁來回選取仍是同一個節點（P0 回報）', () => {
+		const e = new Editor();
+		expect(e.stacking).toBe(false);
+		const names = ['樓層 PDU 2F-A', '機櫃 PDU A-05-A', '機櫃 PDU A-06-A', '機櫃 PDU A-07-A'];
+		for (const n of names) {
+			e.locate(n);
+			e.addToWorkspace([n]);
+		}
+		e.setPage('edit');
+		e.stacking = true;
+		expect(e.selected).toEqual({ kind: 'node', id: names[3] });
+		expect(e.canvas.owner.get(names[3])).toBeTruthy();
+		e.setPage('graph');
+		e.setPage('edit');
+		expect(e.selected).toEqual({ kind: 'node', id: names[3] });
+	});
+});
+
+describe('編輯頁版面與視野', () => {
+	it('增量加入不搬動既有卡片；改名不重排；位置與視野跨切頁保留', () => {
+		const e = new Editor();
+		e.addToWork(['機櫃 A-01', '機櫃 PDU A-01-A']);
+		e.setPage('edit');
+		const p1 = new Map(e.editPositions);
+		e.addToWork(['ToR Switch A-01']);
+		const p2 = e.editPositions;
+		for (const [id, p] of p1) expect(p2.get(id)).toEqual(p);
+		expect(p2.has('ToR Switch A-01')).toBe(true);
+		const lay = e.editLayout;
+		e.updateNode('機櫃 A-01', { name: '改名' });
+		expect(e.editLayout).toBe(lay);
+		e.canvasViewport = { x: 10, y: 20, zoom: 0.5 };
+		e.setPage('graph');
+		e.systems = ['電力'];
+		e.setPage('edit');
+		expect(e.canvasViewport).toEqual({ x: 10, y: 20, zoom: 0.5 });
+		expect(e.editPositions.get('機櫃 A-01')).toEqual(p2.get('機櫃 A-01'));
+	});
+
+	it('畫面外的邊不能在編輯頁被改拓撲（刪除／改方向）', () => {
+		const e = new Editor();
+		const edge = e.graph.edges.find((x) => !x.readonly && x.from !== x.to)!;
+		e.addToWork([edge.from]);
+		e.setPage('edit');
+		const before = e.graph;
+		expect(e.deleteEdge(edge.id)).toBe(false);
+		expect(e.updateEdge(edge.id, { bidirectional: !edge.bidirectional }, edge)).toBe(false);
+		expect(e.graph).toBe(before);
+		expect(e.message).toBe('邊的兩端都要在編輯頁才能修改');
+	});
+
+	it('外部鄰居數量完整（不受分頁）', () => {
+		const e = new Editor();
+		e.addToWork(['機櫃 A-01']);
+		const all = new Set(
+			e.incidentEdges('機櫃 A-01').map((x) => (x.from === '機櫃 A-01' ? x.to : x.from))
+		);
+		expect(e.outsideCount('機櫃 A-01')).toBe(all.size);
 	});
 });
 
@@ -236,7 +415,9 @@ describe('Editor 搜尋服務（Worker 協定）', () => {
 			/** 下一則這種訊息 postMessage 同步丟例外（模擬 structured clone 失敗） */
 			throwOn: null as SearchRequest['kind'] | null,
 			/** 送到已結束 Worker 的訊息數；應永遠是 0 */
-			deadPosts: 0
+			deadPosts: 0,
+			/** terminate 丟例外（模擬已壞掉的 Worker 收不掉） */
+			throwOnTerminate: false
 		};
 		const create = (): WorkerLike => {
 			if (f.failCreate) {
@@ -270,6 +451,7 @@ describe('Editor 搜尋服務（Worker 協定）', () => {
 				},
 				terminate() {
 					dead = true;
+					if (f.throwOnTerminate) throw new Error('terminate 失敗');
 				}
 			};
 			return w;
@@ -390,6 +572,23 @@ describe('Editor 搜尋服務（Worker 協定）', () => {
 		await ready(e.palette);
 		expect(e.palette.total).toBeGreaterThan(0);
 		expect(f.instances).toBe(2);
+	});
+
+	it('壞掉的 Worker 收不掉時明確記錄，不吞掉；仍轉錯誤且可重試', async () => {
+		const { f, create } = fakeWorker();
+		const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const e = new Editor(undefined, { searchWorker: create });
+		f.crash = true;
+		f.throwOnTerminate = true;
+		e.palette.set({ text: 'UPS' });
+		await expect.poll(() => e.palette.status).toBe('error');
+		expect(e.search.error).toBe('boom');
+		expect(log).toHaveBeenCalledWith('搜尋 Worker 結束失敗', expect.any(Error));
+		log.mockRestore();
+		f.crash = f.throwOnTerminate = false;
+		e.palette.retry();
+		await ready(e.palette);
+		expect(e.palette.total).toBeGreaterThan(0);
 	});
 
 	it('跨頁勾選保留到主動清除；刪除節點時移出', async () => {

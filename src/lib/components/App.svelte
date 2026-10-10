@@ -134,7 +134,7 @@
 	role="status"
 	class={[
 		'fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-lg border bg-ink-850/95 px-4 py-2.5 text-sm shadow-2xl shadow-black/50 backdrop-blur transition-all duration-200',
-		editor.message === '已加入編輯頁'
+		editor.message.startsWith('已加入編輯頁')
 			? 'border-emerald-400/40 text-emerald-100'
 			: 'border-rose-500/40 text-rose-100',
 		editor.message ? 'translate-y-0 opacity-100' : 'pointer-events-none translate-y-2 opacity-0'

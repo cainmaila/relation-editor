@@ -225,8 +225,9 @@ export class SearchService {
 		this.#waiting.clear();
 		try {
 			w?.terminate();
-		} catch {
-			// 已壞掉的 Worker 結束失敗也無妨
+		} catch (e) {
+			// 已壞掉的 Worker 收不掉不影響轉錯誤與重試，但要留下記錄，不悄悄吞掉
+			console.error('搜尋 Worker 結束失敗', e);
 		}
 		this.#notify();
 	}

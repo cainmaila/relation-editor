@@ -69,6 +69,11 @@
 			<p class="mt-1 text-xs text-slate-400">
 				選起點、終點與邊類型；不符連接限制的類型會直接標出原因。
 			</p>
+			{#if [d.from, d.to].some((id) => id && !editor.inWork(id))}
+				<p class="mt-1 text-xs text-amber-200">
+					不在編輯頁的端點會和這條邊一起加入（受工作區預算限制）
+				</p>
+			{/if}
 		</div>
 		<div class="flex items-end gap-2">
 			{@render endpoint('from', '起點')}

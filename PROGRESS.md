@@ -1,5 +1,28 @@
 # PROGRESS
 
+## 主 agent QA 進度
+
+- P0、P1、P2、P3 已分階段審核；P3 至 `343c32f`，獨立搜尋相關 unit 63／63、搜尋 e2e 4／4。
+- P3 QA 已修正：只改邊屬性造成搜尋永久 pending、Worker 同步失敗無錯誤 UI、排序與規格不符、缺少系統／類型搜尋篩選。
+- Next: P4 局部工作區；P5–P8 未交付。正式 10k 效能驗收尚未通過。
+
+## P4 局部工作區與完整編輯閉環（分支 cainmaila/main-3-3）
+
+- **Goal:** 編輯頁成為有預算的局部工作區（200 節點／1000 原始誘導邊），所有建立路徑都先純計算准入、再原子提交。計畫 `.superpowers/sdd/plan/task-4-brief.md`
+- **Done（agent-tested，待 parent QA）:**
+  - `src/lib/model/workspace.ts`：`planWorkspaceAdmission`（去重、新節點／提議邊計數、超額回需求與剩餘名額，不改任何狀態）、`inducedSubgraph`（工作區＝精確誘導邊）、`externalNeighbors`（in／out／all＋邊類型、完整外部計數）
+  - `Editor`：`addToWork`／`addNode`／`addEdge`／`addNodeWithEdge` 走准入後一次 `execute`；取消或超額不動 domain 與工作區；連到工作區外端點會連端點一起加入；兩端不全在工作區的邊在編輯頁唯讀（`邊的兩端都要在編輯頁才能修改`）
+  - 移出工作區（詳情、右鍵）、頂列「清空工作區」只改 membership；刪除確認寫出含工作區外 K 條邊
+  - 詳情「鄰居預覽」`NeighborPicker.svelte`：每頁 50、方向／邊類型篩選、預設不勾，「勾選本頁前 20 個」須明確按、加入前顯示將新增節點／帶入邊數
+  - 拖到空白：先選類型→再選合法關係（雙向列出）才一次建立新節點＋邊；不合法類型停用並寫原因
+  - 收疊預設關閉（頂列手動開）；版面／位置／2D 視野存在 `Editor`（`editLayout`／`editPositions`／`canvasViewport`），切 3D 卸載畫布再回來不重排、不跳視野；改名／屬性不重排
+  - P0 回報（切頁後選取換成別的節點）：unit＋e2e 回歸（開收疊重現情境）
+  - ⌘K：全圖 Enter＝定位；編輯頁 Enter＝明確「加入並定位」（`admitAndLocate`，先准入）
+  - `SearchService.#fail` 收 Worker 失敗時 `console.error('搜尋 Worker 結束失敗', e)`
+  - check 0、lint 綠、unit 171、e2e 65（全套跑一次）
+- **Todo:** 正式 10k 效能驗收（P5+）
+- **Notes:** e2e 500 上限改 200；收疊相關 e2e 先按「收疊同類」；拖曳建邊測試先 Fit View（視野保留後新卡片不再自動整張入鏡，目標貼邊會觸發 xyflow 自動平移）；報告 `.superpowers/sdd/plan/task-4-report.md`
+
 ## P3 全量搜尋與分頁入口（分支 cainmaila/main-3-3）
 
 - **Goal:** 單一搜尋 Worker／服務取代各處自掃 `graph.nodes`；快捷搜尋、大綱、新增邊端點共用分頁結果，不常駐全部節點 DOM。計畫 `.superpowers/sdd/plan/task-3-brief.md`

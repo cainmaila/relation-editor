@@ -48,8 +48,9 @@
 
 	function go(id: string) {
 		editor.dialog = null;
-		// 全圖：選取＋飛過去；編輯頁：加入後定位。超過上限時 addToWork 已設 message
-		if (graph || editor.addToWork([id])) editor.locate(id);
+		// 全圖：只定位（選取＋飛過去）；編輯頁：明確的「加入並定位」＝先 admission 加入，成功才定位
+		if (graph) editor.locate(id);
+		else editor.admitAndLocate(id);
 	}
 
 	function key(e: KeyboardEvent) {

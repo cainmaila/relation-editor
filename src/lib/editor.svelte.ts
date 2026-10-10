@@ -12,6 +12,8 @@ import {
 	checkDeleteNode,
 	collapse,
 	findCustomers,
+	layout,
+	pin,
 	STACK_MIN,
 	stacks,
 	unprocessed,
@@ -30,6 +32,13 @@ import {
 import { buildGraphIndex, edgesOf, type GraphIndex } from './model/graph-index';
 import { graphMock, idcMock } from './model/mock';
 import type { GEdge, GNode, Graph } from './model/types';
+import {
+	externalNeighbors,
+	inducedSubgraph,
+	planWorkspaceAdmission,
+	type Proposed,
+	type WorkspaceAdmission
+} from './model/workspace';
 import {
 	SearchController,
 	SearchService,
@@ -60,8 +69,8 @@ export type Menu = { x: number; y: number } & (
 let seq = 0;
 const uid = (p: string) => `${p}-${++seq}`;
 
-/** 編輯頁節點上限 */
-export const WORK_LIMIT = 500;
+/** 編輯頁畫布視野（平移與縮放） */
+export type Viewport = { x: number; y: number; zoom: number };
 
 export class Editor {
 	// raw：10k 節點時深層 proxy 太貴。只由 execute() 換新物件，UI 不可直接改或 bind
@@ -104,8 +113,8 @@ export class Editor {
 	issue = $state<'unprocessed' | 'unreachable' | null>(null);
 	/** 畫布角落的圖例卡 */
 	legend = $state(false);
-	/** 同類兄弟節點收成一疊（關掉＝全部展開） */
-	stacking = $state(true);
+	/** 同類兄弟節點收成一疊（關掉＝全部展開）；預設關閉，由使用者手動開啟 */
+	stacking = $state(false);
 	/** 手動展開的堆疊 key */
 	expanded = $state<string[]>([]);
 	/** 每加一就整張重新排版（編輯圖時既有節點不動） */
@@ -170,25 +179,31 @@ export class Editor {
 		return untrack(() => visibleIn(this.graph, systems));
 	});
 
-	/** 編輯頁的圖：working 內的節點，邊兩端都在才留 */
-	editVisible = $derived.by(() => {
-		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- 只在 derived 內查詢用，不需響應
-		const ids = new Set(this.working);
-		return {
-			nodes: this.graph.nodes.filter((n) => ids.has(n.id)),
-			edges: this.graph.edges.filter((e) => ids.has(e.from) && ids.has(e.to))
-		};
-	});
+	/** 編輯頁的圖：working 的誘導子圖（索引取得，只留兩端都在 working 的真實邊） */
+	editVisible = $derived(inducedSubgraph(this.index, this.working));
+	/** 工作區的原始誘導邊數（收疊、合併呈現都不降低） */
+	workspaceEdgeCount = $derived(this.editVisible.edges.length);
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- derived 每次重建，不需響應
+	#workSet = $derived(new Set(this.working));
+	/** 不在工作區的直接鄰居數（完整，不受分頁） */
+	outsideCount = (id: string) => externalNeighbors(this.index, id, this.#workSet).length;
+	/** 是否在工作區 */
+	inWork = (id: string) => this.#workSet.has(id);
 
-	/** 加入編輯頁：只收存在的節點、去重；加完超過上限則整批擋下 */
+	/** 加入前的 admission（純計算）；失敗時顯示原因，什麼都不改 */
+	#admit(ids: string[], proposed?: Proposed): WorkspaceAdmission | null {
+		const r = planWorkspaceAdmission(this.index, this.working, ids, proposed);
+		if (r.ok) return r.value;
+		this.fail(r.message);
+		return null;
+	}
+
+	/** 加入編輯頁：整批 admission（存在、去重、200 節點／1,000 條邊預算），通過才一次提交 */
 	addToWork(ids: string[]): boolean {
-		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- 每次呼叫重算，不需響應
-		const have = new Set(this.working);
-		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- 只用來去重
-		const add = [...new Set(ids)].filter((id) => this.index.nodeById.has(id) && !have.has(id));
-		if (this.working.length + add.length > WORK_LIMIT)
-			return this.fail(`編輯頁最多 ${WORK_LIMIT} 個節點，無法再加入 ${add.length} 個`);
-		this.working = [...this.working, ...add];
+		const a = this.#admit(ids);
+		if (!a) return false;
+		this.working = a.ids;
+		this.message = `已加入編輯頁：新增 ${a.addedIds.length} 個節點、帶入 ${a.addedEdgeCount} 條邊`;
 		return true;
 	}
 
@@ -210,14 +225,21 @@ export class Editor {
 		this.hoverEdge = this.hoverNode = null;
 		// 問題篩選只在全圖
 		if (page === 'edit') this.issue = null;
+		// 視野不重設：編輯頁沿用上次的位置與縮放（第一次進入由畫布整張入鏡）
 		if (!keep) this.selected = null;
-		this.fit(keep && s?.kind === 'node' ? [s.id] : []);
 	}
 
 	/** 搜尋結果「加入編輯頁」：不換畫面、不改系統篩選與選取 */
 	addToWorkspace(ids: string[]): boolean {
-		if (!this.addToWork(ids)) return false;
-		this.message = '已加入編輯頁';
+		return this.addToWork(ids);
+	}
+
+	/** 明確的「加入並定位」：先 admission 加入，成功才定位；失敗什麼都不改 */
+	admitAndLocate(id: string): boolean {
+		if (!this.addToWork([id])) return false;
+		const msg = this.message;
+		this.locate(id);
+		this.message = msg;
 		return true;
 	}
 
@@ -233,8 +255,30 @@ export class Editor {
 		this.fit([id]);
 	}
 
+	/** 移出工作區：只改 membership，不刪資料；清掉指向已移出節點的選取與暫態 */
 	removeFromWork(ids: string[]) {
-		this.working = this.working.filter((id) => !ids.includes(id));
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- 區域查表，不需響應
+		const out = new Set(ids);
+		this.working = this.working.filter((id) => !out.has(id));
+		const gone = (id: string | null) => !!id && out.has(id);
+		const s = this.selected;
+		const e = s?.kind === 'edge' ? this.edge(s.id) : undefined;
+		if (
+			this.page === 'edit' &&
+			(gone(s?.kind === 'node' ? s.id : null) || (e && (gone(e.from) || gone(e.to))))
+		)
+			this.select(null);
+		if (gone(this.connecting)) this.connecting = null;
+		if (gone(this.hoverNode)) this.hoverNode = null;
+		if (gone(this.fresh)) this.fresh = null;
+		if (gone(this.armDelete)) this.armDelete = null;
+		if (this.menu?.kind === 'node' && gone(this.menu.id)) this.menu = null;
+		this.loose = this.loose.filter((id) => !out.has(id));
+	}
+
+	/** 清空工作區（不刪任何資料） */
+	clearWorkspace() {
+		this.removeFromWork([...this.working]);
 	}
 
 	stacks = $derived(stacks(this.editVisible));
@@ -252,6 +296,38 @@ export class Editor {
 	);
 	/** 畫布實際畫的圖：收起的堆疊換成代表卡 */
 	canvas = $derived(collapse(this.editVisible, this.closed));
+
+	/** 收疊形狀（字串比對）：改名／屬性重建 closed 時不讓版面失效 */
+	#shape = $derived([...this.closed].map(([k, ids]) => `${k}:${ids.join(',')}`).join('|'));
+	/**
+	 * 編輯頁排版：只隨拓撲、工作區成員與收疊形狀變；改名／屬性不重排。
+	 * 只讀 id／type／from／to。放在 Editor（不在 Canvas）：切到 3D 卸載畫布後回來仍沿用
+	 */
+	editLayout = $derived.by(() => {
+		void [this.topologyRevision, this.working, this.#shape];
+		return untrack(() => layout(this.canvas));
+	});
+	/** 檢視操作（收疊、展開、重新排版）才整張重排；系統勾選不影響編輯頁 */
+	#viewKey = $derived(
+		[
+			// 疊卡消失時的過期 key 清除不算檢視操作
+			this.expanded.filter((k) => this.stacks.has(k)).join(),
+			this.stacking,
+			this.relayout
+		].join('/')
+	);
+	#lastPos: { key: string; pos: ReturnType<typeof layout>['pos'] } | undefined;
+	/** 卡片位置：增量加入時既有卡片留在原位（刻意在 derived 內記住上次結果，非響應） */
+	editPositions = $derived.by(() => {
+		const lay = this.editLayout;
+		const key = this.#viewKey;
+		const last = this.#lastPos;
+		const pos = last?.key === key ? pin(last.pos, lay.pos) : lay.pos;
+		this.#lastPos = { key, pos };
+		return pos;
+	});
+	/** 編輯頁視野；null＝還沒進過，畫布第一次掛載時整張入鏡 */
+	canvasViewport = $state.raw<Viewport | null>(null);
 
 	#stackKey = $derived(
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- derived 每次重建，不需響應
@@ -341,35 +417,58 @@ export class Editor {
 		);
 	}
 
+	/**
+	 * 拖到空白處：other 與「type 類型的新節點」之間各邊類型的檢查結果（null＝可建立）。
+	 * reverse＝新節點為起點。新節點還沒建立，用只含兩端的暫時索引驗證
+	 */
+	newEdgeErrors(other: string, type: string, reverse = false) {
+		const NEW = '#new';
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- 暫時驗證索引，不需響應
+		const nodeById = new Map([[NEW, { id: NEW, type, name: '', props: {} } as GNode]]);
+		const o = this.node(other);
+		if (o) nodeById.set(other, o);
+		const idx = { ...this.index, nodeById };
+		const [from, to] = reverse ? [NEW, other] : [other, NEW];
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- 每次呼叫重算，不需響應
+		return new Map(
+			CREATABLE_EDGE_TYPES.map((t) => [t.name, validateEdge(this.graph, from, to, t.name, idx)])
+		);
+	}
+
 	deleteBlock = (id: string) => checkDeleteNode(this.graph, id, this.index);
 
-	/** 唯一的標準圖寫入入口：驗證全部欄位後一次換新 graph／index／revision；失敗時什麼都不改 */
-	execute(cmd: GraphCommand): boolean {
-		const r = applyCommand(
-			{
-				graph: this.graph,
-				index: this.index,
-				revision: this.revision,
-				topologyRevision: this.topologyRevision
-			},
-			cmd
-		);
-		if (!r.ok) return this.fail(r.message);
-		const { state, change } = r.value;
+	/**
+	 * 唯一的標準圖寫入入口：依序純計算全部命令，全部通過才一次換新 graph／index／revision；
+	 * 任一筆失敗時什麼都不改（多筆＝原子批次，例：新節點＋邊）
+	 */
+	execute(...cmds: GraphCommand[]): boolean {
+		let state = {
+			graph: this.graph,
+			index: this.index,
+			revision: this.revision,
+			topologyRevision: this.topologyRevision
+		};
+		const changes: GraphChange[] = [];
+		for (const cmd of cmds) {
+			const r = applyCommand(state, cmd);
+			if (!r.ok) return this.fail(r.message);
+			state = r.value.state;
+			changes.push(r.value.change);
+		}
 		this.#keepOut(() => {
 			this.graph = state.graph;
 			this.index = state.index;
 			this.revision = state.revision;
 			this.topologyRevision = state.topologyRevision;
-			this.lastChange = change;
+			this.lastChange = changes.at(-1) ?? null;
 		});
-		// 逐筆送出：同一 tick 多筆命令時 lastChange 只看得到最後一筆
-		this.search.publish(change);
+		// 逐筆送出：Worker 依版本連續套用
+		for (const c of changes) this.search.publish(c);
 		return true;
 	}
 
-	/** 名稱留空時用「類型 N」；回傳新節點 id，失敗回傳 null */
-	addNode(type: string, name = ''): string | null {
+	/** 新節點草稿：名稱留空時用「類型 N」；類型不可建立時回傳 null 並顯示原因 */
+	#draftNode(type: string, name = ''): GNode | null {
 		const err = !type ? '請選擇類型' : nodeType(type).idc ? IDC_MESSAGE : '';
 		if (err) {
 			this.fail(err);
@@ -377,20 +476,62 @@ export class Editor {
 		}
 		let n = 1;
 		while (!name.trim() && this.graph.nodes.some((x) => x.name === `${type} ${n}`)) n++;
-		const id = uid('n');
-		if (
-			!this.execute({
-				kind: 'addNode',
-				node: { id, type, name: name.trim() || `${type} ${n}`, props: {} }
-			})
-		)
-			return null;
-		this.fresh = id;
+		return { id: uid('n'), type, name: name.trim() || `${type} ${n}`, props: {} };
+	}
+
+	/** 編輯器手拉的邊沒有資料來源，依 PRD 定義為推定 */
+	#draftEdge = (from: string, to: string, type: string): GEdge => ({
+		id: uid('e'),
+		type,
+		from,
+		to,
+		bidirectional: false,
+		props: { 確認狀態: '推定' }
+	});
+
+	/** 編輯頁只能改兩端都在工作區的邊（畫面外的拓撲不能被悄悄修改） */
+	#guardEdge(id: string): boolean {
+		const e = this.edge(id);
+		if (this.page !== 'edit' || !e || (this.inWork(e.from) && this.inWork(e.to))) return true;
+		return this.fail('邊的兩端都要在編輯頁才能修改');
+	}
+
+	/** 名稱留空時用「類型 N」；工作區 admission 通過才建立並加入，回傳新節點 id，失敗回傳 null */
+	addNode(type: string, name = ''): string | null {
+		const node = this.#draftNode(type, name);
+		if (!node) return null;
+		const a = this.#admit([], { newNodes: 1 });
+		if (!a || !this.execute({ kind: 'addNode', node })) return null;
+		this.working = [...a.ids, node.id];
+		this.fresh = node.id;
 		this.dialog = null;
-		this.reveal(id);
-		// 超過上限時節點照建（資料不丟），只是不自動進編輯頁；放在 reveal 後才不會被清掉提示
-		this.addToWork([id]);
-		return id;
+		this.reveal(node.id);
+		return node.id;
+	}
+
+	/**
+	 * 拖到空白處：新節點＋一條邊原子提交（reverse＝新節點為起點）。
+	 * 另一端不在工作區時一起 admission；連接規則、預算任一不符就什麼都不建
+	 */
+	addNodeWithEdge(type: string, other: string, edgeType: string, reverse = false): string | null {
+		if (!edgeType) {
+			this.fail('請選擇邊類型');
+			return null;
+		}
+		const node = this.#draftNode(type);
+		if (!node) return null;
+		const a = this.#admit([other], { newNodes: 1, newEdges: 1 });
+		if (!a) return null;
+		const edge = reverse
+			? this.#draftEdge(node.id, other, edgeType)
+			: this.#draftEdge(other, node.id, edgeType);
+		if (!this.execute({ kind: 'addNode', node }, { kind: 'addEdge', edge })) return null;
+		this.working = [...a.ids, node.id];
+		this.fresh = node.id;
+		this.dialog = null;
+		this.menu = null;
+		this.select({ kind: 'edge', id: edge.id });
+		return node.id;
 	}
 
 	startEdge(from: string, to: string) {
@@ -400,27 +541,34 @@ export class Editor {
 		this.dialog = 'edge';
 	}
 
+	/** 編輯頁建邊：不在工作區的端點與新邊一起 admission，連接規則與預算都通過才一次提交 */
 	addEdge(from: string, to: string, type: string): boolean {
 		if (!from || !to || !type) return this.fail('請選擇起點、終點與邊類型');
-		const id = uid('e');
-		// 編輯器手拉的邊沒有資料來源，依 PRD 定義為推定
-		const edge = { id, type, from, to, bidirectional: false, props: { 確認狀態: '推定' } };
+		const err = validateEdge(this.graph, from, to, type, this.index);
+		if (err) return this.fail(err);
+		const a = this.page === 'edit' ? this.#admit([from, to], { newEdges: 1 }) : null;
+		if (this.page === 'edit' && !a) return false;
+		const edge = this.#draftEdge(from, to, type);
 		if (!this.execute({ kind: 'addEdge', edge })) return false;
+		if (a) this.working = a.ids;
 		this.draft = { from: '', to: '', type: '' };
 		this.dialog = null;
-		this.select({ kind: 'edge', id });
+		this.select({ kind: 'edge', id: edge.id });
 		return true;
 	}
 
+	/** 真正刪除資料（含所有相連邊，工作區外的也會刪）；與「移出工作區」不同 */
 	deleteNode(id: string) {
 		if (!this.execute({ kind: 'deleteNode', id })) return false;
 		this.removeFromWork([id]);
 		this.select(null);
+		return true;
 	}
 
 	deleteEdge(id: string) {
-		if (!this.execute({ kind: 'deleteEdge', id })) return false;
+		if (!this.#guardEdge(id) || !this.execute({ kind: 'deleteEdge', id })) return false;
 		this.select(null);
+		return true;
 	}
 
 	/** 一次寫入節點草稿；base＝草稿開始時的節點，已被改過就拒絕 */
@@ -430,7 +578,7 @@ export class Editor {
 
 	/** 一次寫入邊草稿；base＝草稿開始時的邊，已被改過就拒絕 */
 	updateEdge(id: string, patch: EdgePatch, base?: GEdge): boolean {
-		return this.execute({ kind: 'updateEdge', id, patch, base });
+		return this.#guardEdge(id) && this.execute({ kind: 'updateEdge', id, patch, base });
 	}
 
 	findCustomers(id: string) {

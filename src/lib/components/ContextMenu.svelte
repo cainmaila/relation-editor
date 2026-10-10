@@ -33,8 +33,8 @@
 		f();
 	};
 
-	/** 依系統分組的可新增類型；pick 收到類型名 */
-	function typeMenu(pick: (t: string) => void): Item[] {
+	/** 依系統分組的可新增類型；item 把類型名變成選單項目 */
+	function typeMenu(item: (t: string) => Item): Item[] {
 		return [...SYSTEMS, null]
 			.map((s) => ({ s: s ?? '通用', types: CREATABLE_NODE_TYPES.filter((t) => t.system === s) }))
 			.filter((g) => g.types.length)
@@ -42,11 +42,33 @@
 				label: g.s,
 				icon: g.s,
 				color: SYSTEM_COLORS[g.s],
-				sub: g.types.map((t) => ({ label: t.name, run: () => pick(t.name) }))
+				sub: g.types.map((t) => item(t.name))
 			}));
 	}
 
-	const add = (t: string) => done(() => editor.addNode(t))();
+	/**
+	 * 拖到空白處：先選類型再選關係，選完才把新節點＋邊一次建立（不先建孤立節點）。
+	 * 只列連接規則允許的方向與邊類型
+	 */
+	function dropItem(from: string, type: string): Item {
+		const sub = [false, true].flatMap((reverse) =>
+			[...editor.newEdgeErrors(from, type, reverse)]
+				.filter(([, err]) => !err)
+				.map(([t]) => ({
+					label: reverse
+						? `${t}（${type} → ${nameOf(from)}）`
+						: `${t}（${nameOf(from)} → ${type}）`,
+					icon: t,
+					color: EDGE_COLORS[t],
+					run: done(() => editor.addNodeWithEdge(type, from, t, reverse))
+				}))
+		);
+		return sub.length
+			? { label: type, sub }
+			: { label: type, why: `${nameOf(from)} 無法與${type}相連` };
+	}
+
+	const add = (t: string): Item => ({ label: t, run: done(() => editor.addNode(t)) });
 
 	const head = $derived.by(() => {
 		if (m.kind === 'node') return nameOf(m.id);
@@ -91,6 +113,11 @@
 						editor.fit([n.id, ...near]);
 					})
 				},
+				{
+					label: '移出工作區',
+					icon: 'chevron',
+					run: done(() => editor.removeFromWork([n.id]))
+				},
 				...(k
 					? [
 							{
@@ -122,8 +149,8 @@
 					why: ro ? IDC_MESSAGE : null,
 					run: done(() => editor.updateEdge(e.id, { bidirectional: !e.bidirectional }, e))
 				},
-				{ label: '前往起點', icon: 'chevron', run: done(() => editor.reveal(e.from)) },
-				{ label: '前往終點', icon: 'chevron', run: done(() => editor.reveal(e.to)) },
+				{ label: '前往起點', icon: 'chevron', run: done(() => editor.locate(e.from)) },
+				{ label: '前往終點', icon: 'chevron', run: done(() => editor.locate(e.to)) },
 				{
 					label: '刪除邊',
 					icon: 'trash',
@@ -156,11 +183,8 @@
 			];
 		}
 		if (m.kind === 'drop') {
-			const { from, x, y } = m;
-			return typeMenu((t) => {
-				const to = editor.addNode(t);
-				if (to) editor.menu = { kind: 'connect', from, to, x, y };
-			});
+			const { from } = m;
+			return typeMenu((t) => dropItem(from, t));
 		}
 		return [
 			{ label: '新增節點', icon: 'node-plus', keys: 'N', sub: typeMenu(add) },

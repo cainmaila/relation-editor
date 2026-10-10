@@ -3,6 +3,7 @@
 	import { CONFIRM_STATES, IDC_MESSAGE, UNREACHABLE_LABEL, nodeType } from '#lib/model/config.js';
 	import { EDGE_COLORS, SYSTEM_COLORS } from './Canvas.svelte';
 	import Icon from './Icon.svelte';
+	import NeighborPicker from './NeighborPicker.svelte';
 
 	let { editor }: { editor: Editor } = $props();
 
@@ -15,10 +16,21 @@
 	/** 全圖只讀 */
 	const graph = $derived(editor.page === 'graph');
 	const idc = $derived(!!(node ?? edge)?.readonly);
-	const ro = $derived(idc || graph);
+	/** 編輯頁的邊有一端在工作區外：只能看，不能悄悄改畫面外的拓撲 */
+	const outsideEdge = $derived(
+		!graph && !!edge && !(editor.inWork(edge.from) && editor.inWork(edge.to))
+	);
+	const ro = $derived(idc || graph || outsideEdge);
 	const incoming = $derived(node ? editor.incomingEdges(node.id) : []);
 	const outgoing = $derived(node ? editor.outgoingEdges(node.id) : []);
 	const nodeEdges = $derived(node ? editor.incidentEdges(node.id).length : 0);
+	/** 刪除會一起刪掉的工作區外的邊（畫面上看不到，確認時要講清楚） */
+	const hiddenEdges = $derived(
+		node
+			? editor.incidentEdges(node.id).filter((e) => !editor.inWork(e.from) || !editor.inWork(e.to))
+					.length
+			: 0
+	);
 	const block = $derived(node ? editor.deleteBlock(node.id) : null);
 	const nameOf = (id: string) => editor.node(id)?.name ?? id;
 	const colorOf = (id: string) =>
@@ -74,9 +86,8 @@
 		propKey = propValue = '';
 	}
 
-	function addWork(ids: string[]) {
-		if (editor.addToWork(ids)) editor.message = '已加入編輯頁';
-	}
+	/** 加入編輯頁：整批 admission，訊息由 Editor 給（新增節點與帶入邊數） */
+	const addWork = (ids: string[]) => editor.addToWork(ids);
 
 	function removeNode(id: string) {
 		if (nodeEdges && editor.armDelete !== id) editor.armDelete = id;
@@ -346,9 +357,14 @@
 					>
 				{/if}
 			{:else}
+				<button
+					class="ml-auto btn-ghost px-2 py-1 text-xs"
+					title="只從工作區拿掉，不刪除資料"
+					onclick={() => editor.removeFromWork([node.id])}>移出工作區</button
+				>
 				{#if editor.armDelete !== node.id}
 					<button
-						class="ml-auto grid size-8 place-items-center rounded-md text-rose-300 transition-colors hover:bg-rose-500/15 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent"
+						class="grid size-8 place-items-center rounded-md text-rose-300 transition-colors hover:bg-rose-500/15 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent"
 						aria-label="刪除節點"
 						title={block ? `無法刪除：${block}` : '刪除節點（⌫）'}
 						disabled={!!block}
@@ -363,7 +379,9 @@
 				aria-label="確認刪除"
 				class="mx-5 mb-3 flex animate-rise items-center gap-2 rounded-md border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-xs text-rose-100"
 			>
-				連同 {nodeEdges} 條邊一起刪除？
+				永久刪除資料，連同 {nodeEdges} 條邊{hiddenEdges
+					? `（含工作區外 ${hiddenEdges} 條）`
+					: ''}一起刪除？
 				<button
 					class="ml-auto btn-ghost px-2 py-0.5 text-xs"
 					onclick={() => (editor.armDelete = null)}>取消</button
@@ -378,6 +396,7 @@
 		{/if}
 
 		{@render propsEditor()}
+		{#key node.id}<NeighborPicker {editor} id={node.id} />{/key}
 		{@render edgeList('連入', incoming, 'from')}
 		{@render edgeList('連出', outgoing, 'to')}
 	{:else if edge}
@@ -396,14 +415,14 @@
 				<dd>
 					<button
 						class="text-left text-slate-100 hover:text-sky-300"
-						onclick={() => editor.reveal(edge.from)}>{nameOf(edge.from)}</button
+						onclick={() => editor.locate(edge.from)}>{nameOf(edge.from)}</button
 					>
 				</dd>
 				<dt class="text-xs text-slate-500">終點</dt>
 				<dd>
 					<button
 						class="text-left text-slate-100 hover:text-sky-300"
-						onclick={() => editor.reveal(edge.to)}>{nameOf(edge.to)}</button
+						onclick={() => editor.locate(edge.to)}>{nameOf(edge.to)}</button
 					>
 				</dd>
 				<dt class="text-xs text-slate-500">方向</dt>
@@ -421,7 +440,11 @@
 				</dd>
 			</dl>
 		</header>
-		{#if idc}{@render idcBanner()}{/if}
+		{#if idc}{@render idcBanner()}{:else if outsideEdge}
+			<p class="mx-5 mb-1 text-[11px] text-slate-400">
+				有一端不在編輯頁：先把兩端都加入編輯頁才能修改這條邊
+			</p>
+		{/if}
 		{#if !graph}
 			<div class="flex px-5 py-3">
 				<button

@@ -37,7 +37,7 @@
 	import '@xyflow/svelte/dist/style.css';
 	import type { Editor } from '#lib/editor.svelte.js';
 	import { nodeType } from '#lib/model/config.js';
-	import { NODE_H, NODE_W, layout, pin } from '#lib/model/graph.js';
+	import { NODE_H, NODE_W } from '#lib/model/graph.js';
 	import GraphNode from './GraphNode.svelte';
 	import Icon from './Icon.svelte';
 	import ViewSync from './ViewSync.svelte';
@@ -47,24 +47,9 @@
 	const nodeTypes = { graph: GraphNode };
 
 	const view = $derived(editor.canvas);
-	const lay = $derived(layout(view));
-	/** 檢視操作（系統、收疊、重新排版）才整張重排；編輯圖時既有節點留在原位，免得畫面跳動 */
-	const viewKey = $derived(
-		[
-			editor.systems.join(),
-			// 疊卡消失時的過期 key 清除不算檢視操作
-			editor.expanded.filter((k) => editor.stacks.has(k)).join(),
-			editor.stacking,
-			editor.relayout
-		].join('/')
-	);
-	let last: { key: string; pos: ReturnType<typeof layout>['pos'] } | undefined;
-	// 刻意在 derived 內記住上次位置（非響應變數）：只有 lay／viewKey 變動才會重算
-	const pos = $derived.by(() => {
-		const p = last?.key === viewKey ? pin(last.pos, lay.pos) : lay.pos;
-		last = { key: viewKey, pos: p };
-		return p;
-	});
+	// 版面與位置由 Editor 保存：切到 3D 卸載畫布再回來，卡片不搬動；改名不重排
+	const lay = $derived(editor.editLayout);
+	const pos = $derived(editor.editPositions);
 	/** 堆疊卡代表的節點；一般節點就是自己 */
 	const members = (id: string) => editor.closed.get(id) ?? [id];
 
@@ -292,8 +277,10 @@
 		{nodes}
 		{edges}
 		{nodeTypes}
-		fitView
+		fitView={!editor.canvasViewport}
+		initialViewport={editor.canvasViewport ?? undefined}
 		fitViewOptions={{ padding: 0.06 }}
+		onmoveend={(_, v) => (editor.canvasViewport = v)}
 		minZoom={0.1}
 		maxZoom={2}
 		nodesDraggable={false}

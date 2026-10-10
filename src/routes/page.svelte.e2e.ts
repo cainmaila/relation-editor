@@ -148,6 +148,14 @@ async function settle(page: Page) {
 }
 
 // ---- 編輯頁操作 ----
+/** 收疊預設關閉：手動打開（P4） */
+async function stackOn(page: Page) {
+	const t = page.getByRole('banner').getByRole('button', { name: '收疊同類' });
+	await expect(t).toHaveAttribute('aria-pressed', 'false');
+	await t.click();
+	await expect(t).toHaveAttribute('aria-pressed', 'true');
+	await settle(page);
+}
 /** 開對話框（先 Esc 關掉可能開著的） */
 async function open(page: Page, button: string, form: string) {
 	await page.keyboard.press('Escape');
@@ -382,6 +390,9 @@ test.describe('編輯（編輯頁）', () => {
 		await addNode(page, '攝影機', '攝影機 CAM-04');
 		await expect(graphEdges(page)).toHaveCount(1);
 		await settle(page); // 新節點會置中，等畫面停下再拖
+		// 視野保留（P4）不再因新卡片自動整張入鏡；先手動入鏡，免得目標貼著邊緣觸發自動平移
+		await page.getByRole('button', { name: 'Fit View' }).click();
+		await settle(page);
 		await drag(page, node(page, '攝影機 CAM-04'), node(page, G));
 		const m = page.getByRole('menu', { name: '建立邊' });
 		await expect(m).toContainText(`攝影機 CAM-04 → ${G}`);
@@ -398,13 +409,13 @@ test.describe('編輯（編輯頁）', () => {
 		await drag(page, node(page, G), { x: b.x + b.width / 2, y: b.y + b.height - 30 });
 		const m = page.getByRole('menu', { name: '新增節點並連線' });
 		await m.getByRole('menuitem', { name: '空間' }).hover();
-		await m.getByRole('menuitem', { name: '區域' }).click();
-		await page
-			.getByRole('menu', { name: '建立邊' })
-			.getByRole('menuitem', { name: '包含' })
-			.click();
+		await m.getByRole('menuitem', { name: '區域', exact: true }).hover();
+		// 選類型時還沒建任何東西：選完關係才把新節點＋邊一次建立
+		await expect(graphNodes(page)).toHaveCount(1);
+		await m.getByRole('menuitem', { name: `包含（${G} → 區域）` }).click();
 		await expect(node(page, '區域 1')).toBeVisible();
 		await expect(detail(page)).toContainText(field('終點', '區域 1'));
+		await expect(tab(page, 'edit')).toHaveText('編輯頁 2/200');
 	});
 
 	test('情境 10：違反連接限制時擋下', async ({ page }) => {
@@ -560,7 +571,7 @@ test.describe('編輯（編輯頁）', () => {
 		// 回到初始：全圖、編輯頁是空的、沒有 CAM-04
 		await graphReady(page);
 		await expectCounts(page, TOTAL, TOTAL_EDGES);
-		await expect(tab(page, 'edit')).toHaveText('編輯頁 0/500');
+		await expect(tab(page, 'edit')).toHaveText('編輯頁 0/200');
 		await issueCount(page, '未處理', 0);
 		await tab(page, 'edit').click();
 		await expect(graphNodes(page)).toHaveCount(0);
@@ -670,10 +681,10 @@ test.describe('加入編輯頁', () => {
 		// 操作 1：全圖搜尋，詳情加入
 		await search(page, '機櫃 A-01');
 		await detail(page).getByRole('button', { name: '加入編輯頁', exact: true }).click();
-		await expect(status(page)).toHaveText('已加入編輯頁');
+		await expect(status(page)).toHaveText('已加入編輯頁：新增 1 個節點、帶入 0 條邊');
 		await search(page, '機櫃 PDU A-01-A');
 		await detail(page).getByRole('button', { name: '加入編輯頁', exact: true }).click();
-		await expect(tab(page, 'edit')).toHaveText('編輯頁 2/500');
+		await expect(tab(page, 'edit')).toHaveText('編輯頁 2/200');
 		await tab(page, 'edit').click();
 		// 只有這兩個節點與其間的邊；其他鄰居詳情看得到
 		await expect(graphNodes(page)).toHaveCount(2);
@@ -693,11 +704,11 @@ test.describe('加入編輯頁', () => {
 		await expect(node(page, '攝影機 CAM-04')).toBeVisible();
 	});
 
-	test('情境 20：編輯頁超過 500 個節點', async ({ page }) => {
+	test('情境 20：編輯頁超過 200 個節點', async ({ page }) => {
 		test.setTimeout(300_000);
-		// 全圖大綱翻頁取前 501 個節點（每頁 50），從編輯頁 ⌘K 逐一加入
+		// 全圖大綱翻頁取前 201 個節點（每頁 50），從編輯頁 ⌘K 逐一加入並定位
 		const names: string[] = [];
-		for (let p = 1; names.length < 501; p++) {
+		for (let p = 1; names.length < 201; p++) {
 			await expect(outline(page)).toContainText(`第 ${p} / `);
 			await expect(rows(page).getByRole('listitem')).toHaveCount(50);
 			names.push(
@@ -707,24 +718,24 @@ test.describe('加入編輯頁', () => {
 			);
 			await outline(page).getByRole('button', { name: '下一頁' }).click();
 		}
-		names.length = 501;
-		expect(new Set(names).size).toBe(501);
+		names.length = 201;
+		expect(new Set(names).size).toBe(201);
 		await tab(page, 'edit').click();
 		const box = page.getByRole('textbox', { name: '搜尋節點' });
-		for (const n of names.slice(0, 500)) {
+		for (const n of names.slice(0, 200)) {
 			await page.keyboard.press('ControlOrMeta+k');
 			await box.fill(n);
 			await page.keyboard.press('Enter');
 			await expect(box).toHaveCount(0);
 		}
-		await expect(tab(page, 'edit')).toHaveText('編輯頁 500/500');
-		// 第 501 個擋下並提示，已在畫面上的不變
+		await expect(tab(page, 'edit')).toHaveText('編輯頁 200/200');
+		// 第 201 個整批擋下並提示需求與名額，已在畫面上的不變
 		await page.keyboard.press('ControlOrMeta+k');
-		await box.fill(names[500]);
+		await box.fill(names[200]);
 		await page.keyboard.press('Enter');
-		await expect(status(page)).toContainText('編輯頁最多 500 個節點');
-		await expect(tab(page, 'edit')).toHaveText('編輯頁 500/500');
-		await expect(outline(page).locator(`button[data-id="${names[500]}"]`)).toHaveCount(0);
+		await expect(status(page)).toHaveText('工作區最多 200 個節點：要新增 1 個，只剩 0 個名額');
+		await expect(tab(page, 'edit')).toHaveText('編輯頁 200/200');
+		await expect(outline(page).locator(`button[data-id="${names[200]}"]`)).toHaveCount(0);
 	});
 });
 
@@ -864,6 +875,9 @@ test.describe('編輯器操作', () => {
 	test('編輯頁：同類兄弟節點收成一疊，點開展開、右鍵收回', async ({ page }) => {
 		const pdus = ['A-05', 'A-06', 'A-07'].map((c) => `機櫃 PDU ${c}-A`);
 		await toEdit(page, ['樓層 PDU 2F-A', ...pdus]);
+		// 預設不收疊：四張卡都在
+		await expect(graphNodes(page)).toHaveCount(4);
+		await stackOn(page);
 		const stack = node(page, '機櫃 PDU ×3');
 		await expect(stack).toContainText('3 個同類');
 		await expect(graphNodes(page)).toHaveCount(2);
@@ -880,6 +894,7 @@ test.describe('編輯器操作', () => {
 
 	test('編輯頁：雙擊疊卡只展開，不選到重排後的卡片', async ({ page }) => {
 		await toEdit(page, ['樓層 PDU 2F-A', '機櫃 PDU A-05-A', '機櫃 PDU A-06-A', '機櫃 PDU A-07-A']);
+		await stackOn(page);
 		await clickPane(page); // 取消加入時的選取
 		await expect(detail(page).getByLabel('名稱', { exact: true })).toHaveCount(0);
 		await node(page, '機櫃 PDU ×3').dblclick();
@@ -919,6 +934,22 @@ test.describe('編輯器操作', () => {
 });
 
 test.describe('手測回報', () => {
+	// P0 回報：最後加入 A-07-A 再切到編輯頁，選取變成樓層 PDU 2F-A
+	test('切到編輯頁、回全圖再回來，選取都還是原本的節點', async ({ page }) => {
+		const names = ['樓層 PDU 2F-A', '機櫃 PDU A-05-A', '機櫃 PDU A-06-A', '機櫃 PDU A-07-A'];
+		await toEdit(page, names);
+		// 回報發生在收疊開啟時：選取的成員被收進疊卡
+		await stackOn(page);
+		await expect(graphNodes(page)).toHaveCount(2);
+		const name = detail(page).getByLabel('名稱', { exact: true });
+		await expect(name).toHaveValue('機櫃 PDU A-07-A');
+		await toGraph(page);
+		await expect.poll(() => page.evaluate(() => window.__graphView!.selected())).toBe(names[3]);
+		await tab(page, 'edit').click();
+		await settle(page);
+		await expect(name).toHaveValue('機櫃 PDU A-07-A');
+	});
+
 	test('詳情欄點過的邊，選別的節點後不再亮著', async ({ page }) => {
 		await toEdit(page, ['Core Switch-1', '匯聚 Switch AGG-A', '台電市電']);
 		await pick(page, 'Core Switch-1');
@@ -941,6 +972,7 @@ test.describe('手測回報', () => {
 			'偵測器 SD-01',
 			'機櫃 A-03'
 		]);
+		await stackOn(page);
 		await expect(graphNodes(page)).toHaveCount(4);
 		const at = () =>
 			graphNodes(page).evaluateAll((ns) =>
@@ -1056,8 +1088,8 @@ test.describe('全量搜尋與分頁（P3）', () => {
 		await p.getByRole('textbox', { name: '搜尋節點' }).fill('UPS-1');
 		await expect(p).toContainText('已選 2');
 		await p.getByRole('button', { name: '加入編輯頁（2）' }).click();
-		await expect(status(page)).toHaveText('已加入編輯頁');
-		await expect(tab(page, 'edit')).toHaveText('編輯頁 2/500');
+		await expect(status(page)).toHaveText(/^已加入編輯頁：新增 2 個節點、帶入 \d+ 條邊$/);
+		await expect(tab(page, 'edit')).toHaveText('編輯頁 2/200');
 		// 不切畫面：仍在全圖，對話框還開著，可選擇前往
 		await expect(tab(page, 'graph')).toHaveAttribute('aria-pressed', 'true');
 		await expect(p.getByRole('button', { name: '前往編輯頁' })).toBeVisible();
@@ -1082,7 +1114,7 @@ test.describe('全量搜尋與分頁（P3）', () => {
 		await outline(page).getByRole('checkbox', { name: '勾選 偵測器 SD-02' }).check();
 		await expect(outline(page)).toContainText('已選 2');
 		await outline(page).getByRole('button', { name: '加入編輯頁（2）' }).click();
-		await expect(tab(page, 'edit')).toHaveText('編輯頁 2/500');
+		await expect(tab(page, 'edit')).toHaveText('編輯頁 2/200');
 		await expect(tab(page, 'graph')).toHaveAttribute('aria-pressed', 'true');
 		// 編輯頁大綱只查工作區
 		await tab(page, 'edit').click();
@@ -1095,7 +1127,64 @@ test.describe('全量搜尋與分頁（P3）', () => {
 		await toEdit(page, ['偵測器 SD-01']);
 		const f = await edgeForm(page, '偵測器 SD-01', '機櫃 A-03');
 		await f.getByRole('radio', { name: '監測' }).check();
+		await expect(f).toContainText('不在編輯頁的端點會和這條邊一起加入');
 		await f.getByRole('button', { name: '新增邊' }).click();
 		await expect(detail(page)).toContainText(field('終點', '機櫃 A-03'));
+		// 工作區外的終點和邊一起加入，畫面上看得到
+		await expect(tab(page, 'edit')).toHaveText('編輯頁 2/200');
+		await expect(node(page, '機櫃 A-03')).toBeVisible();
+	});
+});
+
+test.describe('局部工作區（P4）', () => {
+	test('鄰居預覽：明確勾選前 20 個才整批加入', async ({ page }) => {
+		await toEdit(page, ['樓層 PDU 2F-A']);
+		const nb = detail(page).getByRole('region', { name: '鄰居預覽' });
+		await expect(nb).toContainText(/工作區外 \d+ 個鄰居/);
+		// 預設不勾選、不加入
+		const add = nb.getByRole('button', { name: /^加入勾選的/ });
+		await expect(add).toBeDisabled();
+		await expect(tab(page, 'edit')).toHaveText('編輯頁 1/200');
+		await nb.getByRole('button', { name: '勾選本頁前 20 個' }).click();
+		await expect(nb).toContainText(/將新增 \d+ 個節點、帶入 \d+ 條邊/);
+		await add.click();
+		await expect(status(page)).toContainText('已加入編輯頁：新增');
+		await expect(tab(page, 'edit')).not.toHaveText('編輯頁 1/200');
+		await expect(nb).toContainText('已在編輯頁');
+	});
+
+	test('連工作區外端點：端點跟邊一起加入；移出與清空不刪資料', async ({ page }) => {
+		await toEdit(page, ['偵測器 SD-01']);
+		await addEdge(page, '偵測器 SD-01', '機櫃 A-03', '監測');
+		await expect(tab(page, 'edit')).toHaveText('編輯頁 2/200');
+		// 移出工作區：畫面少一張卡，資料還在
+		await page.keyboard.press('Escape');
+		await node(page, '機櫃 A-03').click();
+		await detail(page).getByRole('button', { name: '移出工作區' }).click();
+		await expect(tab(page, 'edit')).toHaveText('編輯頁 1/200');
+		await expect(node(page, '機櫃 A-03')).toHaveCount(0);
+		// 清空工作區
+		await page.getByRole('banner').getByRole('button', { name: '清空工作區' }).click();
+		await expect(tab(page, 'edit')).toHaveText('編輯頁 0/200');
+		await toGraph(page);
+		await pick(page, '機櫃 A-03');
+		await expect(detail(page)).toContainText('偵測器 SD-01');
+	});
+
+	test('2D 視野與位置在切到 3D 再回來後保留', async ({ page }) => {
+		await toEdit(page, ['樓層 PDU 2F-A', '機櫃 PDU A-05-A']);
+		await drag(page, node(page, '機櫃 PDU A-05-A'), { x: 700, y: 520 });
+		await settle(page);
+		const viewport = page.locator('.svelte-flow__viewport');
+		const v0 = await viewport.getAttribute('style');
+		const b0 = await node(page, '機櫃 PDU A-05-A').boundingBox();
+		await toGraph(page);
+		await tab(page, 'edit').click();
+		await expect(pane(page)).toBeVisible();
+		await settle(page);
+		await expect(viewport).toHaveAttribute('style', v0!);
+		const b1 = await node(page, '機櫃 PDU A-05-A').boundingBox();
+		expect(b1!.x).toBeCloseTo(b0!.x, 0);
+		expect(b1!.y).toBeCloseTo(b0!.y, 0);
 	});
 });
