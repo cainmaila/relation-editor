@@ -326,7 +326,10 @@
 				editor.fit([n.id]);
 				return n.id;
 			},
-			find: (id: string) => editor.findCustomers(id)
+			find: (id: string) => editor.findCustomers(id),
+			// 唯讀掛勾，供 e2e 驗證 PRD 的節點／邊數量（3D 畫面讀不到 DOM）
+			nodeCount: () => ids.length,
+			edgeCount: () => g.edges.length
 		};
 		(window as unknown as { __graphView?: typeof view }).__graphView = view;
 

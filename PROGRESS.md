@@ -1,5 +1,21 @@
 # PROGRESS
 
+## P0 接回 v0.4 雙頁基線（分支 cainmaila/main-3-3）
+
+- **Goal:** 把已提交的 v0.4 雙頁基線（`feat/v0.4-two-views` 5b59172）接進本分支，建立可重現的檢查基線；不宣稱符合新設計。計畫 `.superpowers/sdd/plan/task-0-brief.md`
+- **Done（agent 已測，待 parent QA）:**
+  - merge `feat/v0.4-two-views`（fast-forward 47e087d→5b59172），`pnpm install --frozen-lockfile`（manifest 有變）
+  - `playwright.config.ts` webServer 改 `pnpm build && pnpm preview`（仍跑 production build）
+  - e2e 改成雙頁前置：以 `v04-two-views` 未提交 WIP 的 e2e 為底（逐項跑過才收），補 4 項前置修正（等編輯頁視野停下、取消加入時的選取、右鍵前先從大綱點選）；原全圖「A-02 命中 5 個」斷言補回
+  - `GraphView.svelte` 加唯讀 e2e 掛勾 `nodeCount()`／`edgeCount()`（取自同一 WIP）
+  - `.prettierignore` 排除 `.superpowers/`（git 已忽略的本機 SDD 檔讓 `pnpm lint` 失敗）
+  - check 0 錯、lint 綠、unit 35、build 綠、e2e 42 項全過（連跑 2 次）
+- **Todo:** parent QA；P1 之後依計畫
+- **Notes（已知差距）:**
+  - `v04-fix` 未提交 5 檔（編輯頁外節點唯讀、EdgeDialog 只列 working、GraphView 失敗處理／ready 前不飛、addNode 滿額擋下）**未帶入**，留給 P4／P5 依新設計處理
+  - 原 2D 全圖測試的 ×42 疊卡、全圖淡化數、收疊卡片數 1,398 在 3D 全圖無 DOM 可驗，改在編輯頁用小集合驗同一行為
+  - 情境 20（500 上限）e2e 逐一加入 500 個並驗第 501 個擋下；10k 效能、LOD、新搜尋未驗
+
 ## 上萬節點渲染實驗（spike，不合併 main）
 
 - **Goal:** 實測 10k 節點下 Svelte Flow 優化／`force-graph`／Sigma.js，決定渲染方向；計畫 `~/.claude/plans/dom-fluttering-kazoo.md`
