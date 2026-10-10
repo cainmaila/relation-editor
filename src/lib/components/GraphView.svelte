@@ -63,6 +63,20 @@
 	let layout = $state.raw<LayoutStatus>(rt.status);
 	/** LOD 計數（renderer 最多每 250ms 回報一次） */
 	let stats = $state.raw<LodStats | null>(null);
+	// 圖例可明確收合（預設展開）；收合時標頭仍標示有無省略
+	let legendOpen = $state(true);
+	const uid = $props.id();
+	const legendBodyId = `${uid}-legend`;
+	const omitted = $derived(
+		!!stats &&
+			!!(
+				stats.detailOmitted ||
+				stats.localEdgesOmitted ||
+				stats.labelsOmitted ||
+				stats.highlightOmitted ||
+				stats.highlightHidden
+			)
+	);
 	let focusNodes: Set<string> | null = null;
 	/** 掛載前就發生的視野請求屬於其他頁（2D）；這次掛載只接手之後的請求 */
 	let seenSeq = untrack(() => editor.view.seq);
@@ -514,7 +528,7 @@
 	}
 </script>
 
-<div class="relative size-full overflow-hidden bg-[#0b1020]">
+<div class="[container-type:size] relative size-full overflow-hidden bg-[#0b1020]">
 	<div bind:this={host} class="absolute inset-0"></div>
 	<div
 		bind:this={labelHost}
@@ -522,101 +536,126 @@
 		aria-label="節點標籤"
 		role="group"
 	></div>
-	<section
-		aria-label="宇宙圖例"
-		class="absolute bottom-3 left-3 max-w-[22rem] space-y-1.5 rounded-lg border border-slate-700/60 bg-[#0b1020]/80 px-3 py-2 text-xs text-slate-300 backdrop-blur"
-	>
-		<ul class="flex flex-wrap gap-x-3 gap-y-1" aria-label="系統">
-			{#each legendSystems as s (s)}
-				<li>
-					<span class="mr-1 inline-block size-2 rounded-full" style:background={SYSTEM_COLORS[s]}
-					></span>{s} <span class="text-slate-400 tabular-nums">{fmt(perSystem[s])}</span>
-				</li>
-			{/each}
-		</ul>
-		<ul class="flex flex-wrap gap-x-3 gap-y-1">
-			<li>
-				<span class="mr-1 inline-block size-2 rounded-full" style:background={PALETTE.WARN}
-				></span>未處理
-			</li>
-			<li>
-				<span class="mr-1 inline-block size-2 rounded-full" style:background={PALETTE.BROKEN}
-				></span>{UNREACHABLE_LABEL}
-			</li>
-			{#if editor.result}
-				<li>
-					<span class="mr-1 inline-block size-2 rounded-full" style:background={PALETTE.PATH}
-					></span>找客戶路徑
-				</li>
-			{/if}
-		</ul>
-		{#if stats}
-			<dl
-				class="grid grid-cols-[auto_1fr] gap-x-2 border-t border-slate-700/60 pt-1.5 tabular-nums"
-				aria-label="細節層級"
-				data-detail={stats.detail}
-				data-labels={stats.labels}
-			>
-				<dt class="text-slate-400">遠景點</dt>
-				<dd>{fmt(stats.baseNodes)}</dd>
-				<dt class="text-slate-400">近景節點</dt>
-				<dd>
-					{fmt(stats.detail)}／上限 {fmt(LOD.maxDetail)}{#if stats.detailOmitted}・省略 {fmt(
-							stats.detailOmitted
-						)}{/if}
-				</dd>
-				<dt class="text-slate-400">局部連線</dt>
-				<dd>
-					{fmt(stats.localEdges)}／上限 {fmt(LOD.maxLocalEdges)}{#if stats.localEdgesOmitted}・省略
-						{fmt(stats.localEdgesOmitted)}{/if}
-				</dd>
-				<dt class="text-slate-400">名稱標籤</dt>
-				<dd>
-					{fmt(stats.labels)}／上限 {LOD.maxLabels}{#if stats.labelsOmitted}・省略 {fmt(
-							stats.labelsOmitted
-						)}{/if}
-				</dd>
-				{#if stats.highlightTotal}
-					<dt class="text-slate-400">高亮連線</dt>
-					<dd>
-						共 {fmt(stats.highlightTotal)}・已畫 {fmt(
-							stats.highlightDrawn
-						)}{#if stats.highlightOmitted}・省略
-							{fmt(stats.highlightOmitted)}{/if}{#if stats.highlightHidden}・系統隱藏 {fmt(
-								stats.highlightHidden
-							)}{/if}
-					</dd>
-				{/if}
-				<dd class="col-span-2 text-slate-500">
-					拉近到節點 ≥{LOD.detailEnterPx}px 才顯示細節、局部連線與名稱；遠景只畫點
-				</dd>
-			</dl>
-		{/if}
-	</section>
+	<!-- HUD：圖例與版面狀態同一個底部流式排版；容器變窄時狀態列換到下一行，不會互相覆蓋 -->
 	<div
-		class="absolute right-3 bottom-3 flex items-center gap-2 rounded-lg border border-slate-700/60 bg-[#0b1020]/80 px-3 py-1.5 text-xs text-slate-200 backdrop-blur"
-		role="group"
-		aria-label="版面狀態"
-		data-phase={layout.phase}
+		class="pointer-events-none absolute inset-x-3 bottom-3 flex flex-wrap items-end justify-between gap-2 text-xs"
 	>
-		<span class="tabular-nums" aria-live="polite">{phaseText(layout)}</span>
-		{#if layout.stale && layout.phase !== 'running'}
-			<span class="text-amber-300">・資料已變更，版面未重整</span>
-		{/if}
-		{#if layout.phase === 'running'}
-			<button class="rounded px-2 py-0.5 hover:bg-slate-700" onclick={() => rt.stop('user')}
-				>停止</button
-			>
-		{:else}
-			<button class="rounded px-2 py-0.5 hover:bg-slate-700" onclick={() => rt.start()}
-				>{layout.phase === 'error' ? '重試整理' : '重新整理版面'}</button
-			>
-		{/if}
-		<button
-			class="rounded px-2 py-0.5 hover:bg-slate-700"
-			title="相機看全部可見節點（不重算版面）"
-			onclick={() => editor.fit()}>全景</button
+		<section
+			aria-label="宇宙圖例"
+			class="pointer-events-auto flex max-h-[calc(100cqh-5rem)] max-w-[22rem] min-w-0 flex-col rounded-lg border border-slate-700/60 bg-[#0b1020]/80 px-3 py-2 text-slate-300 backdrop-blur"
 		>
+			<div class="flex items-center gap-2">
+				<span class="font-medium text-slate-200">圖例</span>
+				{#if !legendOpen && omitted}
+					<span class="text-amber-300">・有省略</span>
+				{/if}
+				<button
+					class="ml-auto rounded px-2 py-0.5 whitespace-nowrap text-slate-300 hover:bg-slate-700"
+					aria-expanded={legendOpen}
+					aria-controls={legendBodyId}
+					onclick={() => (legendOpen = !legendOpen)}>{legendOpen ? '收合圖例' : '展開圖例'}</button
+				>
+			</div>
+			{#if legendOpen}
+				<div id={legendBodyId} class="mt-1.5 min-h-0 space-y-1.5 overflow-y-auto">
+					<ul class="flex flex-wrap gap-x-3 gap-y-1" aria-label="系統">
+						{#each legendSystems as s (s)}
+							<li>
+								<span
+									class="mr-1 inline-block size-2 rounded-full"
+									style:background={SYSTEM_COLORS[s]}
+								></span>{s} <span class="text-slate-400 tabular-nums">{fmt(perSystem[s])}</span>
+							</li>
+						{/each}
+					</ul>
+					<ul class="flex flex-wrap gap-x-3 gap-y-1">
+						<li>
+							<span class="mr-1 inline-block size-2 rounded-full" style:background={PALETTE.WARN}
+							></span>未處理
+						</li>
+						<li>
+							<span class="mr-1 inline-block size-2 rounded-full" style:background={PALETTE.BROKEN}
+							></span>{UNREACHABLE_LABEL}
+						</li>
+						{#if editor.result}
+							<li>
+								<span class="mr-1 inline-block size-2 rounded-full" style:background={PALETTE.PATH}
+								></span>找客戶路徑
+							</li>
+						{/if}
+					</ul>
+					{#if stats}
+						<dl
+							class="grid grid-cols-[auto_1fr] gap-x-2 border-t border-slate-700/60 pt-1.5 tabular-nums"
+							aria-label="細節層級"
+							data-detail={stats.detail}
+							data-labels={stats.labels}
+						>
+							<dt class="text-slate-400">遠景點</dt>
+							<dd>{fmt(stats.baseNodes)}</dd>
+							<dt class="text-slate-400">近景節點</dt>
+							<dd>
+								{fmt(stats.detail)}／上限 {fmt(LOD.maxDetail)}{#if stats.detailOmitted}・省略 {fmt(
+										stats.detailOmitted
+									)}{/if}
+							</dd>
+							<dt class="text-slate-400">局部連線</dt>
+							<dd>
+								{fmt(stats.localEdges)}／上限 {fmt(
+									LOD.maxLocalEdges
+								)}{#if stats.localEdgesOmitted}・省略
+									{fmt(stats.localEdgesOmitted)}{/if}
+							</dd>
+							<dt class="text-slate-400">名稱標籤</dt>
+							<dd>
+								{fmt(stats.labels)}／上限 {LOD.maxLabels}{#if stats.labelsOmitted}・省略 {fmt(
+										stats.labelsOmitted
+									)}{/if}
+							</dd>
+							{#if stats.highlightTotal}
+								<dt class="text-slate-400">高亮連線</dt>
+								<dd>
+									共 {fmt(stats.highlightTotal)}・已畫 {fmt(
+										stats.highlightDrawn
+									)}{#if stats.highlightOmitted}・省略
+										{fmt(stats.highlightOmitted)}{/if}{#if stats.highlightHidden}・系統隱藏 {fmt(
+											stats.highlightHidden
+										)}{/if}
+								</dd>
+							{/if}
+							<dd class="col-span-2 text-slate-500">
+								拉近到節點 ≥{LOD.detailEnterPx}px 才顯示細節、局部連線與名稱；遠景只畫點
+							</dd>
+						</dl>
+					{/if}
+				</div>
+			{/if}
+		</section>
+		<div
+			class="pointer-events-auto ml-auto flex max-w-full flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-slate-700/60 bg-[#0b1020]/80 px-3 py-1.5 text-slate-200 backdrop-blur [&_button]:whitespace-nowrap"
+			role="group"
+			aria-label="版面狀態"
+			data-phase={layout.phase}
+		>
+			<span class="tabular-nums" aria-live="polite">{phaseText(layout)}</span>
+			{#if layout.stale && layout.phase !== 'running'}
+				<span class="text-amber-300">・資料已變更，版面未重整</span>
+			{/if}
+			{#if layout.phase === 'running'}
+				<button class="rounded px-2 py-0.5 hover:bg-slate-700" onclick={() => rt.stop('user')}
+					>停止</button
+				>
+			{:else}
+				<button class="rounded px-2 py-0.5 hover:bg-slate-700" onclick={() => rt.start()}
+					>{layout.phase === 'error' ? '重試整理' : '重新整理版面'}</button
+				>
+			{/if}
+			<button
+				class="rounded px-2 py-0.5 hover:bg-slate-700"
+				title="相機看全部可見節點（不重算版面）"
+				onclick={() => editor.fit()}>全景</button
+			>
+		</div>
 	</div>
 	{#if failure}
 		<div
@@ -629,7 +668,7 @@
 				{#if needsReload}
 					<p class="text-xs text-amber-300">
 						瀏覽器已記住 3D 程式庫共用模組的載入失敗，這個分頁內重試不會成功；
-						請自行重新整理頁面（重新整理會遺失這次尚未保存的編輯）。
+						請自行重新整理頁面（重新整理會遺失本分頁的所有編輯，包括已按儲存的）。
 					</p>
 				{:else}
 					<button

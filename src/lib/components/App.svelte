@@ -94,7 +94,7 @@
 			{/if}
 			{#if editor.connecting}
 				<div
-					class="pointer-events-none absolute top-4 left-1/2 flex -translate-x-1/2 animate-rise items-center gap-2 rounded-full border border-sky-400/40 bg-ink-850/90 px-4 py-2 text-xs text-sky-100 shadow-xl backdrop-blur"
+					class="pointer-events-none absolute top-4 left-1/2 flex w-max max-w-[calc(100%-2rem)] -translate-x-1/2 animate-rise items-center gap-2 rounded-full border border-sky-400/40 bg-ink-850/90 px-4 py-2 text-xs text-sky-100 shadow-xl backdrop-blur"
 				>
 					<span class="size-1.5 animate-pulse rounded-full bg-sky-400"></span>
 					從「{editor.node(editor.connecting)?.name}」連線：點選終點節點
@@ -102,13 +102,18 @@
 				</div>
 			{:else if graph && origin}
 				<div
-					class="absolute top-4 left-1/2 flex -translate-x-1/2 animate-rise items-center gap-3 rounded-full border border-sky-400/40 bg-ink-850/90 py-1.5 pr-1.5 pl-4 text-xs text-slate-200 shadow-xl backdrop-blur"
+					role="group"
+					aria-label="影響分析"
+					class="absolute top-4 left-1/2 flex w-max max-w-[calc(100%-2rem)] -translate-x-1/2 animate-rise items-center gap-3 rounded-full border border-sky-400/40 bg-ink-850/90 py-1.5 pr-1.5 pl-4 text-xs text-slate-200 shadow-xl backdrop-blur"
 				>
-					<span class="size-1.5 rounded-full bg-cyan-400 shadow-[0_0_8px] shadow-cyan-400"></span>
-					影響分析（青色路徑）：<b class="text-slate-50">{origin}</b> → {editor.result!.customers
-						.length} 位客戶
+					<span class="size-1.5 shrink-0 rounded-full bg-cyan-400 shadow-[0_0_8px] shadow-cyan-400"
+					></span>
+					<span class="min-w-0"
+						>影響分析（青色路徑）：<b class="text-slate-50">{origin}</b> → {editor.result!.customers
+							.length} 位客戶</span
+					>
 					<button
-						class="btn-ghost rounded-full px-2.5 py-0.5 text-xs"
+						class="btn-ghost shrink-0 rounded-full px-2.5 py-0.5 text-xs whitespace-nowrap"
 						onclick={() => editor.clearTrace()}>清除 <span class="kbd">Esc</span></button
 					>
 				</div>

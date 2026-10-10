@@ -673,3 +673,91 @@ test.describe('P6 LOD 與點選（正式 mock）', () => {
 		await expect(legend).toContainText(`已畫 ${s.highlightDrawn.toLocaleString('en-US')}`);
 	});
 });
+
+// QA fix 3：小視窗時圖例與版面狀態列各自貼底會互相蓋住（省略數看不到、「全景」一字一行）
+for (const [w, h, dpr] of [
+	[1024, 640, 1],
+	[1024, 640, 2],
+	[1600, 960, 1]
+] as const)
+	test.describe(`HUD 版面 ${w}×${h} DPR${dpr}`, () => {
+		test.use({ viewport: { width: w, height: h }, deviceScaleFactor: dpr });
+
+		test('高亮中：圖例與狀態列不重疊、按鈕完整可見、計數全部可讀；圖例可明確收合', async ({
+			page
+		}, info) => {
+			await page.goto('/');
+			await ready(page);
+			await page.keyboard.press('ControlOrMeta+k');
+			await page.getByRole('textbox', { name: '搜尋節點' }).fill('台電市電');
+			await page.keyboard.press('Enter');
+			await expect.poll(() => gv(page, (h) => h.selected())).toBe('台電市電');
+			await page.keyboard.press('f');
+			await expect(page.getByRole('region', { name: '找客戶結果' })).toBeVisible();
+			await frames(page);
+			const s = await lod(page);
+			expect(s.highlightTotal).toBeGreaterThan(0);
+
+			const legend = page.getByRole('region', { name: '宇宙圖例' });
+			const status = badge(page);
+			const highlight = legend.locator('dd', {
+				hasText: `共 ${s.highlightTotal.toLocaleString('en-US')}`
+			});
+			await highlight.scrollIntoViewIfNeeded();
+			await page.screenshot({ path: info.outputPath(`hud-${w}x${h}-dpr${dpr}.png`) });
+
+			const rect = (l: ReturnType<Page['locator']>) =>
+				l.evaluate((e) => e.getBoundingClientRect().toJSON());
+			type R = { left: number; right: number; top: number; bottom: number; height: number };
+			const overlap = (a: R, b: R) =>
+				a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+			const inside = (a: R, b: R) =>
+				a.left >= b.left - 0.5 &&
+				a.right <= b.right + 0.5 &&
+				a.top >= b.top - 0.5 &&
+				a.bottom <= b.bottom + 0.5;
+			const canvas: R = await rect(page.locator('main canvas').first());
+			const lr: R = await rect(legend);
+			const sr: R = await rect(status);
+			expect(overlap(lr, sr), JSON.stringify({ lr, sr })).toBe(false);
+			expect(inside(lr, canvas)).toBe(true);
+			expect(inside(sr, canvas)).toBe(true);
+			for (const b of await status.getByRole('button').all()) {
+				const [r, t]: [R, string] = [await rect(b), await b.innerText()];
+				expect(inside(r, canvas), t).toBe(true);
+				expect(overlap(r, lr), t).toBe(false);
+				expect(r.height, `${t} 單行`).toBeLessThan(32);
+			}
+			// 上方「影響分析」浮標：不會一字一行，不蓋圖例與狀態列
+			const banner = page.getByRole('group', { name: '影響分析' });
+			const br: R = await rect(banner);
+			expect(inside(br, canvas)).toBe(true);
+			expect(br.height, '影響分析浮標').toBeLessThan(80);
+			expect(overlap(br, lr) || overlap(br, sr)).toBe(false);
+			expect((await rect(banner.getByRole('button'))).height).toBeLessThan(32);
+			// 每一列 LOD／高亮計數都在圖例可視範圍內（含完整的「共／已畫／省略」）
+			await expect(highlight).toContainText(`已畫 ${s.highlightDrawn.toLocaleString('en-US')}`);
+			if (s.highlightOmitted)
+				await expect(highlight).toContainText(`省略 ${s.highlightOmitted.toLocaleString('en-US')}`);
+			for (const d of await legend.locator('[aria-label="細節層級"] dd').all()) {
+				await d.scrollIntoViewIfNeeded();
+				const [r, t]: [R, string] = [await rect(d), await d.innerText()];
+				expect(inside(r, await rect(legend)), t).toBe(true);
+				expect(overlap(r, sr), t).toBe(false);
+			}
+
+			// 明確收合：標頭仍提示有省略；再展開恢復
+			const toggle = legend.getByRole('button', { name: '收合圖例' });
+			await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+			await toggle.click();
+			await expect(legend.getByRole('button', { name: '展開圖例' })).toHaveAttribute(
+				'aria-expanded',
+				'false'
+			);
+			await expect(legend.getByLabel('細節層級')).toHaveCount(0);
+			if (s.highlightOmitted) await expect(legend).toContainText('有省略');
+			expect(overlap(await rect(legend), await rect(status))).toBe(false);
+			await legend.getByRole('button', { name: '展開圖例' }).click();
+			await expect(legend.getByLabel('細節層級')).toBeVisible();
+		});
+	});

@@ -4,6 +4,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { Editor } from '#lib/editor.svelte.js';
 import GraphView from './GraphView.svelte';
+// HUD 版面斷言需要真的 Tailwind 樣式
+import '../../routes/layout.css';
 
 type Stats = {
 	visibleNodes: number;
@@ -48,9 +50,9 @@ afterEach(() => {
 	host = null;
 });
 
-async function mount(e: Editor) {
+async function mount(e: Editor, w = 800, h = 600) {
 	host = document.createElement('div');
-	host.style.cssText = 'position:fixed;left:0;top:0;width:800px;height:600px';
+	host.style.cssText = `position:fixed;left:0;top:0;width:${w}px;height:${h}px`;
 	document.body.append(host);
 	render(GraphView, { target: host, props: { editor: e } });
 	await expect.poll(() => hooks()?.ready ?? false, { timeout: 20_000 }).toBe(true);
@@ -253,4 +255,73 @@ describe('GraphView（P6 LOD 整合）', () => {
 			canvas.dispatchEvent(ev('pointermove', { buttons: 0 }));
 			await expect.poll(() => canvas.style.cursor).toBe('pointer');
 		});
+});
+
+/** 兩個矩形是否重疊（貼邊不算） */
+const overlaps = (a: DOMRect, b: DOMRect) =>
+	a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+const inside = (a: DOMRect, b: DOMRect) =>
+	a.left >= b.left - 0.5 &&
+	a.right <= b.right + 0.5 &&
+	a.top >= b.top - 0.5 &&
+	a.bottom <= b.bottom + 0.5;
+
+describe('GraphView HUD 版面（圖例與狀態列不重疊）', () => {
+	// 440 寬≈1024 視窗、預設側欄時的主畫面；寬度來自容器而非視窗
+	for (const [w, h] of [
+		[440, 420],
+		[320, 360],
+		[1100, 800]
+	] as const)
+		it(`容器 ${w}×${h}：圖例、狀態列不重疊，按鈕完整可見且單行，LOD 計數都在可視範圍`, async () => {
+			const e = new Editor(graph(60));
+			const el = await mount(e, w, h);
+			await frames();
+			const box = el.getBoundingClientRect();
+			const legend = el.querySelector<HTMLElement>('[aria-label="宇宙圖例"]')!;
+			const status = el.querySelector<HTMLElement>('[aria-label="版面狀態"]')!;
+			const [lr, sr] = [legend.getBoundingClientRect(), status.getBoundingClientRect()];
+			expect(overlaps(lr, sr), `legend ${JSON.stringify(lr)} status ${JSON.stringify(sr)}`).toBe(
+				false
+			);
+			expect(inside(lr, box)).toBe(true);
+			expect(inside(sr, box)).toBe(true);
+			const buttons = [...el.querySelectorAll<HTMLElement>('button')];
+			expect(buttons.length).toBeGreaterThanOrEqual(3);
+			for (const b of buttons) {
+				const r = b.getBoundingClientRect();
+				expect(inside(r, box), b.textContent!).toBe(true);
+				if (!legend.contains(b)) expect(overlaps(r, lr), b.textContent!).toBe(false);
+				// 單行：不會一字一行（「全景」不換行）
+				expect(r.height, b.textContent!).toBeLessThan(32);
+			}
+			// LOD 計數：每一列都在圖例可視範圍內（不被裁切、不被其他面板蓋住）
+			const rows = [...legend.querySelectorAll<HTMLElement>('[aria-label="細節層級"] dd')];
+			expect(rows.length).toBeGreaterThanOrEqual(3);
+			for (const d of rows) {
+				d.scrollIntoView({ block: 'nearest' });
+				const r = d.getBoundingClientRect();
+				expect(inside(r, legend.getBoundingClientRect()), d.textContent!).toBe(true);
+				expect(overlaps(r, status.getBoundingClientRect()), d.textContent!).toBe(false);
+			}
+		});
+
+	it('圖例可明確收合／展開；收合後不蓋住狀態列，按鈕標示清楚', async () => {
+		const e = new Editor(graph(60));
+		const el = await mount(e, 440, 420);
+		const toggle = el.querySelector<HTMLButtonElement>('button[aria-controls]')!;
+		expect(toggle.getAttribute('aria-expanded')).toBe('true');
+		expect(toggle.textContent).toContain('收合');
+		const before = el.querySelector('[aria-label="宇宙圖例"]')!.getBoundingClientRect().height;
+		toggle.click();
+		await frames(2);
+		expect(toggle.getAttribute('aria-expanded')).toBe('false');
+		expect(toggle.textContent).toContain('展開');
+		expect(el.querySelector('[aria-label="細節層級"]')).toBeNull();
+		const after = el.querySelector('[aria-label="宇宙圖例"]')!.getBoundingClientRect().height;
+		expect(after).toBeLessThan(before / 2);
+		toggle.click();
+		await frames(2);
+		expect(el.querySelector('[aria-label="細節層級"]')).not.toBeNull();
+	});
 });
