@@ -5,6 +5,9 @@ import { WORKSPACE_NODE_LIMIT } from './model/workspace';
 import { handleSearchMessage, type SearchRequest } from './search/protocol';
 import type { SearchController, WorkerLike } from './search/search-client.svelte';
 import { SearchStore } from './search/search-index';
+import type { LayoutReply, LayoutRequest, LayoutStart } from './universe/layout';
+import { idsKey } from './universe/layout';
+import type { LayoutWorkerLike } from './universe/runtime';
 
 describe('Editor.addNode', () => {
 	it('名稱留空時用「類型 N」且不重複', () => {
@@ -374,11 +377,11 @@ describe('Editor 命令與 revision', () => {
 		expect(e.unprocessed).not.toBe(u);
 	});
 
-	it('改名／屬性不讓 3D 版面輸入失效（spy）', () => {
+	it('改名／屬性不讓 3D 繪製輸入失效；系統篩選只換繪製子圖（spy）', () => {
 		const e = new Editor();
 		const spy = vi.fn();
 		const stop = $effect.root(() => {
-			$effect(() => spy(e.layoutGraph));
+			$effect(() => spy(e.sceneGraph));
 		});
 		flushSync();
 		expect(spy).toHaveBeenCalledTimes(1);
@@ -386,7 +389,7 @@ describe('Editor 命令與 revision', () => {
 		e.updateEdge(LINK, { props: { 確認狀態: '推定' } });
 		flushSync();
 		expect(spy).toHaveBeenCalledTimes(1);
-		// 版面輸入不帶舊名稱以外的影響；搜尋仍讀最新名稱
+		// 繪製輸入不帶舊名稱以外的影響；搜尋仍讀最新名稱
 		expect(e.graphVisible.nodes.find((n) => n.id === AHU)!.name).toBe('改名');
 		e.updateEdge(LINK, { bidirectional: true });
 		flushSync();
@@ -842,5 +845,124 @@ describe('編輯頁：工作區外的定位與修改', () => {
 		expect(e.incidentEdges(inside.id).some((x) => !e.inWork(x.from) || !e.inWork(x.to))).toBe(true);
 		expect(e.deleteNode(inside.id)).toBe(true);
 		expect(e.node(inside.id)).toBeUndefined();
+	});
+});
+
+describe('3D 宇宙座標（session runtime）', () => {
+	const AHU = '空調箱 AHU-2F-1';
+	/** 假 layout Worker：記錄 start 次數，回覆手動送出 */
+	function layoutWorkers() {
+		const made: (LayoutWorkerLike & { sent: LayoutRequest[] })[] = [];
+		const create = () => {
+			const w = {
+				sent: [] as LayoutRequest[],
+				onmessage: null as ((e: MessageEvent<LayoutReply>) => void) | null,
+				onerror: null as ((e: Event) => void) | null,
+				postMessage(m: LayoutRequest, transfer: Transferable[]) {
+					w.sent.push(structuredClone(m, { transfer }));
+				},
+				terminate() {}
+			};
+			made.push(w);
+			return w;
+		};
+		return { made, create };
+	}
+	const setup = () => {
+		const w = layoutWorkers();
+		const e = new Editor(undefined, { layoutWorker: w.create });
+		return { e, w, pos: () => structuredClone([...e.universe.positions()]) };
+	};
+
+	it('一建立就有全部節點的有限座標，不需等 layout', () => {
+		const { e, w } = setup();
+		const p = e.universe.positions();
+		expect(p.size).toBe(e.graph.nodes.length);
+		expect([...p.values()].flat().every(Number.isFinite)).toBe(true);
+		expect(w.made).toHaveLength(0);
+	});
+
+	it('改名／屬性：座標不變、不啟動 layout', () => {
+		const { e, pos } = setup();
+		const positionsBeforeRename = pos();
+		const starts = e.universe.workerStarts;
+		e.updateNode(AHU, { name: '改名', props: { 型號: 'X' } });
+		const positionsAfterRename = pos();
+		expect(positionsAfterRename).toEqual(positionsBeforeRename);
+		expect(e.universe.workerStarts).toBe(starts);
+	});
+
+	it('系統篩選、選取、切頁、找客戶、工作區變更都不啟動 layout、不動座標', () => {
+		const { e, pos } = setup();
+		const before = pos();
+		const workerStartsBeforeFilter = e.universe.workerStarts;
+		e.solo('電力');
+		e.systems = [];
+		e.select({ kind: 'node', id: AHU });
+		e.findCustomers(AHU);
+		e.addToWork([AHU]);
+		e.setPage('edit');
+		e.setPage('graph');
+		e.fit();
+		flushSync();
+		const workerStartsAfterFilter = e.universe.workerStarts;
+		expect(workerStartsAfterFilter).toBe(workerStartsBeforeFilter);
+		expect(pos()).toEqual(before);
+	});
+
+	it('新增節點＋邊：既有座標不動、新點在鄰居旁、不自動重新整理；標示版面尚未重整', () => {
+		const { e, pos } = setup();
+		const before = new Map(pos());
+		const RACK = '機櫃 A-01';
+		const id = e.addNodeWithEdge('攝影機', RACK, '監測', true)!;
+		expect(id).toBeTruthy();
+		const after = e.universe.positions();
+		for (const [k, v] of before) expect(after.get(k)).toEqual(v);
+		const p = after.get(id)!;
+		const a = before.get(RACK)!;
+		expect(Math.hypot(p[0] - a[0], p[1] - a[1], p[2] - a[2])).toBeLessThan(60);
+		expect(e.universe.workerStarts).toBe(0);
+		expect(e.universe.status.stale).toBe(true);
+	});
+
+	it('刪除節點：移除它的座標，其他不動', () => {
+		const { e, pos } = setup();
+		const before = new Map(pos());
+		const id = e.addNode('攝影機')!;
+		e.deleteNode(id);
+		const after = e.universe.positions();
+		expect(after.has(id)).toBe(false);
+		expect(after.size).toBe(before.size);
+		for (const [k, v] of before) expect(after.get(k)).toEqual(v);
+	});
+
+	it('舊 generation 的回覆不覆蓋目前座標；拓撲編輯後舊回覆也丟棄', () => {
+		const { e, w, pos } = setup();
+		e.universe.start();
+		const old = w.made[0].sent[0] as LayoutStart;
+		e.universe.start();
+		const cur = w.made[1].sent[0] as LayoutStart;
+		const r = (q: LayoutStart, dx: number): LayoutReply => ({
+			type: 'progress',
+			generation: q.generation,
+			topologyRevision: q.topologyRevision,
+			idsKey: idsKey(q.ids),
+			tick: 1,
+			budget: q.budget,
+			positions: q.positions.map((v) => v + dx),
+			tickMs: [1]
+		});
+		w.made[1].onmessage!({ data: r(cur, 1) } as MessageEvent<LayoutReply>);
+		const currentGenerationPositions = pos();
+		w.made[0].onmessage!({ data: r(old, 99) } as MessageEvent<LayoutReply>);
+		const positionsAfterOldGenerationReply = pos();
+		expect(positionsAfterOldGenerationReply).toEqual(currentGenerationPositions);
+		// 拓撲編輯：取消進行中的整理，遲到的回覆丟棄，不自動重啟
+		e.addNode('攝影機');
+		w.made[1].onmessage!({ data: r(cur, 50) } as MessageEvent<LayoutReply>);
+		const now = e.universe.positions();
+		for (const [k, v] of currentGenerationPositions) expect(now.get(k)).toEqual(v);
+		expect(e.universe.status).toMatchObject({ phase: 'stopped', reason: 'topology' });
+		expect(e.universe.workerStarts).toBe(2);
 	});
 });

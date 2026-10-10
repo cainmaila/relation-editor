@@ -45,6 +45,7 @@ import {
 	createSearchWorker,
 	type WorkerLike
 } from './search/search-client.svelte';
+import { UniverseRuntime, type LayoutWorkerLike, type Topology } from './universe/runtime';
 
 /** 勾選系統的節點＋通用節點；邊兩端都在才留 */
 function visibleIn(g: Graph, systems: readonly System[]): Graph {
@@ -128,12 +129,22 @@ export class Editor {
 	readonly outline: SearchController;
 	/** ⌘K 快捷搜尋（永遠查全部節點）；跨頁勾選保留到主動清除 */
 	readonly palette: SearchController;
+	/**
+	 * 3D 宇宙的 session runtime：ID→xyz、layout Worker、相機。與 GraphView 掛載分離，
+	 * 只隨拓撲（topologyRevision）reconcile；改名、篩選、選取、切頁都不碰它
+	 */
+	readonly universe: UniverseRuntime;
 
-	/** 預設＝正式 mock；只有量測入口會傳入其他圖。searchWorker 只給測試替換 */
-	constructor(graph: Graph = Editor.initial(), opts: { searchWorker?: () => WorkerLike } = {}) {
+	/** 預設＝正式 mock；只有量測入口會傳入其他圖。searchWorker／layoutWorker 只給測試替換 */
+	constructor(
+		graph: Graph = Editor.initial(),
+		opts: { searchWorker?: () => WorkerLike; layoutWorker?: () => LayoutWorkerLike } = {}
+	) {
 		const s = initialGraphState(graph);
 		this.graph = s.graph;
 		this.index = s.index;
+		this.universe = new UniverseRuntime({ createWorker: opts.layoutWorker });
+		this.#syncUniverse();
 		this.search = new SearchService(
 			{
 				revision: () => this.revision,
@@ -170,10 +181,10 @@ export class Editor {
 	graphVisible = $derived(visibleIn(this.graph, this.systems));
 
 	/**
-	 * 3D 版面輸入：只隨 topologyRevision 與系統勾選變。只讀 id／type／from／to，
-	 * 名稱／屬性可能是舊的，不可拿來顯示。
+	 * 3D 繪製輸入（可見子圖）：只隨 topologyRevision 與系統勾選變。只讀 id／type／from／to，
+	 * 名稱／屬性可能是舊的，不可拿來顯示。版面座標不在這裡算：篩選只換繪製子集合
 	 */
-	layoutGraph = $derived.by(() => {
+	sceneGraph = $derived.by(() => {
 		void this.topologyRevision;
 		const systems = [...this.systems];
 		return untrack(() => visibleIn(this.graph, systems));
@@ -477,7 +488,22 @@ export class Editor {
 		});
 		// 逐筆送出：Worker 依版本連續套用
 		for (const c of changes) this.search.publish(c);
+		this.#syncUniverse();
 		return true;
+	}
+
+	/** 拓撲變了才 reconcile 3D 座標（runtime 依 topologyRevision 自行略過相同版本） */
+	#syncUniverse() {
+		const g = this.graph;
+		const idx = this.index;
+		const t: Topology = {
+			ids: g.nodes.map((n) => n.id),
+			edges: g.edges,
+			*neighbors(id) {
+				for (const e of edgesOf(idx, idx.incident.get(id))) yield e.from === id ? e.to : e.from;
+			}
+		};
+		this.universe.sync(t, this.topologyRevision);
 	}
 
 	/** 新節點草稿：名稱留空時用「類型 N」；類型不可建立時回傳 null 並顯示原因 */

@@ -40,6 +40,8 @@
 			stats,
 			marks: probe.marks,
 			init: probe.init,
+			/** 瀏覽器實際的起始座標：決定性 phyllotaxis 種子（init 參數只供 layout 模式對照） */
+			seed: 'phyllotaxis',
 			renderInfo: probe.renderInfo,
 			gpu: probe.gpu
 		};

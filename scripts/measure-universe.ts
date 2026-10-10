@@ -375,6 +375,14 @@ async function browser() {
 				const domElements = await page.evaluate(() => document.getElementsByTagName('*').length);
 				const first = await search(page, 'ToR Switch C-07', timeout);
 				await hasMark(page, 'camera:interactive', timeout);
+				// P5：相機可操作早於版面整理完成；記下當時的版面狀態，再等背景整理結束
+				const layoutAtInteractive = await page.evaluate(
+					() =>
+						(
+							window as unknown as { __graphView?: { layout(): { phase: string; tick: number } } }
+						).__graphView?.layout() ?? null
+				);
+				await hasMark(page, 'layout:worker-done', timeout);
 				const h = await page.evaluate(() => {
 					const w = window as unknown as W;
 					return {
@@ -404,8 +412,10 @@ async function browser() {
 				await cdp.send('HeapProfiler.collectGarbage');
 				const heapAfterGcMB = await metric('JSHeapUsedSize');
 				const t = (n: string) => h.marks.find((m) => m.name === n)?.t ?? NaN;
-				const tick = h.marks.find((m) => m.name === 'layout:worker-done')?.detail?.tickMs as
-					number[] | undefined;
+				// 分段 Worker：每段（layout:progress／worker-done）各帶該段的 tickMs
+				const tick = h.marks
+					.filter((m) => m.name === 'layout:progress' || m.name === 'layout:worker-done')
+					.flatMap((m) => (m.detail?.tickMs as number[] | undefined) ?? []);
 				const r = {
 					name,
 					edges,
@@ -413,13 +423,18 @@ async function browser() {
 					sample: s + 1,
 					gpu: h.gpu,
 					stats: h.stats,
-					marksMs: Object.fromEntries(h.marks.map((m) => [m.name, r1(m.t)])),
+					// 同名 marker（layout:progress）取第一次
+					marksMs: Object.fromEntries(
+						[...h.marks].reverse().map((m) => [m.name, r1(m.t)] as const)
+					),
+					layoutAtInteractive,
+					layoutSegments: h.marks.filter((m) => m.name === 'layout:progress').length + 1,
 					domElementsAtMount: domElements,
 					firstSearch: first,
 					warmSearchMs: summary(warm.map((x) => x.latency)),
 					warmSearchRaw: warm,
 					layoutWorkerMs: r1(t('layout:worker-done') - t('layout:start')),
-					workerTickMs: tick && { ...summary(tick), first5: tick.slice(0, 5).map(r1) },
+					workerTickMs: tick.length ? { ...summary(tick), first5: tick.slice(0, 5).map(r1) } : null,
 					coldLongTasks: {
 						count: h.lt.length,
 						totalMs: r1(h.lt.reduce((a, l) => a + l.dur, 0)),
@@ -438,6 +453,7 @@ async function browser() {
 						name,
 						gpu: r.gpu?.renderer,
 						marks: r.marksMs,
+						layoutAtInteractive: r.layoutAtInteractive,
 						dom: domElements,
 						search: first,
 						warmSearch: r.warmSearchMs,

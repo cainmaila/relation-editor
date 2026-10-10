@@ -5,12 +5,14 @@ import type { LayoutInit } from './layout-sim';
 export type Mark = { name: string; t: number; detail?: Record<string, unknown> };
 
 export interface GraphProbe {
-	/** 版面起始座標（對照實驗）；正式頁面固定 zero */
-	init: LayoutInit;
 	mark(name: string, detail?: Record<string, unknown>): void;
 	renderer(r: WebGLRenderer): void;
 }
 
+/**
+ * init 只標記 harness 的 layout 模式對照（zero／d3）；P5 起瀏覽器一律從 runtime 的
+ * 決定性種子座標（seedPositions）出發，不再讀這個值。
+ */
 export function createProbe(init: LayoutInit) {
 	const marks: Mark[] = [];
 	let r: WebGLRenderer | null = null;

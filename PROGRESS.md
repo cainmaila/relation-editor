@@ -2,14 +2,27 @@
 
 ## 主 agent QA 進度
 
-- P0、P1、P2、P3 已分階段審核；P3 至 `343c32f`，獨立搜尋相關 unit 63／63、搜尋 e2e 4／4。
+- P0–P4 已分階段審核，至 `3186ce4`；P4 獨立 check、工作區相關 unit 64／64、外部端點 e2e 通過，並已檢視修正 diff。
 - P3 QA 已修正：只改邊屬性造成搜尋永久 pending、Worker 同步失敗無錯誤 UI、排序與規格不符、缺少系統／類型搜尋篩選。
-- Next: P4 局部工作區；P5–P8 未交付。正式 10k 效能驗收尚未通過。
+- Next: P5 穩定座標與非阻塞宇宙；P5–P8 未交付。正式 10k 效能驗收尚未通過。
+- P7 必須收尾：詳情既有完整關係清單仍需分頁；鄰居資料縮減後的頁碼須重設或限制，避免空白末頁。
+
+## P5 穩定座標與非阻塞宇宙（分支 cainmaila/main-3-3）
+
+- **Goal:** 宇宙座標由 session runtime 持有，種子立即可畫、可操作；版面在 Worker 分段整理、可停止、達預算凍結。計畫 `.superpowers/sdd/plan/task-5-brief.md`，報告 `task-5-report.md`
+- **Done（agent-tested，待 parent QA）:**
+  - `src/lib/universe/layout.ts`：決定性種子 `seedPositions`、`reconcile`（保留既有、新點放鄰居旁）、`idsKey`、Worker 協定；`layout-sim.ts` `startLayoutJob` 分段＋停止，`layout.worker.ts` 改為 start／stop
+  - `src/lib/universe/runtime.ts`：`UniverseRuntime`（generation＋topologyRevision＋idsKey＋長度檢查、拓撲變更取消但不自動重啟、`startInitial` 只一次、錯誤可重試）與 `CameraState`（最後請求生效、使用者操作取消晚到入鏡、卸載保存／重掛恢復）
+  - `Editor.universe` 隨 `execute` 依 topologyRevision 同步全圖座標；`layoutGraph` → `sceneGraph`（只是繪製子集合）
+  - GraphView：首幀即畫種子、進度就地更新 GPU buffer（不進 Svelte）、狀態列（停止／重新整理版面／全景）、import／WebGL／context lost 錯誤＋重試、完整清理
+  - `/measure` marker：`universe:first-frame`、`camera:interactive` 早於 `layout:worker-done`；harness 彙整分段 tickMs
+- **驗證:** unit 209／209、check／lint 通過、production e2e 75／75（新增 `universe.svelte.e2e.ts` 9 項）；真 GPU（M2 Metal）冷啟動 smoke 1 樣本：`camera:interactive` 200.9ms（P1 11557ms）、`layout:worker-done` 9032.8ms，產物 `artifacts/p5`
+- **Todo:** 正式 5 冷啟動／30 樣本矩陣（P8）；LOD（P6）；import 失敗路徑未自動化測試
 
 ## P4 局部工作區與完整編輯閉環（分支 cainmaila/main-3-3）
 
 - **Goal:** 編輯頁成為有預算的局部工作區（200 節點／1000 原始誘導邊），所有建立路徑都先純計算准入、再原子提交。計畫 `.superpowers/sdd/plan/task-4-brief.md`
-- **Done（agent-tested，待 parent QA）:**
+- **Done（parent 已分階段審核，含超額原子拒絕、移出與外部端點修正）:**
   - `src/lib/model/workspace.ts`：`planWorkspaceAdmission`（去重、新節點／提議邊計數、超額回需求與剩餘名額，不改任何狀態）、`inducedSubgraph`（工作區＝精確誘導邊）、`externalNeighbors`（in／out／all＋邊類型、完整外部計數）
   - `Editor`：`addToWork`／`addNode`／`addEdge`／`addNodeWithEdge` 走准入後一次 `execute`；取消或超額不動 domain 與工作區；連到工作區外端點會連端點一起加入；兩端不全在工作區的邊在編輯頁唯讀（`邊的兩端都要在編輯頁才能修改`）
   - 移出工作區（詳情、右鍵）、頂列「清空工作區」只改 membership；刪除確認寫出含工作區外 K 條邊
