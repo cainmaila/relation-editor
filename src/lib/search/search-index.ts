@@ -68,9 +68,8 @@ export function toSearchDoc(n: NodeMeta): SearchDoc {
 	};
 }
 
-/** 名稱、再 ID（code point，與語系無關） */
-export const compareDocs = (a: SearchDoc, b: SearchDoc) =>
-	a.nameN < b.nameN ? -1 : a.nameN > b.nameN ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+/** 同一命中等級內的最終排序：只看 ID（code point，與語系、名稱無關） */
+export const compareDocs = (a: SearchDoc, b: SearchDoc) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 
 /** 建立並排序文件；querySearchIndex 依賴這個順序 */
 export function buildSearchDocs(nodes: Iterable<NodeMeta>): SearchDoc[] {
@@ -89,8 +88,8 @@ function rank(d: SearchDoc, q: string, words: string[]): number {
 }
 
 /**
- * 純函式查詢。documents 必須是 buildSearchDocs 的順序（名稱→ID），
- * 結果依等級分桶後維持該順序，所以排序穩定、與輸入次序無關。
+ * 純函式查詢。documents 必須是 buildSearchDocs 的順序（ID），
+ * 結果依等級分桶後維持該順序：等級優先、同等級依 ID，與輸入次序無關。
  */
 export function querySearchIndex(
 	documents: readonly SearchDoc[],

@@ -73,7 +73,8 @@ describe('querySearchIndex 比對', () => {
 	});
 
 	it('多詞 AND，可跨欄位', () => {
-		expect(ids('A-01 機櫃')).toEqual(['rack-1', 'pdu-1']);
+		// 兩者名稱都含兩詞（同等級）：依 ID
+		expect(ids('A-01 機櫃')).toEqual(['pdu-1', 'rack-1']);
 		expect(ids('A-01 r42')).toEqual(['rack-1']);
 		expect(ids('A-01 不存在')).toEqual([]);
 	});
@@ -89,10 +90,10 @@ describe('querySearchIndex 排序', () => {
 	it('完全符合 → 名稱前綴 → 名稱包含 → 類型／屬性', () => {
 		// 「機櫃 a-01」完全符合 rack-1；pdu-1 名稱只含兩詞
 		expect(ids('機櫃 A-01')).toEqual(['rack-1', 'pdu-1']);
-		// hub 名稱包含 a-01；rack-1、pdu-1 也是名稱包含，依名稱排
-		expect(ids('a-01')).toEqual(['hub', 'rack-1', 'pdu-1']);
-		// 名稱前綴（rack、pdu）優先於只有類型符合的同名節點
-		expect(ids('機櫃')).toEqual(['rack-1', 'rack-2', 'pdu-1', 'dup-a', 'dup-b']);
+		// hub、rack-1、pdu-1 都是名稱包含 a-01：同組依 ID
+		expect(ids('a-01')).toEqual(['hub', 'pdu-1', 'rack-1']);
+		// 名稱前綴（rack、pdu）優先於只有類型符合的同名節點；同組依 ID
+		expect(ids('機櫃')).toEqual(['pdu-1', 'rack-1', 'rack-2', 'dup-a', 'dup-b']);
 	});
 
 	it('同名依 ID 穩定排序，與輸入順序無關', () => {
@@ -100,11 +101,29 @@ describe('querySearchIndex 排序', () => {
 		expect(querySearchIndex(rev, q('同名')).ids).toEqual(['dup-a', 'dup-b']);
 		expect(ids('同名')).toEqual(['dup-a', 'dup-b']);
 	});
+
+	it('同組最後依 ID，不依名稱（名稱與 ID 順序刻意相反）', () => {
+		const inv = [
+			n('id-1', '機櫃', '名 C'),
+			n('id-2', '機櫃', '名 B'),
+			n('id-3', '機櫃', '名 A'),
+			n('id-9', '機櫃', '名')
+		];
+		for (const docs of [buildSearchDocs(inv), buildSearchDocs([...inv].reverse())]) {
+			// 等級優先：id-9 完全符合；其餘同為名稱前綴，依 ID 而非名稱（名 A < 名 B < 名 C）
+			expect(querySearchIndex(docs, q('名')).ids).toEqual(['id-9', 'id-1', 'id-2', 'id-3']);
+			expect(querySearchIndex(docs, q('')).ids).toEqual(['id-1', 'id-2', 'id-3', 'id-9']);
+			expect(querySearchIndex(docs, q('機櫃')).ids).toEqual(['id-1', 'id-2', 'id-3', 'id-9']);
+		}
+		const store = new SearchStore();
+		store.init(1, inv, { unprocessed: [], unreachable: [] });
+		expect(store.query(q('名')).ids).toEqual(['id-9', 'id-1', 'id-2', 'id-3']);
+	});
 });
 
 describe('querySearchIndex 篩選', () => {
 	it('系統、類型、範圍', () => {
-		expect(ids('', { systems: ['電力'] })).toEqual(['ups-1', 'pdu-1']);
+		expect(ids('', { systems: ['電力'] })).toEqual(['pdu-1', 'ups-1']);
 		expect(ids('', { systems: ['通用'] })).toEqual(['hub']);
 		expect(ids('', { types: ['攝影機'] })).toEqual(['cam-1']);
 		expect(ids('a-0', { within: ['rack-2', 'cam-1'] })).toEqual(['rack-2']);
@@ -113,8 +132,8 @@ describe('querySearchIndex 篩選', () => {
 	it('問題篩選依 issue ID sets', () => {
 		const issues = { unprocessed: new Set(['cam-1', 'ups-1']), unreachable: new Set(['ups-1']) };
 		expect(querySearchIndex(docs, q('', { issues: ['unprocessed'] }), issues).ids).toEqual([
-			'ups-1',
-			'cam-1'
+			'cam-1',
+			'ups-1'
 		]);
 		expect(
 			querySearchIndex(docs, q('', { issues: ['unprocessed', 'unreachable'] }), issues).ids

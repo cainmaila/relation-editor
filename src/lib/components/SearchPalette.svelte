@@ -1,8 +1,9 @@
 <script lang="ts">
-	// ⌘K 快捷搜尋：查完整資料（含 3D 隱藏的系統），分頁、跨頁勾選。
+	// ⌘K 快捷搜尋：查完整資料（含 3D 隱藏的系統），可再用系統／類型篩選（與 3D 系統勾選無關），分頁、跨頁勾選。
 	// Enter／點列＝定位（編輯頁：加入後定位）；勾選後「加入編輯頁」不換畫面、不改系統篩選。
 	import type { Editor } from '#lib/editor.svelte.js';
-	import { nodeType } from '#lib/model/config.js';
+	import { NODE_TYPES, SYSTEMS, nodeType } from '#lib/model/config.js';
+	import { GENERAL } from '#lib/search/search-index.js';
 	import Modal from './Modal.svelte';
 	import SearchResults from './SearchResults.svelte';
 
@@ -15,10 +16,28 @@
 	let queued = $state(false);
 	let added = $state(false);
 
-	// 每次打開從空查詢開始（勾選保留）
+	const SYSTEM_OPTIONS = [...SYSTEMS, GENERAL];
+	const systemOf = (type: string) => nodeType(type)?.system ?? GENERAL;
+	const system = $derived(c.systems[0] ?? '');
+	const type = $derived(c.types[0] ?? '');
+	/** 類型選單只列所選系統的類型 */
+	const types = $derived(
+		NODE_TYPES.filter((t) => !system || (t.system ?? GENERAL) === system).map((t) => t.name)
+	);
+
+	// 每次打開從空查詢、全部系統／類型開始（勾選保留）
 	$effect(() => {
-		editor.palette.set({ text: '' });
+		editor.palette.set({ text: '', systems: [], types: [] });
 	});
+
+	/** 改篩選：回第一頁（set 會重設 offset）；選的類型不屬於新系統就清掉 */
+	function filter(next: { system?: string; type?: string }) {
+		const s = next.system ?? system;
+		const t = next.type ?? type;
+		const keep = t && (!s || systemOf(t) === s);
+		c.set({ systems: s ? [s] : [], types: keep ? [t] : [] });
+		active = 0;
+	}
 
 	$effect(() => {
 		if (!queued || c.status !== 'ready') return;
@@ -65,6 +84,30 @@
 		/>
 		<span class="kbd">Esc</span>
 	</div>
+	<div class="flex gap-2 border-b border-white/8 px-4 py-2">
+		<select
+			aria-label="篩選系統"
+			value={system}
+			onchange={(e) => filter({ system: e.currentTarget.value })}
+			class="flex-1 rounded-md border border-white/8 bg-white/3 py-1 pr-7 pl-2 text-xs text-slate-200 focus:border-sky-400/50 focus:ring-0"
+		>
+			<option value="">全部系統</option>
+			{#each SYSTEM_OPTIONS as s (s)}
+				<option value={s}>{s}</option>
+			{/each}
+		</select>
+		<select
+			aria-label="篩選類型"
+			value={type}
+			onchange={(e) => filter({ type: e.currentTarget.value })}
+			class="flex-1 rounded-md border border-white/8 bg-white/3 py-1 pr-7 pl-2 text-xs text-slate-200 focus:border-sky-400/50 focus:ring-0"
+		>
+			<option value="">全部類型</option>
+			{#each types as t (t)}
+				<option value={t}>{t}</option>
+			{/each}
+		</select>
+	</div>
 	<div class="flex max-h-[60vh] flex-col">
 		<SearchResults
 			controller={c}
@@ -76,8 +119,9 @@
 			onpick={go}
 		>
 			{#snippet row(n)}
-				{@const s = nodeType(n.type)?.system ?? '通用'}
-				<span class="ml-auto shrink-0 font-mono text-[10px] text-slate-500">{s} · {n.type}</span>
+				<span class="ml-auto shrink-0 font-mono text-[10px] text-slate-500"
+					>{systemOf(n.type)} · {n.type}</span
+				>
 			{/snippet}
 			{#snippet actions(ids)}
 				{#if added && graph}

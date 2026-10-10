@@ -32,6 +32,9 @@ export const createSearchWorker = (): WorkerLike =>
 	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- Vite worker 入口，不需響應
 	new Worker(new URL('./search.worker.ts', import.meta.url), { type: 'module' }) as WorkerLike;
 
+const reason = (e: unknown) =>
+	(typeof e === 'object' && e && 'message' in e && String(e.message)) || String(e);
+
 /** 純資料副本：props 可能來自草稿 $state proxy，不能直接 postMessage */
 const meta = (n: GNode): NodeMeta => ({
 	id: n.id,
@@ -58,6 +61,9 @@ export class SearchService {
 	#topology = false;
 	#resync = false;
 	#scheduled = false;
+	/** 目前 Worker 已收到（init／patch）的最新 revision；-1＝新 Worker 還沒 init */
+	#sent = -1;
+	#notifying = false;
 	#seq = 0;
 	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- 內部登記，不需響應
 	#controllers = new Set<SearchController>();
@@ -96,18 +102,29 @@ export class SearchService {
 		});
 	}
 
-	/** 送出查詢；回傳 requestId。先把累積的變更送出，確保 Worker 依序先套用 */
+	/**
+	 * 送出查詢；回傳 requestId。先把累積的變更送出，確保 Worker 依序先套用。
+	 * 永不丟例外（可能在 effect 內被呼叫）：建立 Worker、送 init／patch／query 任何一步同步失敗，
+	 * 都轉成服務錯誤，並在 requestId 交回呼叫端之後（microtask）才把作用中的查詢標成錯誤。
+	 */
 	request(c: SearchController, query: SearchQuery): number {
 		this.#controllers.add(c);
 		const requestId = ++this.#seq;
-		if (this.error) {
-			queueMicrotask(() => c.fail(requestId, this.error));
-			return requestId;
+		if (!this.error) {
+			try {
+				const w = this.#ensure();
+				this.#flush();
+				// flush 失敗時 Worker 已被結束：不再送查詢
+				if (this.#worker === w) {
+					this.#waiting.set(requestId, c);
+					w.postMessage({ kind: 'query', requestId, query });
+				}
+			} catch (e) {
+				this.#waiting.delete(requestId);
+				this.#fail(reason(e));
+			}
 		}
-		const w = this.#ensure();
-		this.#flush();
-		this.#waiting.set(requestId, c);
-		w.postMessage({ kind: 'query', requestId, query });
+		if (this.error) this.#notify();
 		return requestId;
 	}
 
@@ -140,6 +157,7 @@ export class SearchService {
 		};
 		w.onmessageerror = () => live() && this.#fail('搜尋服務回覆無法讀取');
 		this.#worker = w;
+		this.#sent = -1;
 		this.#resync = true;
 		return w;
 	}
@@ -152,14 +170,17 @@ export class SearchService {
 			return;
 		}
 		try {
-			if (this.#resync) {
+			if (this.#resync || this.#sent < 0) {
 				w.postMessage({
 					kind: 'init',
 					revision: this.revision,
 					nodes: this.#source.nodes().map(meta),
 					issues: this.#source.issues()
 				});
-			} else if (this.#upsert.size || this.#remove.size || this.#topology) {
+				this.#sent = this.revision;
+			} else if (this.#sent !== this.revision) {
+				// 只改邊、或無變更的命令也會推進 revision：送空 patch 讓 Worker 版本跟上，
+				// 否則查詢回覆永遠是舊版而被丟棄。沒有拓撲變更就不帶 issues（不重算）
 				w.postMessage({
 					kind: 'patch',
 					revision: this.revision,
@@ -167,9 +188,10 @@ export class SearchService {
 					remove: [...this.#remove],
 					...(this.#topology ? { issues: this.#source.issues() } : {})
 				});
+				this.#sent = this.revision;
 			}
 		} catch (e) {
-			this.#fail(e instanceof Error ? e.message : String(e));
+			this.#fail(reason(e));
 		}
 		this.#clearBatch();
 	}
@@ -197,12 +219,27 @@ export class SearchService {
 
 	#fail(message: string) {
 		this.error = message;
-		this.#worker?.terminate();
+		const w = this.#worker;
 		this.#worker = null;
 		this.#clearBatch();
-		const waiting = [...this.#waiting];
 		this.#waiting.clear();
-		for (const [id, c] of waiting) c.fail(id, message);
+		try {
+			w?.terminate();
+		} catch {
+			// 已壞掉的 Worker 結束失敗也無妨
+		}
+		this.#notify();
+	}
+
+	/** 服務壞掉：microtask 後（requestId 已交回）把所有作用中的查詢標成錯誤；期間已重試就不標 */
+	#notify() {
+		if (this.#notifying) return;
+		this.#notifying = true;
+		queueMicrotask(() => {
+			this.#notifying = false;
+			if (!this.error) return;
+			for (const c of this.#controllers) c.broken(this.error);
+		});
 	}
 }
 
@@ -297,6 +334,13 @@ export class SearchController {
 
 	fail(requestId: number, message: string) {
 		if (requestId !== this.#latest) return;
+		this.status = 'error';
+		this.error = message;
+	}
+
+	/** 服務整個壞掉（Worker 無法建立／送出失敗／崩潰）：不論等待哪個請求都標錯誤 */
+	broken(message: string) {
+		if (!this.#active) return;
 		this.status = 'error';
 		this.error = message;
 	}

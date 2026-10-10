@@ -230,14 +230,33 @@ describe('Editor 搜尋服務（Worker 協定）', () => {
 			hold: false,
 			held: [] as Reply[],
 			crash: false,
-			instances: 0
+			instances: 0,
+			/** 下一次建立 Worker 時同步丟例外（模擬無法啟動） */
+			failCreate: false,
+			/** 下一則這種訊息 postMessage 同步丟例外（模擬 structured clone 失敗） */
+			throwOn: null as SearchRequest['kind'] | null,
+			/** 送到已結束 Worker 的訊息數；應永遠是 0 */
+			deadPosts: 0
 		};
 		const create = (): WorkerLike => {
+			if (f.failCreate) {
+				f.failCreate = false;
+				throw new Error('Worker 無法啟動');
+			}
 			f.instances++;
+			let dead = false;
 			const w: WorkerLike = {
 				onmessage: null,
 				onerror: null,
 				postMessage(m) {
+					if (dead) {
+						f.deadPosts++;
+						return;
+					}
+					if (f.throwOn === m.kind) {
+						f.throwOn = null;
+						throw new DOMException('could not be cloned', 'DataCloneError');
+					}
 					const msg = structuredClone(m);
 					f.posted.push(msg);
 					// 真 Worker 依序處理：回覆內容在送出時就決定，只是延後送達
@@ -249,7 +268,9 @@ describe('Editor 搜尋服務（Worker 協定）', () => {
 					if (f.hold) f.held.push(reply);
 					else setTimeout(reply);
 				},
-				terminate() {}
+				terminate() {
+					dead = true;
+				}
 			};
 			return w;
 		};
@@ -424,6 +445,114 @@ describe('Editor 搜尋服務（Worker 協定）', () => {
 		expect(e.outline.ids).toHaveLength(50);
 		expect(e.matched?.size).toBe(many.length);
 		expect(e.matched?.has(AHU)).toBe(false);
+	});
+
+	it('邊只改屬性、無變更命令也推進 Worker 版本；穿插節點改名；不重算拓撲', async () => {
+		const { f, create } = fakeWorker();
+		const e = new Editor(undefined, { searchWorker: create });
+		const both = async () => {
+			await ready(e.palette);
+			await ready(e.outline);
+			expect(e.palette.revision).toBe(e.revision);
+			expect(e.outline.revision).toBe(e.revision);
+			expect(e.search.acked).toBe(e.revision);
+		};
+		e.palette.set({ text: 'UPS' });
+		e.outline.set({ text: 'Switch' });
+		await both();
+		const topo = e.topologyRevision;
+		const link = e.graph.edges.find((x) => !x.readonly)!.id;
+		// 邊只改屬性：沒有節點變更、topology=false
+		expect(e.updateEdge(link, { props: { 備註: 'x' } })).toBe(true);
+		expect(e.lastChange).toMatchObject({ topology: false, upsertNodes: [], removeNodeIds: [] });
+		expect(e.palette.status).toBe('pending');
+		await both();
+		// 無變更命令（空 patch）仍成功並推進 revision
+		expect(e.updateEdge(link, {})).toBe(true);
+		await both();
+		// 同一 tick：邊、節點改名、邊
+		e.updateEdge(link, { props: { 備註: 'y' } });
+		e.updateNode(AHU, { name: '冷氣 Z' });
+		e.updateEdge(link, {});
+		await both();
+		// 下一 tick 又只有邊
+		e.updateEdge(link, { props: { 備註: 'z' } });
+		await both();
+		e.palette.set({ text: '冷氣 Z' });
+		await ready(e.palette);
+		expect(e.palette.ids).toEqual([AHU]);
+		expect(e.topologyRevision).toBe(topo);
+		const patches = f.posted.filter((m) => m.kind === 'patch');
+		expect(patches.map((m) => m.revision)).toEqual([1, 2, 5, 6]);
+		expect(patches.every((m) => m.kind === 'patch' && !('issues' in m))).toBe(true);
+		expect(patches.find((m) => m.revision === 5)).toMatchObject({ remove: [] });
+		expect(f.posted.filter((m) => m.kind === 'init')).toHaveLength(1);
+	});
+
+	it('Worker 建立時同步丟例外：不外洩，所有作用中的查詢轉錯誤，重試恢復', async () => {
+		const { f, create } = fakeWorker();
+		const e = new Editor(undefined, { searchWorker: create });
+		f.failCreate = true;
+		expect(() => e.palette.set({ text: 'UPS' })).not.toThrow();
+		expect(() => e.outline.set({ text: 'Switch' })).not.toThrow();
+		await expect.poll(() => e.palette.status).toBe('error');
+		await expect.poll(() => e.outline.status).toBe('error');
+		expect(e.search.error).toBe('Worker 無法啟動');
+		expect(e.palette.error).toBe('Worker 無法啟動');
+		e.palette.retry();
+		await ready(e.palette);
+		await ready(e.outline);
+		expect(e.palette.total).toBeGreaterThan(0);
+		expect(f.instances).toBe(1);
+		expect(f.deadPosts).toBe(0);
+	});
+
+	it('init 送出失敗（clone）：不把查詢送到已結束的 Worker，全部轉錯誤，重試恢復', async () => {
+		const { f, create } = fakeWorker();
+		const e = new Editor(undefined, { searchWorker: create });
+		f.throwOn = 'init';
+		expect(() => e.palette.set({ text: 'UPS' })).not.toThrow();
+		await expect.poll(() => e.palette.status).toBe('error');
+		expect(e.palette.error).toMatch(/cloned/);
+		expect(f.posted.filter((m) => m.kind === 'query')).toHaveLength(0);
+		expect(f.deadPosts).toBe(0);
+		e.palette.retry();
+		await ready(e.palette);
+		expect(f.instances).toBe(2);
+		expect(e.palette.revision).toBe(e.revision);
+	});
+
+	it('查詢送出失敗：不留等待中的請求；已就緒的其他區塊也標錯誤；重試恢復', async () => {
+		const { f, create } = fakeWorker();
+		const e = new Editor(undefined, { searchWorker: create });
+		e.outline.set({ text: 'Switch' });
+		await ready(e.outline);
+		f.throwOn = 'query';
+		expect(() => e.palette.set({ text: 'UPS' })).not.toThrow();
+		await expect.poll(() => e.palette.status).toBe('error');
+		await expect.poll(() => e.outline.status).toBe('error');
+		expect(f.deadPosts).toBe(0);
+		// 錯誤狀態下 mutation 不會卡在 pending
+		e.updateNode(AHU, { name: '錯誤中改名' });
+		await expect.poll(() => e.palette.status).toBe('error');
+		e.outline.retry();
+		await ready(e.palette);
+		await ready(e.outline);
+		expect(e.palette.revision).toBe(e.revision);
+		expect(f.deadPosts).toBe(0);
+	});
+
+	it('真的 Worker：邊只改屬性後查詢回到最新版本', async () => {
+		const e = new Editor();
+		e.palette.set({ text: '機櫃 A-01' });
+		await ready(e.palette);
+		const link = e.graph.edges.find((x) => !x.readonly)!.id;
+		expect(e.updateEdge(link, { props: { 備註: 'only edge' } })).toBe(true);
+		expect(e.palette.status).toBe('pending');
+		await ready(e.palette);
+		expect(e.palette.revision).toBe(e.revision);
+		expect(e.search.error).toBe('');
+		e.search.dispose();
 	});
 
 	it('真的 Worker：草稿 proxy 屬性也能送出，查得到改後內容', async () => {
