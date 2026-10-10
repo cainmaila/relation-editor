@@ -245,14 +245,27 @@ export class Editor {
 
 	/**
 	 * 搜尋結果「定位」：全圖選取並飛過去（系統隱藏也會勾回）；
-	 * 編輯頁只定位工作區內的節點（不改系統篩選）
+	 * 編輯頁只定位工作區內的節點（不改系統篩選、不偷偷加入），工作區外的明確說明。
+	 * 節點已不存在＝過期選取，明確報錯
 	 */
-	locate(id: string) {
-		if (!this.node(id)) return;
-		if (this.page === 'graph') return this.reveal(id);
-		if (!this.working.includes(id)) return;
+	locate(id: string): boolean {
+		const n = this.node(id);
+		if (!n) return this.fail(`節點已不存在：${id}（選取已過期，請重新選取）`);
+		if (this.page === 'graph') {
+			this.reveal(id);
+			return true;
+		}
+		if (!this.inWork(id)) return this.fail(`「${n.name}」不在編輯頁：先將兩端加入編輯頁才能定位`);
 		this.select({ kind: 'node', id });
 		this.fit([id]);
+		return true;
+	}
+
+	/** 「將兩端加入編輯頁」：邊的兩端整批 admission（200／1,000 預算），保留邊選取；失敗什麼都不改 */
+	admitEdgeEnds(id: string): boolean {
+		const e = this.edge(id);
+		if (!e) return this.fail(`邊已不存在：${id}（選取已過期，請重新選取）`);
+		return this.addToWork([e.from, e.to]);
 	}
 
 	/** 移出工作區：只改 membership，不刪資料；清掉指向已移出節點的選取與暫態 */
@@ -496,6 +509,12 @@ export class Editor {
 		return this.fail('邊的兩端都要在編輯頁才能修改');
 	}
 
+	/** 編輯頁只能改工作區內的節點（經其他路徑選到的工作區外節點唯讀，直到加入） */
+	#guardNode(id: string): boolean {
+		if (this.page !== 'edit' || !this.node(id) || this.inWork(id)) return true;
+		return this.fail('節點不在編輯頁：先加入編輯頁才能修改');
+	}
+
 	/** 名稱留空時用「類型 N」；工作區 admission 通過才建立並加入，回傳新節點 id，失敗回傳 null */
 	addNode(type: string, name = ''): string | null {
 		const node = this.#draftNode(type, name);
@@ -559,7 +578,7 @@ export class Editor {
 
 	/** 真正刪除資料（含所有相連邊，工作區外的也會刪）；與「移出工作區」不同 */
 	deleteNode(id: string) {
-		if (!this.execute({ kind: 'deleteNode', id })) return false;
+		if (!this.#guardNode(id) || !this.execute({ kind: 'deleteNode', id })) return false;
 		this.removeFromWork([id]);
 		this.select(null);
 		return true;
@@ -573,7 +592,7 @@ export class Editor {
 
 	/** 一次寫入節點草稿；base＝草稿開始時的節點，已被改過就拒絕 */
 	updateNode(id: string, patch: NodePatch, base?: GNode): boolean {
-		return this.execute({ kind: 'updateNode', id, patch, base });
+		return this.#guardNode(id) && this.execute({ kind: 'updateNode', id, patch, base });
 	}
 
 	/** 一次寫入邊草稿；base＝草稿開始時的邊，已被改過就拒絕 */

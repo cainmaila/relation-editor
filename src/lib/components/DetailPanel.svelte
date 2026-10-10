@@ -20,7 +20,9 @@
 	const outsideEdge = $derived(
 		!graph && !!edge && !(editor.inWork(edge.from) && editor.inWork(edge.to))
 	);
-	const ro = $derived(idc || graph || outsideEdge);
+	/** 經其他路徑選到工作區外的節點：加入編輯頁前唯讀 */
+	const outsideNode = $derived(!graph && !!node && !editor.inWork(node.id));
+	const ro = $derived(idc || graph || outsideEdge || outsideNode);
 	const incoming = $derived(node ? editor.incomingEdges(node.id) : []);
 	const outgoing = $derived(node ? editor.outgoingEdges(node.id) : []);
 	const nodeEdges = $derived(node ? editor.incidentEdges(node.id).length : 0);
@@ -356,6 +358,12 @@
 						onclick={() => addWork([node.id])}>加入編輯頁</button
 					>
 				{/if}
+			{:else if outsideNode}
+				<button
+					class="ml-auto btn-ghost px-2 py-1 text-xs"
+					aria-label="加入編輯頁"
+					onclick={() => addWork([node.id])}>加入編輯頁</button
+				>
 			{:else}
 				<button
 					class="ml-auto btn-ghost px-2 py-1 text-xs"
@@ -373,7 +381,10 @@
 				{/if}
 			{/if}
 		</div>
-		{#if editor.armDelete === node.id && !graph}
+		{#if outsideNode}
+			<p class="mx-5 mb-3 text-[11px] text-slate-400">不在編輯頁：先加入編輯頁才能修改</p>
+		{/if}
+		{#if editor.armDelete === node.id && !graph && !outsideNode}
 			<div
 				role="alertdialog"
 				aria-label="確認刪除"
@@ -415,6 +426,7 @@
 				<dd>
 					<button
 						class="text-left text-slate-100 hover:text-sky-300"
+						aria-label="起點：{nameOf(edge.from)}"
 						onclick={() => editor.locate(edge.from)}>{nameOf(edge.from)}</button
 					>
 				</dd>
@@ -422,6 +434,7 @@
 				<dd>
 					<button
 						class="text-left text-slate-100 hover:text-sky-300"
+						aria-label="終點：{nameOf(edge.to)}"
 						onclick={() => editor.locate(edge.to)}>{nameOf(edge.to)}</button
 					>
 				</dd>
@@ -441,9 +454,13 @@
 			</dl>
 		</header>
 		{#if idc}{@render idcBanner()}{:else if outsideEdge}
-			<p class="mx-5 mb-1 text-[11px] text-slate-400">
-				有一端不在編輯頁：先把兩端都加入編輯頁才能修改這條邊
-			</p>
+			<div class="mx-5 mb-1 flex items-center gap-2 text-[11px] text-slate-400">
+				<span>有一端不在編輯頁：先把兩端都加入編輯頁才能修改這條邊</span>
+				<button
+					class="ml-auto btn-ghost shrink-0 px-2 py-1 text-[11px]"
+					onclick={() => editor.admitEdgeEnds(edge.id)}>將兩端加入編輯頁</button
+				>
+			</div>
 		{/if}
 		{#if !graph}
 			<div class="flex px-5 py-3">

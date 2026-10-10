@@ -768,3 +768,79 @@ describe('Editor 搜尋服務（Worker 協定）', () => {
 		e.search.dispose();
 	});
 });
+
+describe('編輯頁：工作區外的定位與修改', () => {
+	const edgeOf = (e: Editor) => e.graph.edges.find((x) => !x.readonly && x.from !== x.to)!;
+
+	it('定位工作區外的節點：不再無聲忽略，明確說明且不偷偷加入', () => {
+		const e = new Editor();
+		const edge = edgeOf(e);
+		e.addToWork([edge.from]);
+		e.setPage('edit');
+		e.select({ kind: 'edge', id: edge.id });
+		const view = e.view.seq;
+		expect(e.locate(edge.to)).toBe(false);
+		expect(e.message).toBe(`「${e.node(edge.to)!.name}」不在編輯頁：先將兩端加入編輯頁才能定位`);
+		expect(e.working).toEqual([edge.from]);
+		expect(e.selected).toEqual({ kind: 'edge', id: edge.id });
+		expect(e.view.seq).toBe(view);
+		expect(e.locate(edge.from)).toBe(true);
+		expect(e.selected).toEqual({ kind: 'node', id: edge.from });
+	});
+
+	it('定位已不存在的節點：明確的過期選取錯誤', () => {
+		const e = new Editor();
+		expect(e.locate('nope')).toBe(false);
+		expect(e.message).toBe('節點已不存在：nope（選取已過期，請重新選取）');
+		e.setPage('edit');
+		expect(e.locate('nope')).toBe(false);
+		expect(e.message).toBe('節點已不存在：nope（選取已過期，請重新選取）');
+	});
+
+	it('將兩端加入編輯頁：原子加入、保留邊選取；滿額時整批擋下不變', () => {
+		const e = new Editor();
+		const edge = edgeOf(e);
+		e.setPage('edit');
+		e.select({ kind: 'edge', id: edge.id });
+		expect(e.admitEdgeEnds(edge.id)).toBe(true);
+		expect(e.working).toEqual([edge.from, edge.to]);
+		expect(e.selected).toEqual({ kind: 'edge', id: edge.id });
+		expect(e.message).toMatch(/^已加入編輯頁：新增 2 個節點/);
+		// 只剩 1 個名額：兩端都缺時整批拒絕，一個都不加
+		const taken = new Set([edge.from, edge.to]);
+		const pool = e.graph.nodes.map((n) => n.id).filter((id) => !taken.has(id));
+		e.working = pool.slice(0, WORKSPACE_NODE_LIMIT - 1);
+		const before = [...e.working];
+		expect(e.admitEdgeEnds(edge.id)).toBe(false);
+		expect(e.working).toEqual(before);
+		expect(e.message).toBe('工作區最多 200 個節點：要新增 2 個，只剩 1 個名額');
+		expect(e.admitEdgeEnds('nope')).toBe(false);
+		expect(e.message).toBe('邊已不存在：nope（選取已過期，請重新選取）');
+	});
+
+	it('工作區外的節點在編輯頁不能改名或刪除；工作區內節點有外部邊仍可刪除', () => {
+		const e = new Editor();
+		const edge = edgeOf(e);
+		e.addToWork([edge.from]);
+		e.setPage('edit');
+		const out = e.node(edge.to)!;
+		const before = e.graph;
+		expect(e.updateNode(out.id, { name: 'x' }, out)).toBe(false);
+		expect(e.message).toBe('節點不在編輯頁：先加入編輯頁才能修改');
+		expect(e.deleteNode(out.id)).toBe(false);
+		expect(e.message).toBe('節點不在編輯頁：先加入編輯頁才能修改');
+		expect(e.graph).toBe(before);
+		// 工作區內的節點：外部邊不阻擋刪除
+		const inside = e.graph.nodes.find(
+			(n) =>
+				!n.readonly &&
+				!e.deleteBlock(n.id) &&
+				e.incidentEdges(n.id).length > 0 &&
+				!e.working.includes(n.id)
+		)!;
+		e.addToWork([inside.id]);
+		expect(e.incidentEdges(inside.id).some((x) => !e.inWork(x.from) || !e.inWork(x.to))).toBe(true);
+		expect(e.deleteNode(inside.id)).toBe(true);
+		expect(e.node(inside.id)).toBeUndefined();
+	});
+});

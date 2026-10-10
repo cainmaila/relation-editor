@@ -1171,6 +1171,33 @@ test.describe('局部工作區（P4）', () => {
 		await expect(detail(page)).toContainText('偵測器 SD-01');
 	});
 
+	test('工作區外的邊：端點連結明確說明，「將兩端加入編輯頁」後才可修改', async ({ page }) => {
+		await toEdit(page, ['樓層 PDU 2F-A']);
+		// 詳情邊列中，另一端在工作區外的第一條邊
+		const add = detail(page)
+			.getByRole('button', { name: /^加入編輯頁：/ })
+			.first();
+		const other = (await add.getAttribute('aria-label'))!.replace('加入編輯頁：', '');
+		await add.locator('xpath=preceding-sibling::button').click();
+		const dir = detail(page).getByRole('combobox', { name: '方向' });
+		await expect(dir).toBeDisabled();
+		await detail(page)
+			.getByRole('button', { name: new RegExp(`^(起點|終點)：${other}$`) })
+			.click();
+		await expect(status(page)).toHaveText(`「${other}」不在編輯頁：先將兩端加入編輯頁才能定位`);
+		await expect(tab(page, 'edit')).toHaveText('編輯頁 1/200');
+		await detail(page).getByRole('button', { name: '將兩端加入編輯頁' }).click();
+		await expect(status(page)).toHaveText(/^已加入編輯頁：新增 1 個節點、帶入 \d+ 條邊$/);
+		await expect(tab(page, 'edit')).toHaveText('編輯頁 2/200');
+		await expect(dir).toBeEnabled();
+		await detail(page)
+			.getByRole('button', { name: new RegExp(`^(起點|終點)：${other}$`) })
+			.click();
+		await expect(detail(page).getByRole('textbox', { name: '名稱', exact: true })).toHaveValue(
+			other
+		);
+	});
+
 	test('2D 視野與位置在切到 3D 再回來後保留', async ({ page }) => {
 		await toEdit(page, ['樓層 PDU 2F-A', '機櫃 PDU A-05-A']);
 		await drag(page, node(page, '機櫃 PDU A-05-A'), { x: 700, y: 520 });
