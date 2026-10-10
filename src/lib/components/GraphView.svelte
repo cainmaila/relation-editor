@@ -8,8 +8,11 @@
 	import { UNREACHABLE_LABEL, nodeType } from '#lib/model/config.js';
 	import type * as THREE from 'three';
 	import type { Graph } from '#lib/model/types.js';
+	import type { LayoutOut } from '#lib/layout-sim.js';
+	import type { GraphProbe } from '#lib/measure.js';
 
-	let { editor }: { editor: Editor } = $props();
+	// probe：只有量測入口傳入，記錄 layout／相機可操作的時間點
+	let { editor, probe }: { editor: Editor; probe?: GraphProbe } = $props();
 
 	const DIM = '#1e293b';
 	const LINK_HL = '#e2e8f0';
@@ -72,6 +75,8 @@
 		]);
 		const fg = new ForceGraph3D(host).backgroundColor('#0b1020').showNavInfo(false);
 		const canvas = fg.renderer().domElement;
+		probe?.renderer(fg.renderer());
+		probe?.mark('graph:init');
 
 		let g: Graph = { nodes: [], edges: [] };
 		let ids: string[] = [];
@@ -254,6 +259,7 @@
 			pendingView = false;
 			ready = true;
 			loading = false;
+			probe?.mark('layout:ready', { nodes: n, edges: g.edges.length });
 		};
 
 		const build = (graph: Graph) => {
@@ -277,16 +283,24 @@
 				return;
 			}
 			worker = new Worker(new URL('../layout.worker.ts', import.meta.url), { type: 'module' });
-			worker.onmessage = (e: MessageEvent<Float32Array>) => {
-				pos = e.data;
+			worker.onmessage = (e: MessageEvent<LayoutOut & { recvAt: number; doneAt: number }>) => {
+				pos = e.data.pos;
+				const t0 = performance.timeOrigin;
+				probe?.mark('layout:worker-done', {
+					tickMs: [...e.data.tickMs],
+					recvAt: e.data.recvAt - t0,
+					doneAt: e.data.doneAt - t0
+				});
 				worker?.terminate();
 				worker = null;
 				done();
 			};
+			probe?.mark('layout:start', { nodes: ids.length, edges: graph.edges.length });
 			worker.postMessage({
 				n: ids.length,
 				links: graph.edges.map((e) => [idx.get(e.from)!, idx.get(e.to)!]),
-				ticks: TICKS
+				ticks: TICKS,
+				init: probe?.init ?? 'zero'
 			});
 		};
 
@@ -373,6 +387,7 @@
 	{#if loading}
 		<div
 			out:fade={{ duration: 300 }}
+			onoutroend={() => probe?.mark('camera:interactive')}
 			class="absolute inset-0 grid place-items-center bg-[#0b1020]/70 text-sm text-slate-200"
 		>
 			計算版面中…

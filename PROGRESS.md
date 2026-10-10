@@ -1,16 +1,30 @@
 # PROGRESS
 
+## P1 代表性 10k 資料與量測基線（分支 cainmaila/main-3-3）
+
+- **Goal:** 建立唯一 root、domain-valid、可重現的 10k 規模資料（20k／100k 邊）與 production 量測入口，記錄現況基線（不修效能、不改門檻）。計畫 `.superpowers/sdd/plan/task-1-brief.md`
+- **Done（agent-tested，待 controller QA）:**
+  - `scaleFixture()`（`src/lib/model/scale-fixture.ts`）：seed 化；10,000 節點，hub 度 1001、ToR 環（有向 cycle）、20 個孤立節點、同名不同 id、8 系統、雙向邊、props 各自獨立；`graphStats()` 算 N／E／最大度／連通塊
+  - `/measure?edges=&seed=&init=` opt-in 量測頁：僅此路由掛 `window.__measure`（卸載即刪）；預設首頁仍是 mock（e2e 驗證）
+  - `GraphView` 加選用 `probe`：`graph:init`、`layout:start`、`layout:worker-done`、`layout:ready`、`camera:interactive`；worker 改用共用 `runLayout`（init 預設仍 zero）
+  - `pnpm measure:universe layout|browser`：Node 版面實驗（cpuprofile＋品質指標）與 Playwright 冷啟動（真實滑鼠拖曳／滾輪、搜尋、long task、heap、GPU 字串、截圖）
+  - check 0、lint 綠、unit 52、build 綠、e2e 45 全過（既有 43［主頁 42＋demo 1］＋量測 2）
+- **基線（M2、headless Chromium、真 Metal GPU、zero init、5 次冷啟）:** 20k 邊可操作相機 p50 11.56s、100k 10.86s（worker 版面 ~10–10.8s）；拖曳／滾輪 frame p95 ~16.7ms；heap(GC 後) 71／85MB；DOM 44.7k 元素。SwiftShader 軟體繪製拖曳 p95 433ms（不可用，不可與 GPU 數字混用）
+- **版面實驗:** d3 初始位置比 zero 少首 tick 尖峰（~630→~100ms）、移除 ~450k 離群點、分布正常；但總時仍 ~9–10s，熱點是 many-body charge（非 link）
+- **Todo:** P5 修冷啟動（≤2s 門檻目前未達）；搜尋 `slice(0,8)` 不完整；大綱一次渲染全部節點
+- **Notes:** 量測時工作樹未提交；d3 只跑 2 次、headed 1 次；layout cpuprofile 來自 Node 而非瀏覽器 worker。報告 `.superpowers/sdd/plan/task-1-report.md`，原始產物 `.superpowers/sdd/plan/artifacts/p1`（不 commit）
+
 ## P0 接回 v0.4 雙頁基線（分支 cainmaila/main-3-3）
 
 - **Goal:** 把已提交的 v0.4 雙頁基線（`feat/v0.4-two-views` 5b59172）接進本分支，建立可重現的檢查基線；不宣稱符合新設計。計畫 `.superpowers/sdd/plan/task-0-brief.md`
-- **Done（agent 已測，待 parent QA）:**
+- **Done（parent 已獨立 QA：check 0 錯、unit 35、e2e 42 全過；已檢視基線整合與測試遷移 diff）:**
   - merge `feat/v0.4-two-views`（fast-forward 47e087d→5b59172），`pnpm install --frozen-lockfile`（manifest 有變）
   - `playwright.config.ts` webServer 改 `pnpm build && pnpm preview`（仍跑 production build）
   - e2e 改成雙頁前置：以 `v04-two-views` 未提交 WIP 的 e2e 為底（逐項跑過才收），補 4 項前置修正（等編輯頁視野停下、取消加入時的選取、右鍵前先從大綱點選）；原全圖「A-02 命中 5 個」斷言補回
   - `GraphView.svelte` 加唯讀 e2e 掛勾 `nodeCount()`／`edgeCount()`（取自同一 WIP）
   - `.prettierignore` 排除 `.superpowers/`（git 已忽略的本機 SDD 檔讓 `pnpm lint` 失敗）
   - check 0 錯、lint 綠、unit 35、build 綠、e2e 42 項全過（連跑 2 次）
-- **Todo:** parent QA；P1 之後依計畫
+- **Todo:** P1 代表性資料與量測，後續依計畫；基線不等於新產品驗收通過
 - **Notes（已知差距）:**
   - `v04-fix` 未提交 5 檔（編輯頁外節點唯讀、EdgeDialog 只列 working、GraphView 失敗處理／ready 前不飛、addNode 滿額擋下）**未帶入**，留給 P4／P5 依新設計處理
   - 原 2D 全圖測試的 ×42 疊卡、全圖淡化數、收疊卡片數 1,398 在 3D 全圖無 DOM 可驗，改在編輯頁用小集合驗同一行為

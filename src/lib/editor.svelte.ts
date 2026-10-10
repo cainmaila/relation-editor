@@ -39,7 +39,7 @@ export const WORK_LIMIT = 500;
 
 export class Editor {
 	// raw：10k 節點時深層 proxy 太貴；要改就換新物件，不可原地改
-	graph = $state.raw<Graph>(Editor.initial());
+	graph = $state.raw<Graph>({ nodes: [], edges: [] });
 	systems = $state<System[]>([...SYSTEMS]);
 	/** 目前畫面：全圖（只讀）或編輯頁 */
 	page = $state<'graph' | 'edit'>('graph');
@@ -80,6 +80,11 @@ export class Editor {
 	relayout = $state(0);
 	/** 編輯後才成為疊卡成員的節點：不收進疊卡，免得畫面上的卡片消失；重新排版時清掉 */
 	loose = $state<string[]>([]);
+
+	/** 預設＝正式 mock；只有量測入口會傳入其他圖 */
+	constructor(graph: Graph = Editor.initial()) {
+		this.graph = graph;
+	}
 
 	unprocessed = $derived(unprocessed(this.graph));
 	unreachable = $derived(unreachable(this.graph));

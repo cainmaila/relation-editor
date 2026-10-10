@@ -128,3 +128,16 @@ describe('Editor.setPage', () => {
 		expect(e.selected).toBeNull();
 	});
 });
+
+describe('Editor 初始圖', () => {
+	it('預設是 mock；量測入口可傳入指定的圖', () => {
+		expect(new Editor().graph.nodes.length).toBe(2066);
+		const g = {
+			nodes: [{ id: 'TPKC 大樓', type: '大樓', name: 'TPKC 大樓', props: {} }],
+			edges: []
+		};
+		const e = new Editor(g);
+		expect(e.graph).toBe(g);
+		expect(e.unprocessed.size).toBe(0);
+	});
+});
