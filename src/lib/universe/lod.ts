@@ -128,11 +128,11 @@ export function makeView(
 
 export type Projected = { x: number; y: number; depth: number };
 
-/** 投影到 CSS px（左上為原點）；相機背後或近平面前回傳 null */
+/** 投影到 CSS px（左上為原點）；相機背後、近平面前或遠平面後（GPU 會裁掉）回傳 null */
 export function project(v: View, x: number, y: number, z: number): Projected | null {
 	const m = v.vp;
 	const w = m[3] * x + m[7] * y + m[11] * z + m[15];
-	if (!(w > v.near)) return null;
+	if (!(w > v.near) || w > v.far) return null;
 	const cx = m[0] * x + m[4] * y + m[8] * z + m[12];
 	const cy = m[1] * x + m[5] * y + m[9] * z + m[13];
 	return { x: ((cx / w + 1) / 2) * v.width, y: ((1 - cy / w) / 2) * v.height, depth: w };
@@ -225,12 +225,16 @@ function boxInFrustum(v: View, b: Float64Array, margin: number) {
 	return true;
 }
 
-const clampDist = (e: Vec3, b: Float64Array) =>
-	Math.hypot(
-		Math.max(b[0] - e[0], 0, e[0] - b[3]),
-		Math.max(b[1] - e[1], 0, e[1] - b[4]),
-		Math.max(b[2] - e[2], 0, e[2] - b[5])
+/** 格子內任一點的最小視深度（clip w，與 project 的 depth 相同；線性，取角點即精確下界） */
+const minDepth = (v: View, b: Float64Array) => {
+	const m = v.vp;
+	return (
+		m[3] * (m[3] >= 0 ? b[0] : b[3]) +
+		m[7] * (m[7] >= 0 ? b[1] : b[4]) +
+		m[11] * (m[11] >= 0 ? b[2] : b[5]) +
+		m[15]
 	);
+};
 const farDist = (e: Vec3, b: Float64Array) =>
 	Math.hypot(
 		Math.max(Math.abs(e[0] - b[0]), Math.abs(e[0] - b[3])),
@@ -338,14 +342,15 @@ export function computeFrame(inp: FrameInput, prev: LodState = EMPTY): Frame {
 	let visibleNodes = 0;
 	for (let i = 0; i < visible.length; i++) visibleNodes += visible[i];
 
-	// 1. detail：格網候選（視錐＋近距離），再逐點投影
+	// 1. detail：格網候選（視錐＋視深度夠淺），再逐點投影。半徑只由視深度決定，
+	// 所以以格子的最小視深度排除（偏軸／寬畫面也不會誤刪），不用到眼睛的歐氏距離
 	const seen = new Map<number, Projected>();
 	const general: { i: number; r: number }[] = [];
 	const reach = (R * v.focal) / cfg.detailExitPx;
 	const b = new Float64Array(6);
 	for (const c of grid.occupied) {
 		box(grid, c, b);
-		if (clampDist(v.eye, b) > reach || !boxInFrustum(v, b, R)) continue;
+		if (minDepth(v, b) > reach || !boxInFrustum(v, b, R)) continue;
 		for (let k = grid.start[c]; k < grid.start[c + 1]; k++) {
 			const i = grid.items[k];
 			if (!visible[i]) continue;
@@ -428,7 +433,6 @@ export function computeFrame(inp: FrameInput, prev: LodState = EMPTY): Frame {
 	// 4. 標籤
 	const labels: Label[] = [];
 	const sides = new Map<number, 1 | -1>();
-	let labelCandidates: number;
 	const H = cfg.labelHeightPx;
 	const place = (i: number, side: 1 | -1, p: Projected) => {
 		const w = inp.labelWidth(i);
@@ -441,23 +445,22 @@ export function computeFrame(inp: FrameInput, prev: LodState = EMPTY): Frame {
 		labels.every(
 			(o) => !(l.x < o.x + o.w && o.x < l.x + l.w && l.y < o.y + o.h && o.y < l.y + l.h)
 		);
+	// 有資格：這一幀的 detail，且投影夠大（選取、滑過例外）
+	const pri = new Set([inp.selected, inp.hover]);
+	const eligibleLabel = (i: number) =>
+		inDetail.has(i) && (pri.has(i) || rpx(seen.get(i)!) >= cfg.labelMinPx);
+	const tier = (i: number) =>
+		pri.has(i) ? (i === inp.selected ? 0 : 1) : forcedSet.has(i) ? 2 : 3;
+	let cand: number[];
 	if (inp.labels === 'reproject') {
-		for (const i of prev.labels) {
-			if (!visible[i]) continue;
-			const p = seen.get(i) ?? proj(i);
-			if (!p) continue;
-			const l = place(i, prev.sides.get(i) ?? 1, p);
-			if (!fits(l)) continue;
-			labels.push(l);
-			sides.set(i, prev.sides.get(i) ?? 1);
-		}
-		labelCandidates = labels.length;
+		// 轉動中節流：不重新挑選，只沿用上一幀的標籤（加上選取／滑過），但仍檢查資格、避碰、畫面內
+		// （prev.labels ≤ maxLabels，所以這條路徑的成本固定有上限）
+		cand = [...new Set([inp.selected, inp.hover, ...prev.labels])].filter(
+			(i) => i >= 0 && eligibleLabel(i)
+		);
 	} else {
 		const had = new Set(prev.labels);
-		const pri = new Set([inp.selected, inp.hover]);
-		const cand = detail.filter((i) => pri.has(i) || rpx(seen.get(i)!) >= cfg.labelMinPx);
-		const tier = (i: number) =>
-			pri.has(i) ? (i === inp.selected ? 0 : 1) : forcedSet.has(i) ? 2 : 3;
+		cand = detail.filter(eligibleLabel);
 		cand.sort(
 			(a, c) =>
 				tier(a) - tier(c) ||
@@ -465,29 +468,29 @@ export function computeFrame(inp: FrameInput, prev: LodState = EMPTY): Frame {
 				rpx(seen.get(c)!) - rpx(seen.get(a)!) ||
 				a - c
 		);
-		labelCandidates = cand.length;
-		for (const i of cand) {
-			if (labels.length >= cfg.maxLabels) break;
-			const p = seen.get(i)!;
-			const first = prev.sides.get(i) ?? 1;
-			let done = false;
-			for (const side of [first, -first as 1 | -1]) {
-				const l = place(i, side, p);
-				if (fits(l) && free(l)) {
-					labels.push(l);
-					sides.set(i, side);
-					done = true;
-					break;
-				}
-			}
-			// 選取節點一定要有標籤：放不下就夾進畫面內（它是第一個，不會撞到別人）
-			if (!done && i === inp.selected && !labels.length) {
-				const l = place(i, 1, p);
-				l.x = Math.min(Math.max(0, l.x), Math.max(0, v.width - l.w));
-				l.y = Math.min(Math.max(0, l.y), Math.max(0, v.height - l.h));
+	}
+	const labelCandidates = cand.length;
+	for (const i of cand) {
+		if (labels.length >= cfg.maxLabels) break;
+		const p = seen.get(i)!;
+		const first = prev.sides.get(i) ?? 1;
+		let done = false;
+		for (const side of [first, -first as 1 | -1]) {
+			const l = place(i, side, p);
+			if (fits(l) && free(l)) {
 				labels.push(l);
-				sides.set(i, 1);
+				sides.set(i, side);
+				done = true;
+				break;
 			}
+		}
+		// 選取節點一定要有標籤：放不下就夾進畫面內（它是第一個，不會撞到別人）
+		if (!done && i === inp.selected && !labels.length) {
+			const l = place(i, 1, p);
+			l.x = Math.min(Math.max(0, l.x), Math.max(0, v.width - l.w));
+			l.y = Math.min(Math.max(0, l.y), Math.max(0, v.height - l.h));
+			labels.push(l);
+			sides.set(i, 1);
 		}
 	}
 
@@ -575,33 +578,57 @@ export type PickInput = {
 	/** CSS px（相對畫布左上） */
 	x: number;
 	y: number;
+	/** 每個節點的繪製倍率（問題節點 1.6；renderer 的 base）；省略＝全部 1 */
+	scale?: Float32Array;
+	/** 目前畫成 detail 球的節點（物理大小）；其他是封頂的 Points。省略＝都沒有 */
+	detail?: ReadonlySet<number>;
 	config?: LodConfig;
 };
 
 /**
- * 點選：沿射線找格網候選，逐點投影；只接受勾選系統、相機前方、視錐內、
- * 在容差（或節點投影半徑）內的點；重疊時取最近的正深度。沒有回傳 -1。
+ * 節點實際畫出的螢幕半徑（CSS px），與 renderer 一致：detail 球＝R·倍率·focal／depth；
+ * Points＝同一值夾在 [1, detailEnterPx·倍率]（shader 的 gl_PointSize clamp）。
+ */
+export function drawnRadius(
+	physPx: number,
+	scale: number,
+	isDetail: boolean,
+	cfg: LodConfig = LOD
+) {
+	const r = physPx * scale;
+	return isDetail ? r : Math.min(Math.max(r, 1), cfg.detailEnterPx * scale);
+}
+
+/**
+ * 點選：沿射線找格網候選，逐點投影；只接受勾選系統、相機前方、視錐內（含 far）、
+ * 在容差（或節點「實際畫出」的半徑）內的點；重疊時取最近的正深度。沒有回傳 -1。
  */
 export function pick(inp: PickInput): number {
 	const cfg = inp.config ?? LOD;
 	const { positions: P, view: v, grid } = inp;
 	const R = cfg.nodeRadius;
 	const tol = cfg.pickTolerancePx;
+	const scale = inp.scale;
+	const detail = inp.detail;
+	let sMax = 1;
+	if (scale) for (let i = 0; i < scale.length; i++) if (scale[i] > sMax) sMax = scale[i];
 	const b = new Float64Array(6);
 	let best = -1;
 	let bd = Infinity;
 	let bs = Infinity;
 	for (const c of grid.occupied) {
 		box(grid, c, b);
-		if (!rayHits(inp.ray, b, R + (tol * farDist(v.eye, b)) / v.focal)) continue;
+		// 畫出的半徑 ≤ 物理半徑 R·倍率，所以以它＋容差放大格子是保守的
+		if (!rayHits(inp.ray, b, R * sMax + (tol * farDist(v.eye, b)) / v.focal)) continue;
 		for (let k = grid.start[c]; k < grid.start[c + 1]; k++) {
 			const i = grid.items[k];
 			if (!inp.visible[i]) continue;
 			const p = project(v, P[i * 3], P[i * 3 + 1], P[i * 3 + 2]);
-			if (!p || p.depth > v.far) continue;
+			if (!p) continue;
 			if (p.x < 0 || p.y < 0 || p.x > v.width || p.y > v.height) continue;
 			const s = Math.hypot(p.x - inp.x, p.y - inp.y);
-			if (s > Math.max(tol, (R * v.focal) / p.depth)) continue;
+			const r = drawnRadius((R * v.focal) / p.depth, scale ? scale[i] : 1, !!detail?.has(i), cfg);
+			if (s > Math.max(tol, r)) continue;
 			if (p.depth < bd || (p.depth === bd && (s < bs || (s === bs && i < best)))) {
 				[best, bd, bs] = [i, p.depth, s];
 			}

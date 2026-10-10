@@ -192,10 +192,12 @@ export function createUniverseLayers(o: UniverseLayersOptions) {
 		el.style.cssText =
 			'position:absolute;left:0;top:0;display:none;box-sizing:border-box;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;' +
 			`height:${LOD.labelHeightPx}px;line-height:${LOD.labelHeightPx}px;font-size:${LOD.labelFontPx}px;padding:0 4px;` +
-			'border-radius:4px;color:#e2e8f0;background:rgba(11,16,32,.72);pointer-events:none;will-change:transform';
+			'border-radius:4px;font-weight:400;outline:none;color:#e2e8f0;background:rgba(11,16,32,.72);pointer-events:none;will-change:transform';
 		o.labelHost.appendChild(el);
-		return { el, node: -1 };
+		// DOM 狀態快取：只在真的變了才寫 DOM；gen 落後＝名稱刷新過，要重寫字與寬度
+		return { el, node: -1, shown: false, sel: false, w: -1, gen: 0 };
 	});
+	let labelGen = 0;
 	const widths = new Map<number, number>();
 	const widthOf = (i: number) => {
 		let w = widths.get(i);
@@ -228,6 +230,8 @@ export function createUniverseLayers(o: UniverseLayersOptions) {
 		colors = (pointGeom.getAttribute('tint') as THREE_NS.BufferAttribute).array as Float32Array;
 		base = new Float32Array(n);
 		prevDetail = [];
+		// 索引重新對應：舊的 hover 索引指向別的節點
+		hover = -1;
 		state = undefined;
 		widths.clear();
 		writePositions();
@@ -475,21 +479,29 @@ export function createUniverseLayers(o: UniverseLayersOptions) {
 		const sel = focusIdx.selected;
 		pool.forEach((slot, k) => {
 			const l = f.labels[k];
+			const st = slot.el.style;
 			if (!l) {
-				if (slot.node !== -1) slot.el.style.display = 'none';
+				if (slot.shown) st.display = 'none';
+				slot.shown = false;
 				slot.node = -1;
 				return;
 			}
-			if (slot.node !== l.node) {
+			if (slot.node !== l.node || slot.gen !== labelGen) {
 				slot.node = l.node;
+				slot.gen = labelGen;
 				slot.el.textContent = o.name(l.id);
 				slot.el.dataset.id = l.id;
-				slot.el.style.width = `${l.w}px`;
-				slot.el.style.display = 'block';
-				slot.el.style.fontWeight = l.node === sel ? '600' : '400';
-				slot.el.style.outline = l.node === sel ? '1px solid #fff' : 'none';
 			}
-			slot.el.style.transform = `translate(${l.x}px,${l.y}px)`;
+			if (slot.w !== l.w) st.width = `${(slot.w = l.w)}px`;
+			if (!slot.shown) st.display = 'block';
+			slot.shown = true;
+			const isSel = l.node === sel;
+			if (slot.sel !== isSel) {
+				slot.sel = isSel;
+				st.fontWeight = isSel ? '600' : '400';
+				st.outline = isSel ? '1px solid #fff' : 'none';
+			}
+			st.transform = `translate(${l.x}px,${l.y}px)`;
 		});
 	}
 
@@ -520,7 +532,7 @@ export function createUniverseLayers(o: UniverseLayersOptions) {
 		/** 名稱改了：標籤重寫文字與寬度，不碰版面 */
 		refreshLabels() {
 			widths.clear();
-			for (const s of pool) s.node = -1;
+			labelGen++;
 			labelsDirty = true;
 		},
 		/** 尺寸／DPR 改變 */
@@ -581,7 +593,18 @@ export function createUniverseLayers(o: UniverseLayersOptions) {
 
 	function pickIndex(x: number, y: number) {
 		const v = currentView();
-		return pick({ positions: P(), grid, visible, view: v, ray: pickRay(v, x, y), x, y });
+		// 與畫面一致：detail 球用物理大小、其他是封頂的 Points；倍率＝Points 的 base（問題節點 1.6）
+		return pick({
+			positions: P(),
+			grid,
+			visible,
+			view: v,
+			ray: pickRay(v, x, y),
+			x,
+			y,
+			scale: base,
+			detail: state?.detail
+		});
 	}
 }
 

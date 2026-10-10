@@ -19,13 +19,32 @@ const W = 800;
 const H = 600;
 
 /** 真的 three 相機 → 純數值 View（與 renderer 同一條路徑） */
-function cam(eye: [number, number, number], at: [number, number, number] = [0, 0, 0]): View {
-	const c = new THREE.PerspectiveCamera(70, W / H, 0.1, 1e5);
+function cam(
+	eye: [number, number, number],
+	at: [number, number, number] = [0, 0, 0],
+	{ w = W, h = H, far = 1e5 }: { w?: number; h?: number; far?: number } = {}
+): View {
+	const c = new THREE.PerspectiveCamera(70, w / h, 0.1, far);
 	c.position.set(...eye);
 	c.lookAt(...at);
 	c.updateMatrixWorld();
 	c.updateProjectionMatrix();
-	return makeView(c.projectionMatrix.elements, c.matrixWorldInverse.elements, eye, W, H);
+	return makeView(c.projectionMatrix.elements, c.matrixWorldInverse.elements, eye, w, h);
+}
+
+/** 兩兩不重疊且在畫面內 */
+function expectNoOverlap(labels: { x: number; y: number; w: number; h: number }[], w = W, h = H) {
+	for (const a of labels) {
+		expect(a.x).toBeGreaterThanOrEqual(0);
+		expect(a.y).toBeGreaterThanOrEqual(0);
+		expect(a.x + a.w).toBeLessThanOrEqual(w);
+		expect(a.y + a.h).toBeLessThanOrEqual(h);
+		for (const b of labels)
+			if (a !== b)
+				expect(a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h).toBe(
+					false
+				);
+	}
 }
 
 type G = {
@@ -108,6 +127,47 @@ describe('project', () => {
 	});
 	it('相機背後回傳 null', () => {
 		expect(project(cam([0, 0, 100]), 0, 0, 200)).toBeNull();
+	});
+	it('遠平面之外回傳 null（與 near 一致）', () => {
+		const v = cam([0, 0, 0], [0, 0, -1], { far: 1000 });
+		expect(project(v, 0, 0, -990)).not.toBeNull();
+		expect(project(v, 0, 0, -1010)).toBeNull();
+	});
+});
+
+describe('格網候選以視深度（與投影一致）排除，不用歐氏距離', () => {
+	const at = (px: number, v: View) => (LOD.nodeRadius * v.focal) / px;
+	it('偏軸、上一幀已是 detail、4–6px：仍是 detail（hysteresis）', () => {
+		const v = cam([0, 0, 0], [0, 0, -1]);
+		const d = at(4.5, v);
+		const g = graph([[0.8 * d, 0, -d]]); // 單點＝極小格子
+		const p = project(v, 0.8 * d, 0, -d)!;
+		expect(p.x).toBeLessThan(W);
+		const prev: LodState = { detail: new Set([0]), labels: [], sides: new Map() };
+		expect(run(input(g, v), prev).detailNodeIds).toEqual(['n0']);
+	});
+	it('寬畫面偏軸 ≥ 6px：進入 detail', () => {
+		const v = cam([0, 0, 0], [0, 0, -1], { w: 1600, h: 600 });
+		const d = at(6.5, v);
+		const g = graph([[1.5 * d, 0, -d]]);
+		const p = project(v, 1.5 * d, 0, -d)!;
+		expect(p.x).toBeLessThan(1600);
+		expect(run(input(g, v)).detailNodeIds).toEqual(['n0']);
+	});
+});
+
+describe('遠平面之外（選取／高亮也一樣）', () => {
+	it('選取與高亮節點在 far 之外：不是 detail、沒有標籤', () => {
+		const v = cam([0, 0, 0], [0, 0, -1], { far: 1000 });
+		const g = graph([
+			[0, 0, -2000],
+			[30, 0, -1500],
+			[0, 0, -50]
+		]);
+		const f = run(input(g, v, { selected: 0, hover: 1, focus: [1] }));
+		expect(f.detailNodeIds).toEqual(['n2']);
+		expect(f.labels.map((l) => l.id)).not.toContain('n0');
+		expect(f.labels.map((l) => l.id)).not.toContain('n1');
 	});
 });
 
@@ -279,6 +339,35 @@ describe('標籤：避碰、畫面內、穩定排序', () => {
 		expect(b.labels[0].x).not.toBe(a.labels[0].x);
 	});
 
+	it('reproject：相機造成的重疊也要避碰（不保留重疊標籤）', () => {
+		const g = graph([
+			[-5, 0, 0],
+			[5, 0, 0]
+		]);
+		const a = run(input(g, cam([0, 0, 40], [0, 0, 0])));
+		expect(a.labels.map((l) => l.id).sort()).toEqual(['n0', 'n1']);
+		expectNoOverlap(a.labels);
+		// 拉遠：兩個點靠近，原本右側的標籤會互相重疊
+		const b = run(input(g, cam([0, 0, 80], [0, 0, 0]), { labels: 'reproject' }), a.state);
+		expect(b.labels.length).toBeGreaterThan(0);
+		expectNoOverlap(b.labels);
+		expect(b.labels.length).toBeLessThanOrEqual(LOD.maxLabels);
+	});
+
+	it('reproject：不再是 detail（或低於標籤門檻）的標籤移除；選取仍優先', () => {
+		const g = graph([
+			[-5, 0, 0],
+			[5, 0, 0],
+			[0, 8, 0]
+		]);
+		const a = run(input(g, cam([0, 0, 40], [0, 0, 0])));
+		expect(a.labels.length).toBe(3);
+		const far = cam([0, 0, 4000], [0, 0, 0]);
+		const b = run(input(g, far, { labels: 'reproject', selected: 2 }), a.state);
+		expect(b.detailNodeIds).toEqual(['n2']);
+		expect(b.labels.map((l) => l.id)).toEqual(['n2']);
+	});
+
 	it('labelWidth：中文較寬、有上限', () => {
 		expect(labelWidth('機櫃機櫃')).toBeGreaterThan(labelWidth('abcd'));
 		expect(labelWidth('機'.repeat(200))).toBe(LOD.labelMaxWidthPx);
@@ -340,6 +429,43 @@ describe('點選', () => {
 		expect(at(W / 2 + LOD.pickTolerancePx + 20, H / 2)(g)).toBe(-1);
 	});
 
+	it('未升級（被預算排除）的近處點只有畫出的封頂點大小可點，不是無形大圓', () => {
+		const g = graph([[0, 0, 60]]); // 深度 40 → 物理半徑 ≫ 6px
+		const r = (LOD.nodeRadius * v.focal) / 40;
+		expect(r).toBeGreaterThan(30);
+		const x = W / 2 + 20;
+		const base = { positions: g.positions, grid: buildGrid(g.positions), view: v };
+		const vis = new Uint8Array([1]);
+		const ray = pickRay(v, x, H / 2);
+		// 不是 detail：Points 封頂 detailEnterPx（×倍率），20px 外不中
+		expect(pick({ ...base, visible: vis, ray, x, y: H / 2, detail: new Set() })).toBe(-1);
+		// 是 detail：球畫出物理大小，命中
+		expect(pick({ ...base, visible: vis, ray, x, y: H / 2, detail: new Set([0]) })).toBe(0);
+	});
+
+	it('問題節點（1.6 倍）：detail 外緣與封頂點都依實際大小判定', () => {
+		const g = graph([[0, 0, 20]]); // 深度 80
+		const r = (LOD.nodeRadius * v.focal) / 80;
+		const base = { positions: g.positions, grid: buildGrid(g.positions), view: v };
+		const vis = new Uint8Array([1]);
+		const hit = (dx: number, detail: Set<number>, scale: number) =>
+			pick({
+				...base,
+				visible: vis,
+				ray: pickRay(v, W / 2 + dx, H / 2),
+				x: W / 2 + dx,
+				y: H / 2,
+				detail,
+				scale: new Float32Array([scale])
+			});
+		const rim = r * 1.4; // 介於 1 倍與 1.6 倍半徑之間
+		expect(hit(rim, new Set([0]), 1)).toBe(-1);
+		expect(hit(rim, new Set([0]), 1.6)).toBe(0);
+		// 未升級的問題點：封頂 6×1.6=9.6px，比容差 8px 大
+		expect(hit(9, new Set(), 1.6)).toBe(0);
+		expect(hit(9, new Set(), 1)).toBe(-1);
+	});
+
 	it('格網候選與暴力法一致', () => {
 		const g = lattice(14, 7);
 		const view = cam([30, 20, 120], [0, 0, 0]);
@@ -356,7 +482,8 @@ describe('點選', () => {
 			for (let i = 0; i < g.ids.length; i++) {
 				const p = project(view, g.positions[i * 3], g.positions[i * 3 + 1], g.positions[i * 3 + 2]);
 				if (!p || p.x < 0 || p.y < 0 || p.x > W || p.y > H) continue;
-				const r = Math.max(LOD.pickTolerancePx, (LOD.nodeRadius * view.focal) / p.depth);
+				const drawn = Math.min((LOD.nodeRadius * view.focal) / p.depth, LOD.detailEnterPx);
+				const r = Math.max(LOD.pickTolerancePx, drawn);
 				if (Math.hypot(p.x - x, p.y - y) <= r && p.depth < bd) [bd, best] = [p.depth, i];
 			}
 			expect(

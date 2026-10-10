@@ -312,11 +312,26 @@
 				const r = canvas.getBoundingClientRect();
 				return [e.clientX - r.left, e.clientY - r.top] as const;
 			};
+			// down：按著中的手勢（期間不做滑過）；ended：剛在畫布上放開的手勢，留給緊接的 click 判斷拖曳
 			let down: { x: number; y: number } | null = null;
 			let travel = 0;
+			let ended: { travel: number } | null = null;
 			const onDown = (e: PointerEvent) => {
 				down = { x: e.clientX, y: e.clientY };
 				travel = 0;
+				ended = null;
+			};
+			// 放開（任何地方）或取消都結束手勢：在畫布外放開、pointercancel 不會留下永久的 down
+			const onUp = (e: PointerEvent) => {
+				const d = down;
+				if (!d) return;
+				down = null;
+				travel = Math.max(travel, Math.hypot(e.clientX - d.x, e.clientY - d.y));
+				ended = e.target === canvas && e.button === 0 ? { travel } : null;
+			};
+			const onCancel = () => {
+				down = null;
+				ended = null;
 			};
 			const onMove = (e: PointerEvent) => {
 				if (down) {
@@ -336,10 +351,10 @@
 				canvas.style.cursor = '';
 			};
 			const onClick = (e: MouseEvent) => {
-				const d = down;
-				down = null;
-				if (!ready || !d) return;
-				if (Math.max(travel, Math.hypot(e.clientX - d.x, e.clientY - d.y)) > CLICK_SLOP) return;
+				const g = ended;
+				ended = null;
+				if (!ready || !g) return;
+				if (g.travel > CLICK_SLOP) return;
 				const id = layers.pick(...local(e));
 				editor.select(id ? { kind: 'node', id } : null);
 			};
@@ -359,6 +374,8 @@
 			};
 			listen(canvas, 'pointerdown', onDown);
 			listen(window, 'pointermove', onMove);
+			listen(window, 'pointerup', onUp);
+			listen(window, 'pointercancel', onCancel);
 			listen(canvas, 'pointerleave', onLeave);
 			listen(canvas, 'click', onClick);
 			listen(canvas, 'webglcontextlost', onLost);
