@@ -49,7 +49,7 @@ export function graphMock(): Graph {
 	const nodes = [
 		n('大樓', 'TPKC 大樓'),
 		n('樓層', '2F'),
-		...ROWS.map(([r]) => n('列', `${r} 排`)),
+		...ROWS.map(([r]) => n('排', `${r} 排`)),
 		...CABS.map((c) => n('機櫃', `機櫃 ${c.id}`, { '總 U 數': '42' })),
 		n('台電市電', '台電市電'),
 		n('UPS', 'UPS-1'),

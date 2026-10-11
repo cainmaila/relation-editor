@@ -1,22 +1,22 @@
 <script lang="ts" module>
 	export const EDGE_COLORS: Record<string, string> = {
 		包含: '#94a3b8',
-		供電: '#fb923c',
+		供電: '#c084fc',
 		冷卻: '#22d3ee',
 		連線: '#60a5fa',
 		服務: '#4ade80',
 		承載: '#e879f9',
-		監測: '#f472b6'
+		監測: '#2dd4bf'
 	};
-	/** 系統識別色：節點色條、篩選膠囊、圖例共用 */
+	/** 系統識別色：節點色條、篩選膠囊、圖例共用。只用冷色：紅／橘／黃保留給告警 */
 	export const SYSTEM_COLORS: Record<string, string> = {
 		空間: '#a5b4fc',
 		通用: '#e2e8f0',
-		電力: '#fb923c',
+		電力: '#c084fc',
 		空調: '#22d3ee',
 		網路: '#60a5fa',
-		消防: '#fb7185',
-		CCTV: '#f472b6',
+		消防: '#2dd4bf',
+		CCTV: '#e879f9',
 		IDC: '#4ade80'
 	};
 </script>
@@ -37,34 +37,23 @@
 	import '@xyflow/svelte/dist/style.css';
 	import type { Editor } from '#lib/editor.svelte.js';
 	import { nodeType } from '#lib/model/config.js';
-	import { NODE_H, NODE_W, layout, pin } from '#lib/model/graph.js';
+	import { NODE_H, NODE_W } from '#lib/model/graph.js';
+	import { StableById } from '#lib/model/stable.js';
 	import GraphNode from './GraphNode.svelte';
 	import Icon from './Icon.svelte';
 	import ViewSync from './ViewSync.svelte';
+	import ConnectionPreview from './ConnectionPreview.svelte';
+	import FocusEdge, { type FocusEdgeData } from './FocusEdge.svelte';
 
 	let { editor }: { editor: Editor } = $props();
 
 	const nodeTypes = { graph: GraphNode };
+	const edgeTypes = { focus: FocusEdge };
 
 	const view = $derived(editor.canvas);
-	const lay = $derived(layout(view));
-	/** 檢視操作（系統、收疊、重新排版）才整張重排；編輯圖時既有節點留在原位，免得畫面跳動 */
-	const viewKey = $derived(
-		[
-			editor.systems.join(),
-			// 疊卡消失時的過期 key 清除不算檢視操作
-			editor.expanded.filter((k) => editor.stacks.has(k)).join(),
-			editor.stacking,
-			editor.relayout
-		].join('/')
-	);
-	let last: { key: string; pos: ReturnType<typeof layout>['pos'] } | undefined;
-	// 刻意在 derived 內記住上次位置（非響應變數）：只有 lay／viewKey 變動才會重算
-	const pos = $derived.by(() => {
-		const p = last?.key === viewKey ? pin(last.pos, lay.pos) : lay.pos;
-		last = { key: viewKey, pos: p };
-		return p;
-	});
+	// 版面與位置由 Editor 保存：切到 3D 卸載畫布再回來，卡片不搬動；改名不重排
+	const lay = $derived(editor.editLayout);
+	const pos = $derived(editor.editPositions);
 	/** 堆疊卡代表的節點；一般節點就是自己 */
 	const members = (id: string) => editor.closed.get(id) ?? [id];
 
@@ -80,52 +69,60 @@
 				m && {
 					nodes: m,
 					edges: new Set(
-						editor.visible.edges.filter((e) => m.has(e.from) && m.has(e.to)).map((e) => e.id)
+						editor.editVisible.edges.filter((e) => m.has(e.from) && m.has(e.to)).map((e) => e.id)
 					)
 				}
 			);
 		const ids = members(s.id);
 		const edges =
 			s.kind === 'node'
-				? editor.visible.edges.filter((e) => ids.includes(e.from) || ids.includes(e.to))
-				: editor.visible.edges.filter((e) => e.id === s.id);
+				? editor.editVisible.edges.filter((e) => ids.includes(e.from) || ids.includes(e.to))
+				: editor.editVisible.edges.filter((e) => e.id === s.id);
 		return {
 			nodes: new Set([...(s.kind === 'node' ? ids : []), ...edges.flatMap((e) => [e.from, e.to])]),
 			edges: new Set(edges.map((e) => e.id))
 		};
 	});
 
-	const nodes = $derived<Node[]>([
-		...view.nodes.map((n) => {
-			const ids = members(n.id);
-			const any = (set: Set<string>) => ids.some((id) => set.has(id));
-			const stack = ids.length > 1;
-			const active = !!editor.selected && ids.includes(editor.selected.id);
-			return {
-				id: n.id,
-				connectable: !stack,
-				type: 'graph',
-				position: pos.get(n.id)!,
-				width: NODE_W,
-				height: NODE_H,
-				data: {
-					name: n.name,
-					type: n.type,
-					system: nodeType(n.type).system ?? '通用',
-					color: SYSTEM_COLORS[nodeType(n.type).system ?? '通用'],
-					readonly: !!n.readonly,
-					stack: stack ? ids.length : 0,
-					unprocessed: any(editor.unprocessed),
-					unreachable: any(editor.unreachable),
-					dim: !!focus && !any(focus.nodes),
-					soft: !editor.selected && !editor.result && !editor.matched,
-					active,
-					origin: editor.result !== null && active,
-					fresh: editor.fresh === n.id
-				}
-			};
-		})
-	]);
+	// 內容沒變的卡片／邊沿用上一次的物件：改一張卡片的名稱不讓 Svelte Flow 重新採用、量測全部（P8 實測）
+	const stableNodes = new StableById<Node>();
+	const stableEdges = new StableById<Edge>();
+
+	const nodes = $derived<Node[]>(
+		stableNodes.take(
+			view.nodes.map((n) => {
+				const ids = members(n.id);
+				const any = (set: ReadonlySet<string>) => ids.some((id) => set.has(id));
+				const stack = ids.length > 1;
+				const active = !!editor.selected && ids.includes(editor.selected.id);
+				return {
+					id: n.id,
+					connectable: !stack,
+					type: 'graph',
+					position: pos.get(n.id)!,
+					width: NODE_W,
+					height: NODE_H,
+					// 卡片尺寸固定：先給量測值，Svelte Flow 重新採用卡片時沿用把手位置，不必整批重量、邊不會整批重建
+					measured: { width: NODE_W, height: NODE_H },
+					data: {
+						name: n.name,
+						type: n.type,
+						system: nodeType(n.type).system ?? '通用',
+						color: SYSTEM_COLORS[nodeType(n.type).system ?? '通用'],
+						readonly: !!n.readonly,
+						stack: stack ? ids.length : 0,
+						unprocessed: any(editor.unprocessed),
+						unreachable: any(editor.unreachable),
+						dim: !!focus && !any(focus.nodes),
+						soft: !editor.selected && !editor.result && !editor.matched,
+						active,
+						origin: editor.result !== null && active,
+						fresh: editor.fresh === n.id
+					}
+				};
+			})
+		)
+	);
 
 	// 只有主機：機框→主機（包含）與主機→機框（承載）畫成一條雙向線（資料仍是兩條邊）
 	const hostPair = $derived.by(() => {
@@ -147,52 +144,74 @@
 	const merged = $derived(new Set([...hostPair.values()].map((b) => b.id)));
 
 	const edges = $derived<Edge[]>(
-		view.edges
-			.filter((e) => !merged.has(e.id))
-			.map((e) => {
-				const pair = hostPair.get(e.id);
-				if (pair) e = { ...e, bidirectional: true, members: [...e.members, ...pair.members] };
-				const color = EDGE_COLORS[e.type] ?? '#94a3b8';
-				const marker = { type: MarkerType.ArrowClosed, color, width: 14, height: 14 };
-				const lit =
-					e.members.some((id) => focus?.edges.has(id) || editor.hoverEdge === id) ||
-					editor.hoverEdge === e.id;
-				// 反向邊（例：承載 主機→機框）改由左畫到右、箭頭放起點，走卡片下方的 back 把手，不和同對節點的邊疊在一起
-				// 用排版的層級判斷（不用保留的位置），編輯後一般邊不會被當成反向
-				const back = lay.pos.get(e.from)!.x > lay.pos.get(e.to)!.x;
-				const animated = e.members.some((id) => editor.result?.edges.has(id));
-				return {
-					id: e.id,
-					// 沒有包含可合併的承載邊只在相關時畫出
-					hidden: e.type === '承載' && !lit && !animated,
-					...(back
-						? {
-								source: e.to,
-								target: e.from,
-								sourceHandle: 'back',
-								targetHandle: 'back',
-								markerStart: marker,
-								markerEnd: e.bidirectional ? marker : undefined
-							}
-						: {
-								source: e.from,
-								target: e.to,
-								markerEnd: marker,
-								markerStart: e.bidirectional ? marker : undefined
-							}),
-					interactionWidth: 24,
-					animated,
-					style: [
-						`stroke: ${color}`,
-						`stroke-width: ${lit ? 2.75 : 1.25}`,
-						e.props['確認狀態'] === '推定' ? 'stroke-dasharray: 5 4' : '',
-						lit ? `filter: drop-shadow(0 0 4px ${color})` : '',
-						focus && !lit
-							? `opacity: ${editor.selected || editor.result ? 0.08 : 0.3}`
-							: 'opacity: 0.75'
-					].join(';')
-				};
-			})
+		stableEdges.take(
+			view.edges
+				.filter((e) => !merged.has(e.id))
+				.map((e) => {
+					const pair = hostPair.get(e.id);
+					if (pair) e = { ...e, bidirectional: true, members: [...e.members, ...pair.members] };
+					const color = EDGE_COLORS[e.type] ?? '#94a3b8';
+					const marker = { type: MarkerType.ArrowClosed, color, width: 14, height: 14 };
+					const lit =
+						e.members.some((id) => focus?.edges.has(id) || editor.hoverEdge === id) ||
+						editor.hoverEdge === e.id;
+					// 反向邊（例：承載 主機→機框）改由左畫到右、箭頭放起點，走卡片下方的 back 把手，不和同對節點的邊疊在一起
+					// 用排版的層級判斷（不用保留的位置），編輯後一般邊不會被當成反向
+					const back = lay.pos.get(e.from)!.x > lay.pos.get(e.to)!.x;
+					// 找客戶結果，或選取節點時它亮起的直接相連（滑過不流動）
+					const animated = e.members.some(
+						(id) =>
+							editor.result?.edges.has(id) ||
+							(editor.selected?.kind === 'node' && focus?.edges.has(id))
+					);
+					const dash = e.props['確認狀態'] === '推定' ? 'stroke-dasharray: 5 4' : '';
+					const data: FocusEdgeData = {
+						lit: lit
+							? [
+									`stroke: ${color}`,
+									'stroke-width: 2.75',
+									dash,
+									`filter: drop-shadow(0 0 4px ${color})`,
+									'opacity: 0.75'
+								].join(';')
+							: null,
+						animated,
+						back,
+						label: pair ? `${e.type}／${pair.type}` : e.type
+					};
+					return {
+						id: e.id,
+						type: 'focus',
+						data,
+						// 沒有包含可合併的承載邊只在相關時畫出
+						hidden: e.type === '承載' && !lit && !animated,
+						...(back
+							? {
+									source: e.to,
+									target: e.from,
+									sourceHandle: 'back',
+									targetHandle: 'back',
+									markerStart: marker,
+									markerEnd: e.bidirectional ? marker : undefined
+								}
+							: {
+									source: e.from,
+									target: e.to,
+									markerEnd: marker,
+									markerStart: e.bidirectional ? marker : undefined
+								}),
+						interactionWidth: 24,
+						// 流動虛線只畫在亮起的副本，底層不必每幀重畫
+						// 底層樣式與亮暗無關（亮起的副本在 FocusEdge、暗化在邊容器），選取／滑過不重畫上千條邊
+						style: [`stroke: ${color}`, 'stroke-width: 1.25', dash, 'opacity: 0.75'].join(';')
+					};
+				})
+		)
+	);
+
+	/** 沒亮的邊整層暗化（0.75 × 0.107 ≈ 0.08；滑過 0.75 × 0.4 = 0.3） */
+	const dimEdges = $derived(
+		focus ? (editor.selected || editor.result ? 'dim-edges' : 'dim-edges-soft') : null
 	);
 
 	/** 這一下點擊展開了疊卡（雙擊的後半不該再選取／縮放重排後的卡片） */
@@ -224,6 +243,15 @@
 
 	/** 拖曳連線中（目標卡片的 target 把手要浮到最上層才接得到） */
 	let linking = $state(false);
+
+	/**
+	 * 開始拖曳連線：凍結亮起狀態。拖曳中滑過的邊、離開起點卡片留下的 200ms 計時都不再改 focus——
+	 * 否則每次滑過一條邊或計時到期，就要重設上千條邊的樣式、整個 viewport 重畫（P8 實測連線拖曳掉到 30fps）
+	 */
+	function startLink() {
+		clearTimeout(hoverTimer);
+		linking = true;
+	}
 
 	/** 拖曳放開：放在節點上 → 選邊類型；放在空白 → 新增節點並連線 */
 	function connectEnd(e: MouseEvent | TouchEvent, from?: string) {
@@ -292,24 +320,35 @@
 		{nodes}
 		{edges}
 		{nodeTypes}
-		fitView
+		{edgeTypes}
+		fitView={!editor.canvasViewport}
+		initialViewport={editor.canvasViewport ?? undefined}
 		fitViewOptions={{ padding: 0.06 }}
+		onmoveend={(_, v) => (editor.canvasViewport = v)}
 		minZoom={0.1}
 		maxZoom={2}
 		nodesDraggable={false}
 		zoomOnDoubleClick={false}
 		deleteKey={null}
 		colorMode="dark"
-		class={[editor.connecting && 'connecting', linking && 'linking']}
+		ariaLabelConfig={{
+			'controls.ariaLabel': '畫布控制',
+			'controls.zoomIn.ariaLabel': '放大',
+			'controls.zoomOut.ariaLabel': '縮小',
+			'controls.fitView.ariaLabel': '全部入鏡',
+			'minimap.ariaLabel': '小地圖'
+		}}
+		class={[editor.connecting && 'connecting', linking && 'linking', dimEdges]}
 		clickConnect={false}
 		connectionDragThreshold={6}
+		connectionLineContainerStyle="display: none"
 		onnodeclick={({ node, event }) => nodeClick(node.id, event.detail)}
 		onedgeclick={({ edge }) => edgeClick(edge.id)}
 		onpaneclick={() => editor.select(null)}
 		onnodepointerenter={({ node }) => hover(node.id)}
 		onnodepointerleave={() => hover(null)}
-		onedgepointerenter={({ edge }) => (editor.hoverEdge = edge.id)}
-		onedgepointerleave={() => (editor.hoverEdge = null)}
+		onedgepointerenter={({ edge }) => !linking && (editor.hoverEdge = edge.id)}
+		onedgepointerleave={() => !linking && (editor.hoverEdge = null)}
 		onnodecontextmenu={({ event, node }) => {
 			if (editor.stacks.has(node.id)) return void menuAt(event);
 			editor.select({ kind: 'node', id: node.id });
@@ -322,7 +361,7 @@
 			editor.menu = { kind: 'edge', id: edge.id, ...at };
 		}}
 		onpanecontextmenu={({ event }) => (editor.menu = { kind: 'pane', ...menuAt(event) })}
-		onconnectstart={() => (linking = true)}
+		onconnectstart={startLink}
 		onconnectend={(e, s) => connectEnd(e, s.fromNode?.id)}
 		isValidConnection={(c) =>
 			!!editor.node(c.target) &&
@@ -348,6 +387,15 @@
 			nodeBorderRadius={4}
 		/>
 		<ViewSync {editor} />
+		<!-- 內建連線 SVG 在 viewport 裡（上面 display: none）；預覽改畫在 viewport 外，拉線時不重畫上千條邊 -->
+		<ConnectionPreview />
+		{#if editor.working.length === 0}
+			<p
+				class="pointer-events-none absolute inset-0 z-10 grid place-items-center px-6 text-center text-sm text-slate-400"
+			>
+				編輯頁是空的：用 ⌘K 搜尋節點加入，或到全圖選取節點加入
+			</p>
+		{/if}
 		{#if toolbarNode}
 			{@const n = editor.node(toolbarNode)}
 			<NodeToolbar nodeId={toolbarNode} isVisible position={Position.Top} offset={6}>
@@ -357,7 +405,6 @@
 					onpointerenter={() => hover(toolbarNode)}
 					onpointerleave={() => hover(null)}
 				>
-					{@render tool('找客戶（F）', 'target', () => editor.findCustomers(toolbarNode))}
 					{@render tool('連到…（或直接拖曳卡片到目標）', 'link', () => {
 						editor.select({ kind: 'node', id: toolbarNode });
 						editor.connecting = toolbarNode;

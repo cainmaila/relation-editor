@@ -1,5 +1,5 @@
 <script lang="ts">
-	// 放在 SvelteFlow 裡才拿得到 useSvelteFlow：依 editor.view 請求與系統勾選縮放視野
+	// 放在 SvelteFlow 裡才拿得到 useSvelteFlow：依 editor.view 請求縮放視野
 	import { untrack } from 'svelte';
 	import { useSvelteFlow } from '@xyflow/svelte';
 	import type { Editor } from '#lib/editor.svelte.js';
@@ -22,17 +22,12 @@
 			});
 		});
 
-	// 系統變動整張入鏡。要宣告在視野請求之前：reveal() 同時勾回系統又請求置中時，置中排在後面才會生效
-	let first = true;
-	$effect(() => {
-		void editor.systems.join();
-		if (first) first = false;
-		else go([]);
-	});
-
+	// 只回應掛載後的新請求：切回編輯頁時沿用保存的視野，不被舊請求覆蓋。
+	// 系統勾選只影響全圖，編輯頁不因此重新入鏡
+	const seq0 = untrack(() => editor.view.seq);
 	$effect(() => {
 		// 收起的成員改對準它的堆疊卡
-		if (editor.view.seq) {
+		if (editor.view.seq !== seq0) {
 			const owner = untrack(() => editor.canvas.owner);
 			go([...new Set(editor.view.ids.map((id) => owner.get(id) ?? id))]);
 		}

@@ -7,3 +7,6 @@ bun.lockb
 
 # Miscellaneous
 /static/
+
+# Local SDD workflow artifacts (git-ignored)
+.superpowers/
