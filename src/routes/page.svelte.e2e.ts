@@ -1234,16 +1234,18 @@ test.describe('手測回報', () => {
 		expect(await at()).toEqual(after);
 	});
 
-	test('系統隱藏時從大綱點節點，自動勾回該系統並選取（全圖）', async ({ page }) => {
-		await page.getByRole('checkbox', { name: '消防' }).setChecked(false);
-		await expectCounts(page, TOTAL - 2, TOTAL_EDGES - 2);
-		await outline(page).getByRole('searchbox', { name: '篩選節點' }).fill('SD-02');
-		await outline(page).getByRole('button', { name: '偵測器 SD-02' }).click();
-		await expect(page.getByRole('checkbox', { name: '消防' })).toBeChecked();
-		await expectCounts(page, TOTAL, TOTAL_EDGES);
-		await expect
-			.poll(() => page.evaluate(() => window.__graphView!.selected()))
-			.toBe('偵測器 SD-02');
+	test('T-A2a：大綱跟系統開關同步，搜尋疊在系統之上（全圖）', async ({ page }) => {
+		const box = outline(page).getByRole('searchbox', { name: '篩選節點' });
+		await page.getByRole('checkbox', { name: '空間' }).click({ modifiers: ['Alt'] });
+		// 空間 345＋通用節點 1
+		await expect(outline(page)).toContainText('共 346 筆');
+		await box.fill('A-01');
+		await expect(outline(page).getByRole('button', { name: '機櫃 A-01' })).toBeVisible();
+		await expect(outline(page).getByRole('button', { name: 'ToR Switch A-01' })).toHaveCount(0);
+		await expect(outline(page).getByRole('button', { name: '機櫃 PDU A-01-A' })).toHaveCount(0);
+		await box.fill('');
+		await page.getByRole('checkbox', { name: '空間' }).click({ modifiers: ['Alt'] });
+		await expect(outline(page)).toContainText(`共 ${TOTAL} 筆`);
 	});
 
 	test('文字與問題篩選疊加沒結果時，說明並可一鍵清除', async ({ page }) => {

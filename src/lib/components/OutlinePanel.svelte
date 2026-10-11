@@ -2,8 +2,9 @@
 	// 左欄大綱：全量搜尋、問題篩選、分頁結果（不常駐全部節點的 DOM）。點列＝定位，滑過＝畫布亮起；全圖可勾選後加入編輯頁
 	import { untrack } from 'svelte';
 	import type { Editor } from '#lib/editor.svelte.js';
-	import { UNREACHABLE_LABEL, nodeType } from '#lib/model/config.js';
+	import { UNREACHABLE_LABEL } from '#lib/model/config.js';
 	import { SearchController } from '#lib/search/search-client.svelte.js';
+	import { GENERAL } from '#lib/search/search-index.js';
 	import Icon from './Icon.svelte';
 	import SearchResults from './SearchResults.svelte';
 
@@ -35,9 +36,10 @@
 	const issue = $derived(ISSUES.find((i) => i.key === editor.issue));
 	let added = $state(false);
 
-	// 全圖查全部節點（隱藏系統變淡，仍可從這裡定位）；編輯頁只查工作區
+	// 全圖只查開啟的系統（通用節點一律列出），跟頂部系統開關同步；編輯頁只查工作區
 	$effect(() => {
 		editor.outline.set({
+			systems: graph ? [...editor.systems, GENERAL] : [],
 			within: graph ? null : [...editor.working],
 			issues: editor.issue ? [editor.issue] : []
 		});
@@ -50,7 +52,7 @@
 	);
 	const empty = $derived(!!issue && !!c.text.trim() && c.status === 'ready' && c.total === 0);
 	$effect(() => {
-		if (empty) textOnly.set({ text: c.text, within: c.within });
+		if (empty) textOnly.set({ text: c.text, systems: c.systems, within: c.within });
 	});
 	$effect(() => () => textOnly.dispose());
 	const textHits = $derived(empty && textOnly.status === 'ready' && textOnly.total > 0);
@@ -103,7 +105,7 @@
 	</div>
 
 	<p class="px-3 pt-2 text-[10px] text-slate-500">
-		{graph ? '全圖所有節點' : '編輯頁內的節點'}{issue ? `・只列${issue.label}` : ''}
+		{graph ? '全圖開啟系統的節點' : '編輯頁內的節點'}{issue ? `・只列${issue.label}` : ''}
 	</p>
 	<SearchResults
 		controller={c}
@@ -111,15 +113,8 @@
 		label="節點"
 		selectable={graph}
 		current={editor.selected?.kind === 'node' ? editor.selected.id : null}
-		muted={(n) => {
-			const s = nodeType(n.type)?.system;
-			return graph && !!s && !editor.systems.includes(s);
-		}}
 		onpick={(id) => editor.locate(id)}
-		onhover={(id) => {
-			const s = id && nodeType(editor.node(id)!.type)?.system;
-			editor.hoverNode = id && (!graph || !s || editor.systems.includes(s)) ? id : null;
-		}}
+		onhover={(id) => (editor.hoverNode = id)}
 	>
 		{#snippet row(n)}
 			<span class="ml-auto flex items-center gap-1">

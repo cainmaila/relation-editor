@@ -16,7 +16,6 @@
 		selectable = false,
 		active = $bindable(-1),
 		current = null,
-		muted,
 		onhover,
 		row,
 		actions,
@@ -34,8 +33,6 @@
 		active?: number;
 		/** 目前選取的節點，標示該列 */
 		current?: string | null;
-		/** 淡化的列（例：全圖隱藏中的系統） */
-		muted?: (n: GNode) => boolean;
 		onhover?: (id: string | null) => void;
 		row?: Snippet<[GNode]>;
 		actions?: Snippet<[string[]]>;
@@ -116,9 +113,7 @@
 							? 'bg-sky-400/12 text-slate-50'
 							: listbox && k === active
 								? 'bg-sky-400/15 text-slate-50'
-								: muted?.(n)
-									? 'text-slate-500 hover:bg-white/4'
-									: 'text-slate-300 hover:bg-white/4 hover:text-slate-50'
+								: 'text-slate-300 hover:bg-white/4 hover:text-slate-50'
 					]}
 					onclick={() => onpick(n.id)}
 					onpointerenter={() => {
