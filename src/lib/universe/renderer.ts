@@ -1,4 +1,5 @@
-// 3D 宇宙的分層繪製（three.js）：遠景 Points、近景 detail InstancedMesh、局部邊、高亮邊＋方向箭頭、標籤池。
+// 3D 宇宙的分層繪製（three.js）：星塵背景、遠景 Points、全圖連線、近景 detail InstancedMesh、局部邊、
+// 高亮邊＋方向箭頭、標籤池。連線不走 LOD（遠景也看得到關係網），只有名稱與 detail 走 LOD。
 // 每一層都是固定容量的 GPU buffer，相機改變只改寫有上限的內容；Points 只在拓撲改變時重配、
 // 座標改變時就地寫入。LOD 與點選的決策在 lod.ts（純計算），這裡只負責把結果寫進 buffer／DOM。
 import type * as THREE_NS from 'three';
@@ -67,6 +68,13 @@ export type UniverseLayersOptions = {
 };
 
 const STATS_MS = 250;
+/** 遠景點的光暈範圍（核心半徑的倍數） */
+const GLOW = 2.5;
+/** 全圖連線的不透明度：邊越多越淡（疊加混色，密處自然變亮）；聚焦時退到背景 */
+const baseOpacity = (edges: number) =>
+	Math.min(0.5, Math.max(0.08, 0.5 * Math.sqrt(400 / Math.max(edges, 1))));
+const BASE_DIM_OPACITY = 0.04;
+const STARS = 1600;
 
 export function createUniverseLayers(o: UniverseLayersOptions) {
 	// 建構中途失敗（GPU 資源、標籤 DOM）：已建的全部倒序收回，不留場景物件／hook／DOM
@@ -149,15 +157,22 @@ function buildLayers(o: UniverseLayersOptions, undo: (() => void)[]) {
 					if (size <= 0.0 || -mv.z <= 0.0) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); gl_PointSize = 0.0; return; }
 					gl_Position = projectionMatrix * mv;
 					float px = size * radius * focal / -mv.z;
-					gl_PointSize = clamp(2.0 * px, 2.0, 2.0 * ${LOD.detailEnterPx.toFixed(1)} * size) * dpr;
+					// 畫成核心的 GLOW 倍大：外圈是光暈，核心大小與點選半徑一致
+					gl_PointSize = clamp(2.0 * px, 2.0, 2.0 * ${LOD.detailEnterPx.toFixed(1)} * size) * dpr * ${GLOW.toFixed(1)};
 				}`,
 			fragmentShader: /* glsl */ `
 				varying vec3 vTint;
 				void main() {
-					float d = length(gl_PointCoord - 0.5);
-					if (d > 0.5) discard;
-					gl_FragColor = vec4(vTint * (d > 0.36 ? 0.7 : 1.0), 1.0);
-				}`
+					float d = length(gl_PointCoord - 0.5) * ${(2 * GLOW).toFixed(1)};
+					if (d > ${GLOW.toFixed(1)}) discard;
+					float core = 1.0 - smoothstep(0.75, 1.0, d);
+					float halo = exp(-d * d * 2.2) * 0.3;
+					vec3 col = vTint * (1.0 + core * 0.3); // 核心提亮但不混白：暗化的節點保持暗
+					gl_FragColor = vec4(col * max(core, halo), 1.0);
+				}`,
+			transparent: true,
+			depthWrite: false,
+			blending: THREE.AdditiveBlending
 		})
 	);
 	let pointGeom = new THREE.BufferGeometry();
@@ -168,7 +183,8 @@ function buildLayers(o: UniverseLayersOptions, undo: (() => void)[]) {
 
 	// ---- 近景 detail（固定容量） ----
 	const sphere = own(new THREE.SphereGeometry(R, 12, 10));
-	const detailMat = own(new THREE.MeshLambertMaterial());
+	// 不打光：與遠景的發光點同一種質感，光暈交給 bloom
+	const detailMat = own(new THREE.MeshBasicMaterial());
 	const detailMesh = new THREE.InstancedMesh(sphere, detailMat, LOD.maxDetail);
 	detailMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
 	detailMesh.setColorAt(0, new THREE.Color());
@@ -206,6 +222,47 @@ function buildLayers(o: UniverseLayersOptions, undo: (() => void)[]) {
 	const localLines = lines(LOD.maxLocalEdges, localMat);
 	const hiLines = lines(LOD.maxHighlightEdges, hiMat);
 
+	// ---- 全圖連線（不走 LOD）：容量＝可見邊數，只在可見子圖改變時重配；相機移動不碰 ----
+	const baseMat = own(
+		new THREE.LineBasicMaterial({
+			vertexColors: true,
+			transparent: true,
+			depthWrite: false,
+			blending: THREE.AdditiveBlending
+		})
+	);
+	let baseGeom = new THREE.BufferGeometry();
+	undo.push(() => baseGeom.dispose());
+	const baseLines = new THREE.LineSegments(baseGeom, baseMat);
+	baseLines.frustumCulled = false;
+	baseLines.renderOrder = -1;
+	add(baseLines);
+
+	// ---- 星塵（純裝飾，固定、遠在版面之外） ----
+	const starGeom = own(new THREE.BufferGeometry());
+	const star = new Float32Array(STARS * 3);
+	for (let k = 0; k < STARS; k++) {
+		const u = Math.random() * 2 - 1;
+		const t = Math.random() * Math.PI * 2;
+		const r = 3000 + Math.random() * 5000;
+		const s = Math.sqrt(1 - u * u) * r;
+		star.set([s * Math.cos(t), s * Math.sin(t), u * r], k * 3);
+	}
+	starGeom.setAttribute('position', new THREE.BufferAttribute(star, 3));
+	const starMat = own(
+		new THREE.PointsMaterial({
+			color: '#8ea3d6',
+			size: 1.4,
+			sizeAttenuation: false,
+			transparent: true,
+			opacity: 0.45,
+			depthWrite: false
+		})
+	);
+	const stars = new THREE.Points(starGeom, starMat);
+	stars.renderOrder = -2;
+	add(stars);
+
 	// ---- 方向箭頭（只有選取／找客戶的高亮邊；固定容量） ----
 	const cone = own(new THREE.ConeGeometry(1.8, 6, 6));
 	const arrowMat = own(new THREE.MeshBasicMaterial());
@@ -224,7 +281,7 @@ function buildLayers(o: UniverseLayersOptions, undo: (() => void)[]) {
 		el.style.cssText =
 			'position:absolute;left:0;top:0;display:none;box-sizing:border-box;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;' +
 			`height:${LOD.labelHeightPx}px;line-height:${LOD.labelHeightPx}px;font-size:${LOD.labelFontPx}px;padding:0 4px;` +
-			'border-radius:4px;font-weight:400;outline:none;color:#e2e8f0;background:rgba(11,16,32,.72);pointer-events:none;will-change:transform';
+			'border-radius:4px;font-weight:400;outline:none;color:#e2e8f0;background:rgba(5,7,15,.62);box-shadow:inset 0 0 0 1px rgba(148,163,184,.14);letter-spacing:.01em;pointer-events:none;will-change:transform';
 		o.labelHost.appendChild(el);
 		undo.push(() => el.remove());
 		// DOM 狀態快取：只在真的變了才寫 DOM；gen 落後＝名稱刷新過，要重寫字與寬度
@@ -267,6 +324,8 @@ function buildLayers(o: UniverseLayersOptions, undo: (() => void)[]) {
 		hover = -1;
 		state = undefined;
 		widths.clear();
+		// 舊邊索引對應舊的節點索引：先清空，applyScene 重建
+		from = to = new Uint32Array(0);
 		writePositions();
 		applyScene();
 	}
@@ -279,7 +338,21 @@ function buildLayers(o: UniverseLayersOptions, undo: (() => void)[]) {
 		(a.array as Float32Array).set(s.positions);
 		a.needsUpdate = true;
 		grid = buildGrid(s.positions);
+		writeBase();
 		dirty = true;
+	}
+
+	/** 全圖連線的座標（座標改變時就地寫入，O(邊數)） */
+	function writeBase() {
+		const a = baseGeom.getAttribute('position') as THREE_NS.BufferAttribute | undefined;
+		if (!a || a.count !== from.length * 2) return;
+		const pos = P();
+		const arr = a.array as Float32Array;
+		for (let e = 0; e < from.length; e++) {
+			arr.set(pos.subarray(from[e] * 3, from[e] * 3 + 3), e * 6);
+			arr.set(pos.subarray(to[e] * 3, to[e] * 3 + 3), e * 6 + 3);
+		}
+		a.needsUpdate = true;
 	}
 
 	/** 可見子圖 → 可見遮罩、邊索引、基本顏色 */
@@ -301,6 +374,26 @@ function buildLayers(o: UniverseLayersOptions, undo: (() => void)[]) {
 		to = Uint32Array.from(es, (e) => index.get(e.to)!);
 		bidi = Uint8Array.from(es, (e) => (e.bidirectional ? 1 : 0));
 		adjacency = buildAdjacency(n, from, to);
+		// 全圖連線重配：每端用自己系統的顏色（線呈漸層）
+		baseGeom.dispose();
+		baseGeom = new THREE.BufferGeometry();
+		const m = es.length;
+		const col = new Float32Array(m * 6);
+		for (let e = 0; e < m; e++)
+			for (const [k, i] of [
+				[0, from[e]],
+				[1, to[e]]
+			]) {
+				c.set(typeColor[i]);
+				col.set([c.r, c.g, c.b], e * 6 + k * 3);
+			}
+		baseGeom.setAttribute(
+			'position',
+			new THREE.BufferAttribute(new Float32Array(m * 6), 3).setUsage(THREE.DynamicDrawUsage)
+		);
+		baseGeom.setAttribute('color', new THREE.BufferAttribute(col, 3));
+		baseLines.geometry = baseGeom;
+		writeBase();
 		applyFocus();
 	}
 
@@ -332,6 +425,7 @@ function buildLayers(o: UniverseLayersOptions, undo: (() => void)[]) {
 		}
 		(pointGeom.getAttribute('tint') as THREE_NS.BufferAttribute).needsUpdate = true;
 		writeSizes([], true);
+		baseMat.opacity = fn ? BASE_DIM_OPACITY : baseOpacity(from.length);
 		dirty = labelsDirty = true;
 	}
 
@@ -620,8 +714,10 @@ function buildLayers(o: UniverseLayersOptions, undo: (() => void)[]) {
 		},
 		dispose() {
 			off();
-			for (const x of [points, detailMesh, localLines, hiLines, arrows]) x.removeFromParent();
+			for (const x of [points, detailMesh, localLines, hiLines, arrows, baseLines, stars])
+				x.removeFromParent();
 			pointGeom.dispose();
+			baseGeom.dispose();
 			detailMesh.dispose();
 			arrows.dispose();
 			for (const d of disposables) d.dispose();

@@ -67,7 +67,7 @@ function tracked(
 		SphereGeometry: track(THREE.SphereGeometry),
 		ConeGeometry: track(THREE.ConeGeometry),
 		ShaderMaterial: track(THREE.ShaderMaterial),
-		MeshLambertMaterial: track(THREE.MeshLambertMaterial),
+		PointsMaterial: track(THREE.PointsMaterial),
 		MeshBasicMaterial: track(THREE.MeshBasicMaterial),
 		LineBasicMaterial: track(THREE.LineBasicMaterial),
 		InstancedMesh: Instanced
@@ -77,7 +77,7 @@ function tracked(
 
 describe('createUniverseLayers 建構失敗清理', () => {
 	it('GPU 層建到一半失敗：場景沒有殘留、已建資源都 dispose、沒有掛 hook', () => {
-		// 第 2 個 InstancedMesh＝方向箭頭：此時 Points、detail、兩組 LineSegments 已加入場景
+		// 第 2 個 InstancedMesh＝方向箭頭：此時 Points、detail、三組 LineSegments、星塵已加入場景
 		const { three, made } = tracked({ cls: 'InstancedMesh', nth: 2 });
 		const { scene, hook, labelHost, opts } = setup(three);
 		expect(() => createUniverseLayers(opts)).toThrow('InstancedMesh 建立失敗');
@@ -131,7 +131,7 @@ describe('createUniverseLayers 建構失敗清理', () => {
 		const { three, made } = tracked(null);
 		const { scene, hook, labelHost, opts } = setup(three);
 		const layers = createUniverseLayers(opts);
-		expect(scene.children.length).toBe(5);
+		expect(scene.children.length).toBe(7);
 		expect(scene.onBeforeRender).not.toBe(hook);
 		layers.dispose();
 		expect(made.filter((m) => !m.disposed)).toEqual([]);

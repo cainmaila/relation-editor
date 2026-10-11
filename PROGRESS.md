@@ -1,5 +1,16 @@
 # PROGRESS
 
+## 3D 宇宙：全圖連線常駐＋視覺質感（分支 cainmaila/main-3-3）
+
+- **Goal:** 連線不走 LOD（遠景就看得到關係網）、文字維持 LOD；視覺達 awwwards 等級。計畫 `~/.claude/plans/lod-lod-ticklish-duckling.md`
+- **Done（已驗證：check／lint 綠、unit 347、e2e 94 全過、build 過）:**
+  - `renderer.ts`：全圖連線層 `baseLines`（端點系統色漸層、疊加混色、邊越多越淡，只在可見子圖改變時重配）；聚焦時整層退到 0.04
+  - 遠景點改柔光核心＋光暈（疊加混色）；detail 球改不打光；星塵背景；標籤細框
+  - `GraphView.svelte`：UnrealBloom＋OutputPass；背景 `#05070f` 改走 `scene.background`（透過 composer 時 clear color 會被二次編碼成灰）；軟體 GL（SwiftShader，headless 測試）略過 bloom，否則 GraphView 元件測試慢 3 倍逾時
+  - 實機 M2：10k 節點／100k 邊，拖曳／滾輪／拉近 p95 17.7ms
+- **Todo:** 使用者看過視覺後再調
+- **Notes:** 未做：idle 自轉、高亮邊流動光點、fog（自轉會讓 e2e／量測相機不穩定）；背景有極淡的 bloom 色階帶
+
 ## P8 端到端與效能驗收、文件收斂（分支 cainmaila/main-3-3）
 
 - **Goal:** 在真 GPU 上實跑正式效能矩陣、補殘留情境 e2e、README 收斂；計畫 `.superpowers/sdd/plan/task-8-brief.md`，報告 `task-8-report.md`，產物 `artifacts/p8`

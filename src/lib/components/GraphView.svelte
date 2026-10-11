@@ -19,6 +19,24 @@
 		},
 		asset
 	});
+	type PassesModule = [
+		typeof import('three/examples/jsm/postprocessing/UnrealBloomPass.js'),
+		typeof import('three/examples/jsm/postprocessing/OutputPass.js')
+	];
+	const loadPasses = retryableImport(
+		() =>
+			Promise.all([
+				import('three/examples/jsm/postprocessing/UnrealBloomPass.js'),
+				import('three/examples/jsm/postprocessing/OutputPass.js')
+			]),
+		{
+			accept: (m): m is PassesModule => {
+				const [b, o] = (m ?? []) as Partial<PassesModule>;
+				return typeof b?.UnrealBloomPass === 'function' && typeof o?.OutputPass === 'function';
+			},
+			asset
+		}
+	);
 </script>
 
 <script lang="ts">
@@ -46,6 +64,7 @@
 	const FITS_CAP = 20;
 	/** 按下到放開移動超過這個距離就是拖曳相機，不算點選 */
 	const CLICK_SLOP = 5;
+	const BG = '#05070f';
 
 	type Api = { build: (g: Graph) => void; paint: () => void; refresh: () => void };
 	type Hooks = Record<string, unknown>;
@@ -174,7 +193,8 @@
 
 	async function init(isDead: () => boolean): Promise<{ api: Api; off: () => void }> {
 		// 等兩個載入都結束才回報失敗（重試不會和原本的載入重疊；無法恢復的原因優先）
-		const [{ default: ForceGraph3D }, three] = await importAll([loadForceGraph(), loadThree()]);
+		const [{ default: ForceGraph3D }, three, [{ UnrealBloomPass }, { OutputPass }]] =
+			await importAll([loadForceGraph(), loadThree(), loadPasses()]);
 		const noop = { api: { build: () => {}, paint: () => {}, refresh: () => {} }, off: () => {} };
 		// 卸載後才載入完成：不建立任何 GPU 資源
 		if (isDead()) return noop;
@@ -198,7 +218,7 @@
 
 		function build(): { api: Api; off: () => void } {
 			const fg = new ForceGraph3D(host)
-				.backgroundColor('#0b1020')
+				.backgroundColor(BG)
 				.showNavInfo(false)
 				.enablePointerInteraction(false);
 			undo.push(() => fg._destructor());
@@ -208,6 +228,24 @@
 			const controls = fg.controls() as EventTarget & { target: THREE.Vector3 };
 			probe?.renderer(renderer);
 			probe?.mark('graph:init');
+			// 光暈：只讓亮核與疊加變亮的密集連線發光；OutputPass 做色彩空間轉換。
+			// 軟體繪圖（SwiftShader／llvmpipe，如無 GPU 的 CI）跑不動多層模糊，略過
+			const gl = renderer.getContext();
+			const info = gl.getExtension('WEBGL_debug_renderer_info');
+			const gpu = String(gl.getParameter(info?.UNMASKED_RENDERER_WEBGL ?? gl.RENDERER));
+			if (!/swiftshader|llvmpipe|software/i.test(gpu)) {
+				const composer = fg.postProcessingComposer();
+				composer.addPass(
+					new UnrealBloomPass(
+						new three.Vector2(host.clientWidth, host.clientHeight),
+						0.65,
+						0.12,
+						0.4
+					)
+				);
+				composer.addPass(new OutputPass());
+			}
+			fg.scene().background = new three.Color(BG);
 			if (probe) {
 				rt.mark = probe.mark;
 				undo.push(() => {
@@ -529,7 +567,7 @@
 	}
 </script>
 
-<div class="[container-type:size] relative size-full overflow-hidden bg-[#0b1020]">
+<div class="[container-type:size] relative size-full overflow-hidden bg-[#05070f]">
 	<div bind:this={host} class="absolute inset-0"></div>
 	<div
 		bind:this={labelHost}
@@ -625,7 +663,7 @@
 								</dd>
 							{/if}
 							<dd class="col-span-2 text-slate-500">
-								拉近到節點 ≥{LOD.detailEnterPx}px 才顯示細節、局部連線與名稱；遠景只畫點
+								連線全部常駐；拉近到節點 ≥{LOD.detailEnterPx}px 才顯示名稱與加亮連線
 							</dd>
 						</dl>
 					{/if}
