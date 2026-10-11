@@ -60,7 +60,7 @@ describe('planWorkspaceAdmission', () => {
 		const current = all.slice(0, 150);
 		const r = planWorkspaceAdmission(idx, current, all.slice(100));
 		expect(r.ok).toBe(false);
-		if (!r.ok) expect(r.message).toBe('工作區最多 200 個節點：要新增 51 個，只剩 50 個名額');
+		if (!r.ok) expect(r.message).toBe('編輯頁最多 200 個節點：要新增 51 個，只剩 50 個名額');
 	});
 
 	it('原始誘導邊剛好 1,000 可，1,001 整批拒絕並說明數字', () => {
@@ -71,7 +71,7 @@ describe('planWorkspaceAdmission', () => {
 		const idx = buildGraphIndex(bipartite(true));
 		const r = planWorkspaceAdmission(idx, all.slice(1), ['a0']);
 		expect(r.ok).toBe(false);
-		if (!r.ok) expect(r.message).toBe('工作區最多 1000 條關係：要帶入 101 條，只剩 100 條名額');
+		if (!r.ok) expect(r.message).toBe('編輯頁最多 1000 條關係：要帶入 101 條，只剩 100 條名額');
 	});
 
 	it('hub 批次：只算兩端都在工作區的邊；不因 hub 度數而拒絕', () => {
@@ -107,7 +107,7 @@ describe('planWorkspaceAdmission', () => {
 		expect(planWorkspaceAdmission(idx, all.slice(1), [], { newNodes: 1 }).ok).toBe(true);
 		const r = planWorkspaceAdmission(idx, all, [], { newNodes: 1 });
 		expect(r.ok).toBe(false);
-		if (!r.ok) expect(r.message).toBe('工作區最多 200 個節點：要新增 1 個，只剩 0 個名額');
+		if (!r.ok) expect(r.message).toBe('編輯頁最多 200 個節點：要新增 1 個，只剩 0 個名額');
 		// 缺一個端點＋新邊：端點與邊一起檢查
 		const edgeOnly = planWorkspaceAdmission(idx, all.slice(0, 199), [all[199]], { newEdges: 1 });
 		expect(edgeOnly).toEqual({

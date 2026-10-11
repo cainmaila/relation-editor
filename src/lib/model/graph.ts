@@ -277,8 +277,13 @@ export function layout(g: Graph) {
 
 type XY = { x: number; y: number };
 
-/** 沿用 prev 的位置；新節點用 next 的欄，與同欄卡片重疊就排到該欄最下方 */
+/**
+ * 沿用 prev 的位置；新節點用 next 的欄，與同欄卡片重疊就排到該欄最下方。
+ * 加了節點又讓既有卡片換欄（例：加了上游）就整個重排，上游才會在左邊；只加邊不重排
+ */
 export function pin(prev: Map<string, XY>, next: Map<string, XY>) {
+	const added = [...next.keys()].some((id) => !prev.has(id));
+	if (added && [...next].some(([id, p]) => prev.has(id) && prev.get(id)!.x !== p.x)) return next;
 	const out = new Map<string, XY>();
 	for (const id of next.keys()) if (prev.has(id)) out.set(id, prev.get(id)!);
 	for (const [id, p] of next) {

@@ -84,6 +84,11 @@ const ROOT_SIZE = 3;
 /** 根節點光環半徑（核心半徑的倍數）與畫面上的最小半徑（px） */
 const RING = 2.6;
 const RING_MIN_PX = 32;
+/** 高亮邊上的流動光點：每條邊幾顆、世界速度（單位／秒）、世界半徑與畫面最小半徑（px） */
+const FLOW = 3;
+const FLOW_SPEED = 60;
+const FLOW_R = 2.5;
+const FLOW_MIN_PX = 2.5;
 
 export function createUniverseLayers(o: UniverseLayersOptions) {
 	// 建構中途失敗（GPU 資源、標籤 DOM）：已建的全部倒序收回，不留場景物件／hook／DOM
@@ -328,6 +333,59 @@ function buildLayers(o: UniverseLayersOptions, undo: (() => void)[]) {
 	add(arrows);
 	undo.push(() => arrows.dispose());
 
+	// ---- 流動光點（選取／找客戶的單向高亮邊：每條 FLOW 顆，由來源流向目標；位置全在 GPU 算） ----
+	const flowMat = own(
+		new THREE.ShaderMaterial({
+			uniforms: { focal: { value: 1 }, dpr: { value: 1 }, time: { value: 0 } },
+			vertexShader: /* glsl */ `
+				attribute vec3 b;
+				attribute float phase;
+				attribute vec3 tint;
+				uniform float focal;
+				uniform float dpr;
+				uniform float time;
+				varying vec3 vTint;
+				void main() {
+					vTint = tint;
+					// 除以邊長：長短邊上的光點世界速度相近
+					float t = fract(phase + time * ${FLOW_SPEED.toFixed(1)} / max(distance(position, b), 1.0));
+					vec4 mv = modelViewMatrix * vec4(mix(position, b, t), 1.0);
+					if (-mv.z <= 0.0) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); gl_PointSize = 0.0; return; }
+					gl_Position = projectionMatrix * mv;
+					gl_PointSize = 2.0 * max(${FLOW_R.toFixed(1)} * focal / -mv.z, ${FLOW_MIN_PX.toFixed(1)}) * dpr;
+				}`,
+			fragmentShader: /* glsl */ `
+				varying vec3 vTint;
+				void main() {
+					float d = length(gl_PointCoord - 0.5) * 2.0;
+					if (d > 1.0) discard;
+					gl_FragColor = vec4(vTint * (exp(-d * d * 5.0) + (1.0 - smoothstep(0.2, 0.35, d)) * 0.6), 1.0);
+				}`,
+			transparent: true,
+			depthWrite: false,
+			blending: THREE.AdditiveBlending
+		})
+	);
+	const flowGeom = own(new THREE.BufferGeometry());
+	for (const [name, size] of [
+		['position', 3],
+		['b', 3],
+		['phase', 1],
+		['tint', 3]
+	] as const)
+		flowGeom.setAttribute(
+			name,
+			new THREE.BufferAttribute(
+				new Float32Array(LOD.maxHighlightEdges * FLOW * size),
+				size
+			).setUsage(THREE.DynamicDrawUsage)
+		);
+	flowGeom.setDrawRange(0, 0);
+	const flow = new THREE.Points(flowGeom, flowMat);
+	flow.frustumCulled = false;
+	add(flow);
+	const still = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)');
+
 	// ---- 標籤池（DOM，最多 maxLabels 個，建立一次） ----
 	const pool = Array.from({ length: LOD.maxLabels }, () => {
 		const el = document.createElement('div');
@@ -560,6 +618,8 @@ function buildLayers(o: UniverseLayersOptions, undo: (() => void)[]) {
 		pointMat.uniforms.dpr.value = o.pixelRatio();
 		ringMat.uniforms.focal.value = view.focal;
 		ringMat.uniforms.dpr.value = o.pixelRatio();
+		flowMat.uniforms.focal.value = view.focal;
+		flowMat.uniforms.dpr.value = o.pixelRatio();
 		// 轉動中只重新投影既有標籤；停下（或間隔到了）才重新挑選與避碰
 		const full = !state || !moved || now - lastFull >= LOD.labelThrottleMs;
 		const f = computeFrame(
@@ -675,13 +735,25 @@ function buildLayers(o: UniverseLayersOptions, undo: (() => void)[]) {
 			arrows.setColorAt(n, c);
 			n++;
 		};
+		const fa = flowGeom.attributes;
+		let m = 0;
 		f.highlightEdges.forEach((e, k) => {
 			c.set(e === focusIdx.edge ? PALETTE.SEL : tone);
 			seg(hiLines, k, from[e], to[e], c);
 			arrow(from[e], to[e]);
 			if (bidi[e]) arrow(to[e], from[e]);
+			// 雙向邊沒有單一流向：不放光點
+			else
+				for (let j = 0; j < FLOW; j++, m++) {
+					fa.position.setXYZ(m, pos[from[e] * 3], pos[from[e] * 3 + 1], pos[from[e] * 3 + 2]);
+					fa.b.setXYZ(m, pos[to[e] * 3], pos[to[e] * 3 + 1], pos[to[e] * 3 + 2]);
+					fa.phase.setX(m, j / FLOW);
+					fa.tint.setXYZ(m, c.r, c.g, c.b);
+				}
 		});
 		finish(hiLines, f.highlightEdges.length);
+		flowGeom.setDrawRange(0, m);
+		for (const a of Object.values(fa)) (a as THREE_NS.BufferAttribute).needsUpdate = true;
 		arrows.count = n;
 		arrows.instanceMatrix.needsUpdate = true;
 		arrows.instanceColor!.needsUpdate = true;
@@ -749,6 +821,7 @@ function buildLayers(o: UniverseLayersOptions, undo: (() => void)[]) {
 		scene.onBeforeRender = (...args) => {
 			prev.apply(scene, args);
 			ringMat.uniforms.time.value = performance.now() / 1000;
+			if (!still?.matches) flowMat.uniforms.time.value = performance.now() / 1000;
 			update();
 		};
 		const restore = () => (scene.onBeforeRender = prev);
@@ -824,7 +897,17 @@ function buildLayers(o: UniverseLayersOptions, undo: (() => void)[]) {
 		},
 		dispose() {
 			off();
-			for (const x of [points, detailMesh, localLines, hiLines, arrows, baseLines, stars, ring])
+			for (const x of [
+				points,
+				detailMesh,
+				localLines,
+				hiLines,
+				arrows,
+				baseLines,
+				stars,
+				ring,
+				flow
+			])
 				x.removeFromParent();
 			pointGeom.dispose();
 			baseGeom.dispose();

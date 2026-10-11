@@ -393,7 +393,7 @@ test.describe('編輯（編輯頁）', () => {
 		await expect(graphEdges(page)).toHaveCount(1);
 		await settle(page); // 新節點會置中，等畫面停下再拖
 		// 視野保留（P4）不再因新卡片自動整張入鏡；先手動入鏡，免得目標貼著邊緣觸發自動平移
-		await page.getByRole('button', { name: 'Fit View' }).click();
+		await page.getByRole('button', { name: '全部入鏡' }).click();
 		await settle(page);
 		await drag(page, node(page, '攝影機 CAM-04'), node(page, G));
 		const m = page.getByRole('menu', { name: '建立邊' });
@@ -426,7 +426,7 @@ test.describe('編輯（編輯頁）', () => {
 		// P8：預覽線若在 viewport 裡（夾在上千條邊與卡片之間），每幀都要重畫整個 viewport；
 		// 改畫在 viewport 外的螢幕座標層，外觀與起訖點必須和原本一樣
 		await toEdit(page, ['偵測器 SD-01', G, 'UPS-1']);
-		await page.getByRole('button', { name: 'Fit View' }).click();
+		await page.getByRole('button', { name: '全部入鏡' }).click();
 		await settle(page);
 		// 真滾輪縮放＋真拖曳平移後再拉線：座標換算要跟著相機
 		const pb = (await pane(page).boundingBox())!;
@@ -514,7 +514,7 @@ test.describe('編輯（編輯頁）', () => {
 		// P8 實測：拖曳中滑過邊（hoverEdge）或離開起點留下的 200ms 計時到期（hoverNode），
 		// 都會重設上千條邊的樣式、整個 viewport 重畫，連線拖曳掉到 30fps
 		await toEdit(page, ['偵測器 SD-01', G, 'UPS-1', '機櫃 A-01']);
-		await page.getByRole('button', { name: 'Fit View' }).click();
+		await page.getByRole('button', { name: '全部入鏡' }).click();
 		await settle(page);
 		await clickPane(page);
 		const from = (await node(page, '偵測器 SD-01').boundingBox())!;
@@ -891,7 +891,7 @@ test.describe('加入編輯頁', () => {
 		await page.keyboard.press('ControlOrMeta+k');
 		await box.fill(names[200]);
 		await page.keyboard.press('Enter');
-		await expect(status(page)).toHaveText('工作區最多 200 個節點：要新增 1 個，只剩 0 個名額');
+		await expect(status(page)).toHaveText('編輯頁最多 200 個節點：要新增 1 個，只剩 0 個名額');
 		await expect(tab(page, 'edit')).toHaveText('編輯頁 200/200');
 		await expect(outline(page).locator(`button[data-id="${names[200]}"]`)).toHaveCount(0);
 	});
@@ -1383,7 +1383,7 @@ test.describe('局部工作區（P4）', () => {
 	test('鄰居預覽：明確勾選前 20 個才整批加入', async ({ page }) => {
 		await toEdit(page, ['樓層 PDU 2F-A']);
 		const nb = detail(page).getByRole('region', { name: '鄰居預覽' });
-		await expect(nb).toContainText(/工作區外 \d+ 個鄰居/);
+		await expect(nb).toContainText(/編輯頁外 \d+ 個鄰居/);
 		// 預設不勾選、不加入
 		const add = nb.getByRole('button', { name: /^加入勾選的/ });
 		await expect(add).toBeDisabled();
@@ -1403,11 +1403,11 @@ test.describe('局部工作區（P4）', () => {
 		// 移出工作區：畫面少一張卡，資料還在
 		await page.keyboard.press('Escape');
 		await node(page, '機櫃 A-03').click();
-		await detail(page).getByRole('button', { name: '移出工作區' }).click();
+		await detail(page).getByRole('button', { name: '移出編輯頁' }).click();
 		await expect(tab(page, 'edit')).toHaveText('編輯頁 1/200');
 		await expect(node(page, '機櫃 A-03')).toHaveCount(0);
 		// 清空工作區
-		await page.getByRole('banner').getByRole('button', { name: '清空工作區' }).click();
+		await page.getByRole('banner').getByRole('button', { name: '清空編輯頁' }).click();
 		await expect(tab(page, 'edit')).toHaveText('編輯頁 0/200');
 		await toGraph(page);
 		await pick(page, '機櫃 A-03');

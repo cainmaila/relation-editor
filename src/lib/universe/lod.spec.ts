@@ -295,16 +295,17 @@ describe('選取優先（佔用同一個 detail 預算，不另開無上限池�
 		expect(f.labels[0].id).toBe(g.ids[far]);
 	});
 
-	it('遠景的高亮節點是 marker 但沒有標籤（只有選取／hover 可低於標籤門檻）', () => {
+	it('遠景的高亮節點（找客戶路徑）低於標籤門檻也有標籤', () => {
 		const v = cam([0, 0, 0], [0, 0, -1]);
 		const g = graph([
 			[0, 0, -3000],
-			[20, 0, -3000],
-			[-20, 0, -3000]
+			[0, 400, -3000],
+			[0, -400, -3000],
+			[300, 0, -3000]
 		]);
 		const f = run(input(g, v, { selected: 0, focus: [1, 2] }));
 		expect(new Set(f.detailNodeIds)).toEqual(new Set(['n0', 'n1', 'n2']));
-		expect(f.labels.map((l) => l.id)).toEqual(['n0']);
+		expect(f.labels.map((l) => l.id).sort()).toEqual(['n0', 'n1', 'n2']);
 	});
 
 	it('hover 的標籤優先於一般節點', () => {

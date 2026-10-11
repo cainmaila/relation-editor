@@ -50,7 +50,7 @@
 <section aria-label="鄰居預覽" class="border-t border-white/6 px-5 py-4">
 	<div class="mb-2 flex items-baseline gap-2">
 		<h3 class="eyebrow">鄰居預覽</h3>
-		<span class="ml-auto text-[11px] text-slate-400">工作區外 {outside} 個鄰居</span>
+		<span class="ml-auto text-[11px] text-slate-400">編輯頁外 {outside} 個鄰居</span>
 	</div>
 	<div class="mb-2 flex gap-1.5">
 		<select

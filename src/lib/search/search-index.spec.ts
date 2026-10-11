@@ -129,6 +129,14 @@ describe('querySearchIndex 篩選', () => {
 		expect(ids('a-0', { within: ['rack-2', 'cam-1'] })).toEqual(['rack-2']);
 	});
 
+	it('first 的命中排最前面，其餘順序不變', () => {
+		const all = ids('', {});
+		expect(ids('', { first: ['ups-1', 'cam-1'] })).toEqual([
+			...all.filter((id) => id === 'ups-1' || id === 'cam-1'),
+			...all.filter((id) => id !== 'ups-1' && id !== 'cam-1')
+		]);
+	});
+
 	it('問題篩選依 issue ID sets', () => {
 		const issues = { unprocessed: new Set(['cam-1', 'ups-1']), unreachable: new Set(['ups-1']) };
 		expect(querySearchIndex(docs, q('', { issues: ['unprocessed'] }), issues).ids).toEqual([

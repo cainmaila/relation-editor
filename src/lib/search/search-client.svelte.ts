@@ -245,7 +245,7 @@ export class SearchService {
 }
 
 export type SearchStatus = 'idle' | 'pending' | 'ready' | 'error';
-type Filters = Pick<SearchQuery, 'text' | 'systems' | 'types' | 'issues' | 'within'>;
+type Filters = Pick<SearchQuery, 'text' | 'systems' | 'types' | 'issues' | 'within' | 'first'>;
 
 /** 一個 UI 區塊的查詢狀態：條件、當頁結果、跨頁勾選。區塊之間互不覆蓋 */
 export class SearchController {
@@ -254,6 +254,7 @@ export class SearchController {
 	types = $state.raw<readonly string[]>([]);
 	issues = $state.raw<readonly IssueKind[]>([]);
 	within = $state.raw<readonly NodeId[] | null>(null);
+	first = $state.raw<readonly NodeId[] | null>(null);
 	offset = $state(0);
 	readonly limit: number;
 
@@ -286,6 +287,7 @@ export class SearchController {
 			types: [...this.types],
 			issues: [...this.issues],
 			within: this.within ? [...this.within] : null,
+			first: this.first ? [...this.first] : null,
 			offset: this.offset,
 			limit: this.limit,
 			matches: this.#matches && !!this.within

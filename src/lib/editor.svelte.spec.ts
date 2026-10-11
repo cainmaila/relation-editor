@@ -36,7 +36,7 @@ describe('編輯後的收疊', () => {
 
 	it('編輯湊成新的一疊時，畫面上的卡片不收起；重新排版後才收', () => {
 		const e = new Editor();
-		const ids = [e.addNode('列')!, e.addNode('列')!, e.addNode('列')!];
+		const ids = [e.addNode('排')!, e.addNode('排')!, e.addNode('排')!];
 		full(e);
 		for (const id of ids) e.addEdge('A 排', id, '包含');
 		expect(cards(e)).toEqual(expect.arrayContaining(ids));
@@ -93,7 +93,7 @@ describe('編輯頁 working', () => {
 		const before = snapshot(e);
 		expect(e.addToWork(all.slice(100))).toBe(false);
 		expect(snapshot(e)).toEqual(before);
-		expect(e.message).toBe('工作區最多 200 個節點：要新增 51 個，只剩 50 個名額');
+		expect(e.message).toBe('編輯頁最多 200 個節點：要新增 51 個，只剩 50 個名額');
 		expect(e.addToWork(all.slice(150, 200))).toBe(true);
 		expect(e.working).toHaveLength(WORKSPACE_NODE_LIMIT);
 	});
@@ -135,10 +135,10 @@ describe('編輯頁 working', () => {
 		const before = snapshot(e);
 		expect(e.addNode('攝影機')).toBeNull();
 		expect(snapshot(e)).toEqual(before);
-		expect(e.message).toBe('工作區最多 200 個節點：要新增 1 個，只剩 0 個名額');
+		expect(e.message).toBe('編輯頁最多 200 個節點：要新增 1 個，只剩 0 個名額');
 	});
 
-	it('移出工作區只改 membership，不刪資料；清掉失效的選取與暫態', () => {
+	it('移出編輯頁只改 membership，不刪資料；清掉失效的選取與暫態', () => {
 		const e = new Editor();
 		const edge = e.graph.edges.find((x) => !x.readonly && x.from !== x.to)!;
 		e.addToWork([edge.from, edge.to]);
@@ -188,7 +188,7 @@ describe('編輯頁 working', () => {
 		const before = snapshot(e);
 		expect(e.addEdge('偵測器 SD-01', '機櫃 A-03', '監測')).toBe(false);
 		expect(snapshot(e)).toEqual(before);
-		expect(e.message).toContain('工作區最多 200 個節點');
+		expect(e.message).toContain('編輯頁最多 200 個節點');
 		e.clearWorkspace();
 		e.addToWork(['偵測器 SD-01']);
 		const before2 = snapshot(e);
@@ -203,15 +203,15 @@ describe('編輯頁 working', () => {
 		const from = 'A 排';
 		e.addToWork([from]);
 		const before = snapshot(e);
-		// 選單只列可建立的：A 排 包含 列 可以，供電不行；新節點還不存在
-		expect(e.newEdgeErrors(from, '列').get('包含')).toBeNull();
-		expect(e.newEdgeErrors(from, '列').get('供電')).toBeTruthy();
+		// 選單只列可建立的：A 排 包含 排 可以，供電不行；新節點還不存在
+		expect(e.newEdgeErrors(from, '排').get('包含')).toBeNull();
+		expect(e.newEdgeErrors(from, '排').get('供電')).toBeTruthy();
 		expect(e.newEdgeErrors(from, '攝影機', true).get('監測')).toBeNull();
 		expect(e.graph).toBe(before.graph);
-		expect(e.addNodeWithEdge('列', from, '供電')).toBeNull();
+		expect(e.addNodeWithEdge('排', from, '供電')).toBeNull();
 		expect(snapshot(e)).toEqual(before);
-		const id = e.addNodeWithEdge('列', from, '包含')!;
-		expect(e.node(id)?.type).toBe('列');
+		const id = e.addNodeWithEdge('排', from, '包含')!;
+		expect(e.node(id)?.type).toBe('排');
 		expect(e.working).toEqual([from, id]);
 		expect(e.revision).toBe(2);
 		expect(e.selected?.kind).toBe('edge');
@@ -227,7 +227,7 @@ describe('編輯頁 working', () => {
 		const full = snapshot(e);
 		expect(e.addNodeWithEdge('攝影機', '機櫃 A-02', '監測', true)).toBeNull();
 		expect(snapshot(e)).toEqual(full);
-		expect(e.message).toBe('工作區最多 200 個節點：要新增 2 個，只剩 1 個名額');
+		expect(e.message).toBe('編輯頁最多 200 個節點：要新增 2 個，只剩 1 個名額');
 	});
 });
 
@@ -816,7 +816,7 @@ describe('編輯頁：工作區外的定位與修改', () => {
 		const before = [...e.working];
 		expect(e.admitEdgeEnds(edge.id)).toBe(false);
 		expect(e.working).toEqual(before);
-		expect(e.message).toBe('工作區最多 200 個節點：要新增 2 個，只剩 1 個名額');
+		expect(e.message).toBe('編輯頁最多 200 個節點：要新增 2 個，只剩 1 個名額');
 		expect(e.admitEdgeEnds('nope')).toBe(false);
 		expect(e.message).toBe('邊已不存在：nope（選取已過期，請重新選取）');
 	});
@@ -1039,7 +1039,7 @@ describe('P7 全圖追查與跨視圖一致性', () => {
 		e.focusEdge('ab');
 		const before = [...e.working];
 		expect(e.admitEdgeEnds('ab')).toBe(false);
-		expect(e.message).toBe('工作區最多 200 個節點：要新增 2 個，只剩 1 個名額');
+		expect(e.message).toBe('編輯頁最多 200 個節點：要新增 2 個，只剩 1 個名額');
 		expect(e.working).toEqual(before);
 		expect(e.selected).toEqual({ kind: 'edge', id: 'ab' });
 		expect(e.result?.customerIds).toEqual(['c']);

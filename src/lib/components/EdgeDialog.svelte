@@ -16,7 +16,10 @@
 	let open = $state<'from' | 'to' | null>(untrack(() => (d.from ? (d.to ? null : 'to') : 'from')));
 
 	$effect(() => {
-		if (open) untrack(() => finders[open!].run());
+		if (!open) return;
+		// 編輯頁已有的節點排前面
+		finders[open].first = editor.working;
+		untrack(() => finders[open!].run());
 	});
 	$effect(() => () => {
 		finders.from.dispose();
@@ -71,7 +74,7 @@
 			</p>
 			{#if [d.from, d.to].some((id) => id && !editor.inWork(id))}
 				<p class="mt-1 text-xs text-amber-200">
-					不在編輯頁的端點會和這條邊一起加入（受工作區預算限制）
+					不在編輯頁的端點會和這條邊一起加入（受編輯頁上限限制）
 				</p>
 			{/if}
 		</div>

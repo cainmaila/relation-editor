@@ -41,7 +41,7 @@ describe('DetailPanel：工作區外的詳情', () => {
 		await expect.element(page.getByRole('textbox', { name: '名稱', exact: true })).toBeDisabled();
 		await expect.element(page.getByText('不在編輯頁：先加入編輯頁才能修改')).toBeInTheDocument();
 		await expect.element(page.getByRole('button', { name: '刪除節點' })).not.toBeInTheDocument();
-		await expect.element(page.getByRole('button', { name: '移出工作區' })).not.toBeInTheDocument();
+		await expect.element(page.getByRole('button', { name: '移出編輯頁' })).not.toBeInTheDocument();
 		await expect.element(page.getByRole('button', { name: '新增屬性' })).not.toBeInTheDocument();
 		await page.getByRole('button', { name: '加入編輯頁', exact: true }).click();
 		expect(e.working).toEqual(['a', 'b']);
@@ -215,7 +215,7 @@ describe('DetailPanel P7：完整清單分頁與追查', () => {
 		await expect.element(trace()).toBeInTheDocument();
 		expect(e.result?.edges.size).toBe(3);
 		await trace().getByRole('button', { name: '兩端加入編輯頁' }).click();
-		expect(e.message).toBe('工作區最多 200 個節點：要新增 2 個，只剩 1 個名額');
+		expect(e.message).toBe('編輯頁最多 200 個節點：要新增 2 個，只剩 1 個名額');
 		expect(e.working).toHaveLength(199);
 		expect(e.selected).toEqual({ kind: 'edge', id: 's-000' });
 		await expect.element(trace()).toBeInTheDocument();

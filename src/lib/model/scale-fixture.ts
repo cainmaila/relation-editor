@@ -176,7 +176,7 @@ export function scaleFixture(options: ScaleOptions): {
 		space.push(F.id);
 		for (const r of ROWS) {
 			const row = {
-				id: node('列', p(`${r} 排`), `${r} 排`),
+				id: node('排', p(`${r} 排`), `${r} 排`),
 				pdu: node('樓層 PDU', p(`樓層 PDU ${r}`), `樓層 PDU ${r}`),
 				agg: node('Switch', p(`AGG-${r}`), `匯聚 Switch AGG-${r}`),
 				cabs: [] as string[]

@@ -158,7 +158,12 @@
 					// 反向邊（例：承載 主機→機框）改由左畫到右、箭頭放起點，走卡片下方的 back 把手，不和同對節點的邊疊在一起
 					// 用排版的層級判斷（不用保留的位置），編輯後一般邊不會被當成反向
 					const back = lay.pos.get(e.from)!.x > lay.pos.get(e.to)!.x;
-					const animated = e.members.some((id) => editor.result?.edges.has(id));
+					// 找客戶結果，或選取節點時它亮起的直接相連（滑過不流動）
+					const animated = e.members.some(
+						(id) =>
+							editor.result?.edges.has(id) ||
+							(editor.selected?.kind === 'node' && focus?.edges.has(id))
+					);
 					const dash = e.props['確認狀態'] === '推定' ? 'stroke-dasharray: 5 4' : '';
 					const data: FocusEdgeData = {
 						lit: lit
@@ -170,7 +175,9 @@
 									'opacity: 0.75'
 								].join(';')
 							: null,
-						animated
+						animated,
+						back,
+						label: pair ? `${e.type}／${pair.type}` : e.type
 					};
 					return {
 						id: e.id,
@@ -324,6 +331,13 @@
 		zoomOnDoubleClick={false}
 		deleteKey={null}
 		colorMode="dark"
+		ariaLabelConfig={{
+			'controls.ariaLabel': '畫布控制',
+			'controls.zoomIn.ariaLabel': '放大',
+			'controls.zoomOut.ariaLabel': '縮小',
+			'controls.fitView.ariaLabel': '全部入鏡',
+			'minimap.ariaLabel': '小地圖'
+		}}
 		class={[editor.connecting && 'connecting', linking && 'linking', dimEdges]}
 		clickConnect={false}
 		connectionDragThreshold={6}

@@ -120,7 +120,7 @@
 					})
 				},
 				{
-					label: '移出工作區',
+					label: '移出編輯頁',
 					icon: 'chevron',
 					run: done(() => editor.removeFromWork([n.id]))
 				},
@@ -135,7 +135,7 @@
 					: []),
 				{
 					label: armed('node', n.id)
-						? `確認刪除（連同 ${all.length} 條邊${hidden ? `，含工作區外 ${hidden} 條` : ''}）`
+						? `確認刪除（連同 ${all.length} 條邊${hidden ? `，含編輯頁外 ${hidden} 條` : ''}）`
 						: '刪除節點',
 					icon: 'trash',
 					keys: '⌫',

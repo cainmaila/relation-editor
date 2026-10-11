@@ -108,6 +108,8 @@ describe('編輯', () => {
 	it('情境 10：連接限制', () => {
 		const g = full();
 		expect(validateEdge(g, '機櫃 A-01', 'UPS-1', '供電')).toBe('「供電」只能由電力設備連出');
+		// 供電終點不限（v0.5）
+		expect(validateEdge(g, '機櫃 PDU A-01-A', 'ToR Switch A-01', '供電')).toBeNull();
 		expect(validateEdge(g, '偵測器 SD-01', '客戶甲', '監測')).toBe(
 			'「監測」只能連到空間或通用節點'
 		);
@@ -237,7 +239,7 @@ it('收疊：每排機櫃 PDU、16 條排、16 台樓層 PDU 各收成一張，�
 	expect(st.size).toBe(18);
 	const key = 'stack:機櫃 PDU:樓層 PDU 2F-A';
 	expect(st.get(key)).toHaveLength(44);
-	expect(st.get('stack:列:2F')).toHaveLength(16);
+	expect(st.get('stack:排:2F')).toHaveLength(16);
 	expect(st.get('stack:樓層 PDU:UPS-1')).toHaveLength(16);
 	expect([...st.keys()].some((k) => k.startsWith('stack:機櫃:'))).toBe(false);
 	const members = [...st.values()].flat().length;
@@ -280,7 +282,7 @@ it('pin：既有節點沿用舊位置，新節點重疊時排到該欄最下方'
 		['b', { x: 0, y: 100 }]
 	]);
 	const next = new Map([
-		['a', { x: 256, y: 50 }],
+		['a', { x: 0, y: 50 }],
 		['b', { x: 0, y: 0 }],
 		['c', { x: 0, y: 0 }], // 和 a 重疊
 		['d', { x: 512, y: 0 }]
@@ -293,6 +295,17 @@ it('pin：既有節點沿用舊位置，新節點重疊時排到該欄最下方'
 			['d', { x: 512, y: 0 }]
 		])
 	);
+});
+
+it('pin：既有節點換欄（加了上游）就整個重排，上游在左', () => {
+	const prev = new Map([['a', { x: 0, y: 0 }]]);
+	const next = new Map([
+		['u', { x: 0, y: 0 }],
+		['a', { x: 256, y: 0 }]
+	]);
+	expect(pin(prev, next)).toBe(next);
+	// 只加邊（沒有新節點）：換欄也不重排
+	expect(pin(prev, new Map([['a', { x: 256, y: 0 }]]))).toEqual(prev);
 });
 
 describe('共用索引', () => {

@@ -60,7 +60,7 @@ describe('NeighborPicker 一跳鄰居預覽', () => {
 		editor = new Editor(graph());
 		editor.addToWork(['hub']);
 		render(NeighborPicker, { editor, id: 'hub' });
-		await expect.element(box().getByText('工作區外 73 個鄰居')).toBeInTheDocument();
+		await expect.element(box().getByText('編輯頁外 73 個鄰居')).toBeInTheDocument();
 		await expect.element(box().getByText('共 73 個')).toBeInTheDocument();
 		await expect.poll(() => rows().elements().length).toBe(50);
 		for (const r of rows().all()) await expect.element(r).not.toBeChecked();
@@ -93,7 +93,7 @@ describe('NeighborPicker 一跳鄰居預覽', () => {
 			'cam-2',
 			...Array.from({ length: 17 }, (_, i) => `rack-${pad(i)}`)
 		]);
-		await expect.element(box().getByText('工作區外 53 個鄰居')).toBeInTheDocument();
+		await expect.element(box().getByText('編輯頁外 53 個鄰居')).toBeInTheDocument();
 		// 已在工作區的鄰居不可再勾
 		await expect.element(rows().first()).toBeDisabled();
 	});
@@ -105,7 +105,7 @@ describe('NeighborPicker 一跳鄰居預覽', () => {
 		render(NeighborPicker, { editor, id: 'hub' });
 		await box().getByRole('button', { name: '勾選本頁前 20 個' }).click();
 		await expect
-			.element(box().getByText('工作區最多 200 個節點：要新增 20 個，只剩 9 個名額'))
+			.element(box().getByText('編輯頁最多 200 個節點：要新增 20 個，只剩 9 個名額'))
 			.toBeInTheDocument();
 		await expect.element(box().getByRole('button', { name: /^加入勾選/ })).toBeDisabled();
 		expect(editor.working).toHaveLength(WORKSPACE_NODE_LIMIT - 9);

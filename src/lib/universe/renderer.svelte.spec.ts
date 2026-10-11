@@ -131,7 +131,7 @@ describe('createUniverseLayers 建構失敗清理', () => {
 		const { three, made } = tracked(null);
 		const { scene, hook, labelHost, opts } = setup(three);
 		const layers = createUniverseLayers(opts);
-		expect(scene.children.length).toBe(8);
+		expect(scene.children.length).toBe(9);
 		expect(scene.onBeforeRender).not.toBe(hook);
 		layers.dispose();
 		expect(made.filter((m) => !m.disposed)).toEqual([]);

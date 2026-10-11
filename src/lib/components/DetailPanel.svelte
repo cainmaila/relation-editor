@@ -314,8 +314,8 @@
 			{:else}
 				<button
 					class="ml-auto btn-ghost px-2 py-1 text-xs"
-					title="只從工作區拿掉，不刪除資料"
-					onclick={() => editor.removeFromWork([node.id])}>移出工作區</button
+					title="只從編輯頁拿掉，不刪除資料"
+					onclick={() => editor.removeFromWork([node.id])}>移出編輯頁</button
 				>
 				{#if !armed('node', node.id)}
 					<button
@@ -335,7 +335,7 @@
 			{@render confirmDelete(
 				`永久刪除「${node.name}」${
 					nodeEdges
-						? `，連同 ${nodeEdges} 條邊${hiddenEdges ? `（含工作區外 ${hiddenEdges} 條）` : ''}一起刪除`
+						? `，連同 ${nodeEdges} 條邊${hiddenEdges ? `（含編輯頁外 ${hiddenEdges} 條）` : ''}一起刪除`
 						: '（沒有相連的邊）'
 				}？無法復原`
 			)}

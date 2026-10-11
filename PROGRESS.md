@@ -1,5 +1,15 @@
 # PROGRESS
 
+## 試用回饋 10-11（PRD v0.5，分支 cainmaila/main-3-3）
+
+- **Goal:** 處理試用回饋；計畫 `~/.claude/plans/lod-lod-ticklish-duckling.md`
+- **Done（已驗證：check／lint 綠、unit 350、e2e 94 全過、build 過；Chrome 實操編輯頁）:**
+  - 類型「列」→「排」；供電終點不限（PDU→ToR 可建）
+  - 編輯頁：`pin()` 加了節點又讓既有卡片換欄就整張重排 → 上游在左（只加邊不重排）
+  - 流向：編輯頁選取節點的相連邊流動虛線（反向邊倒播）；全圖高亮邊加 GPU 流動光點（每邊 3 顆，最多 6,000；reduced-motion 停住）
+  - 邊類型標籤（只標亮起的邊）；新增邊選單編輯頁節點優先（搜尋 `first`）；「工作區」→「編輯頁」；找客戶亮起節點不受標籤最小尺寸限制；xyflow Controls 中文；對話框 `max-h-[86vh]` 可捲
+- **Notes:** 邊標籤全部常駐時平移 p95 33.4ms（超預算 33.3），改只標亮起的邊後 16.8；推定虛線（5 4）流動每 0.5 秒跳 1px 未處理；reduced-motion 未目視驗證；500 節點壓力未重跑
+
 ## 3D 宇宙：全圖連線常駐＋視覺質感（分支 cainmaila/main-3-3）
 
 - **Goal:** 連線不走 LOD（遠景就看得到關係網）、文字維持 LOD；視覺達 awwwards 等級。計畫 `~/.claude/plans/lod-lod-ticklish-duckling.md`

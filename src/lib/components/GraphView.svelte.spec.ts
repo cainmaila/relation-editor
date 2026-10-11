@@ -157,15 +157,16 @@ describe('GraphView（P6 LOD 整合）', () => {
 		const el = await mount(e);
 		e.select({ kind: 'node', id: 'n1' });
 		await expect.poll(() => labelText(el)).toContain('節點1');
-		// 拉遠：只剩選取節點有標籤
+		// 拉遠：只剩選取與相鄰（高亮）節點有標籤（相鄰的可能被避碰擠掉）
 		await wheel(el, 400, 40);
 		await expect
-			.poll(() =>
-				hooks()!
+			.poll(() => {
+				const ids = hooks()!
 					.labels()
-					.map((l) => l.id)
-			)
-			.toEqual(['n1']);
+					.map((l) => l.id);
+				return ids.includes('n1') && !ids.includes('n3');
+			})
+			.toBe(true);
 		await expectDomMatchesFrame(el);
 		// 同一個 tick：改名（刷新標籤池）＋取消選取（標籤變 0）
 		e.updateNode('n1', { name: '很長很長很長的新名字' });
@@ -175,7 +176,7 @@ describe('GraphView（P6 LOD 整合）', () => {
 		expect(domLabels(el)).toEqual([]);
 		// 再選回：新名字、新寬度
 		e.select({ kind: 'node', id: 'n1' });
-		await expect.poll(() => labelText(el)).toEqual(['很長很長很長的新名字']);
+		await expect.poll(() => labelText(el)).toContain('很長很長很長的新名字');
 		await expectDomMatchesFrame(el);
 	});
 

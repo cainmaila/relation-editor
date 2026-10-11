@@ -161,14 +161,14 @@
 		{:else}
 			<span
 				class="px-2 text-slate-400"
-				title="工作區預算：最多 {WORKSPACE_NODE_LIMIT} 個節點、{WORKSPACE_EDGE_LIMIT} 條原始關係（收疊不降低計數）"
+				title="編輯頁上限：最多 {WORKSPACE_NODE_LIMIT} 個節點、{WORKSPACE_EDGE_LIMIT} 條原始關係（收疊不降低計數）"
 				>節點 {editor.working.length}/{WORKSPACE_NODE_LIMIT} · 關係 {editor.workspaceEdgeCount}/{WORKSPACE_EDGE_LIMIT}</span
 			>
 			<button
 				class="rounded-md px-2 py-1.5 font-sans text-slate-400 hover:bg-white/5 hover:text-slate-200 disabled:opacity-40"
-				title="把所有節點移出工作區（不刪任何資料）"
+				title="把所有節點移出編輯頁（不刪任何資料）"
 				disabled={!editor.working.length}
-				onclick={() => editor.clearWorkspace()}>清空工作區</button
+				onclick={() => editor.clearWorkspace()}>清空編輯頁</button
 			>
 		{/if}
 	</div>

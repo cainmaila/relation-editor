@@ -54,7 +54,7 @@ export function planWorkspaceAdmission(
 	if (want > room)
 		return {
 			ok: false,
-			message: `工作區最多 ${WORKSPACE_NODE_LIMIT} 個節點：要新增 ${want} 個，只剩 ${Math.max(room, 0)} 個名額`
+			message: `編輯頁最多 ${WORKSPACE_NODE_LIMIT} 個節點：要新增 ${want} 個，只剩 ${Math.max(room, 0)} 個名額`
 		};
 	const before = inducedEdgeCount(index, set);
 	for (const id of addedIds) set.add(id);
@@ -68,7 +68,7 @@ export function planWorkspaceAdmission(
 	if (addedEdgeCount > edgeRoom)
 		return {
 			ok: false,
-			message: `工作區最多 ${WORKSPACE_EDGE_LIMIT} 條關係：要帶入 ${addedEdgeCount} 條，只剩 ${Math.max(edgeRoom, 0)} 條名額`
+			message: `編輯頁最多 ${WORKSPACE_EDGE_LIMIT} 條關係：要帶入 ${addedEdgeCount} 條，只剩 ${Math.max(edgeRoom, 0)} 條名額`
 		};
 	return {
 		ok: true,

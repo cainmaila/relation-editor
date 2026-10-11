@@ -20,6 +20,8 @@ export interface SearchQuery {
 	limit: number;
 	/** 只在這些 ID 內查（編輯頁大綱）；未給＝全部 */
 	within?: readonly NodeId[] | null;
+	/** 這些 ID 的命中排在最前面（新增邊選單：編輯頁已有的節點） */
+	first?: readonly NodeId[] | null;
 	/** 另回傳全部命中 ID（給畫布淡化；只該配 within 使用） */
 	matches?: boolean;
 }
@@ -111,7 +113,11 @@ export function querySearchIndex(
 		const r = rank(d, q, words);
 		if (r >= 0) buckets[r].push(d.id);
 	}
-	const all = buckets.flat();
+	const flat = buckets.flat();
+	const first = query.first?.length ? new Set(query.first) : null;
+	const all = first
+		? [...flat.filter((id) => first.has(id)), ...flat.filter((id) => !first.has(id))]
+		: flat;
 	const offset = Math.max(0, query.offset);
 	return {
 		ids: all.slice(offset, offset + Math.max(0, query.limit)),

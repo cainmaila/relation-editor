@@ -15,7 +15,7 @@ export const NODE_TYPES: NodeType[] = [
 	{ name: '大樓', system: '空間' },
 	{ name: '樓層', system: '空間' },
 	{ name: '區域', system: '空間' },
-	{ name: '列', system: '空間' },
+	{ name: '排', system: '空間' },
 	{ name: '機櫃', system: '空間' },
 	{ name: '台電市電', system: '電力' },
 	{ name: 'UPS', system: '電力' },
@@ -57,9 +57,7 @@ export const EDGE_TYPES: EdgeType[] = [
 	{
 		name: '供電',
 		from: ['電力'],
-		fromLabel: '電力設備',
-		to: ['電力', '機櫃', '空調箱'],
-		toLabel: '電力設備、機櫃或空調箱'
+		fromLabel: '電力設備'
 	},
 	{ name: '冷卻', from: ['空調'], fromLabel: '空調設備', to: ['空間'], toLabel: '空間' },
 	{

@@ -13,7 +13,7 @@ export const LOD = {
 	maxLocalEdges: 2000,
 	maxHighlightEdges: 2000,
 	maxLabels: 80,
-	/** detail 節點要多大才有標籤（只有選取、滑過不受此限；高亮只是排序優先） */
+	/** detail 節點要多大才有標籤（選取、滑過、高亮不受此限；避碰與 maxLabels 照舊） */
 	labelMinPx: 9,
 	labelFontPx: 12,
 	labelHeightPx: 18,
@@ -449,10 +449,10 @@ export function computeFrame(inp: FrameInput, prev: LodState = EMPTY): Frame {
 		labels.every(
 			(o) => !(l.x < o.x + o.w && o.x < l.x + l.w && l.y < o.y + o.h && o.y < l.y + l.h)
 		);
-	// 有資格：這一幀的 detail，且投影夠大（選取、滑過例外）
+	// 有資格：這一幀的 detail，且投影夠大（選取、滑過、高亮例外）
 	const pri = new Set([inp.selected, inp.hover]);
 	const eligibleLabel = (i: number) =>
-		inDetail.has(i) && (pri.has(i) || rpx(seen.get(i)!) >= cfg.labelMinPx);
+		inDetail.has(i) && (forcedSet.has(i) || rpx(seen.get(i)!) >= cfg.labelMinPx);
 	const tier = (i: number) =>
 		pri.has(i) ? (i === inp.selected ? 0 : 1) : forcedSet.has(i) ? 2 : 3;
 	let cand: number[];
