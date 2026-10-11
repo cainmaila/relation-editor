@@ -444,6 +444,8 @@ export class Editor {
 	select(sel: Selection) {
 		this.menu = null;
 		this.selected = sel;
+		// 等著改名的節點已不是選取：右欄收著時沒機會聚焦，不留到之後突然搶焦點
+		if (sel?.id !== this.naming) this.naming = null;
 		this.message = '';
 		this.connecting = null;
 		this.armDelete = null;

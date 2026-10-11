@@ -10,6 +10,7 @@
 - **Done（待合併）:** A＝fb2-a `e15d795`（diff 已審；check/lint/unit 355 綠，e2e 全圖測試平行時偶發逾時、單跑過）；B＝fb2-b `cbf1d9e`（diff 已審；unit 357；高負載下 e2e 逾時 5 個，負載降後串行全過，合併後需安靜機器重跑全套）
 - **Notes:** 工作區 `../main-3-fb-{a,b,c}`（branch fb2-a/b/c，由 main-3 分出）；T-C6a 實際資料客戶甲經機櫃 A-01、A-03（PRD 只寫 A-01，待使用者決定）；GraphView.svelte:710 舊文案「包括已按儲存的」合併時修
 - **Done:** A、B 已合入 main-3（check／lint／unit 357 綠；合併後 e2e 未跑）；GraphView 舊文案「包括已按儲存的」已移除
+- **Done:** PR #7 審查 2 點已修（naming 換選取清掉；名稱空白寫不進去時還原），各有 unit 測試
 - **Next:** 等 C 回報 → 合入、安靜機器跑全套 e2e、Chrome 實操；PR main-3 → main → 讀 diff、跑全部檢查、Chrome 實操
 
 ## 試用回饋 10-11（PRD v0.5，分支 cainmaila/main-3-3）

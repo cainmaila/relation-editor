@@ -61,9 +61,10 @@
 		const props = Object.fromEntries(d.props.map((p) => [p.key, p.value]));
 		const n = sel?.kind === 'node' ? editor.node(sel.id) : undefined;
 		const e = sel?.kind === 'edge' ? editor.edge(sel.id) : undefined;
-		if (n && (d.name !== n.name || !same(props, n.props)))
-			editor.updateNode(n.id, { name: d.name, props }, n);
-		else if (e && (d.bidirectional !== e.bidirectional || !same(props, e.props)))
+		// 寫不進去（例：名稱空白）就把名稱還原，免得換選取時再報一次錯
+		if (n && (d.name !== n.name || !same(props, n.props))) {
+			if (!editor.updateNode(n.id, { name: d.name, props }, n)) d.name = n.name;
+		} else if (e && (d.bidirectional !== e.bidirectional || !same(props, e.props)))
 			editor.updateEdge(e.id, { bidirectional: d.bidirectional, props }, e);
 	}
 	const save = () => commit(editor.selected, draft);
