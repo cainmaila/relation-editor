@@ -108,13 +108,13 @@
 	const TIPS = $derived(
 		graph
 			? [
-					['mouse', '點節點', '看詳情與鄰居；找客戶、加入編輯頁都從詳情欄操作'],
-					['solo', '系統開關', '頂列切換要看的系統（⌥＋點：只看該系統）']
+					['mouse', '點節點', '檢視詳情與鄰居'],
+					['solo', '系統開關', '⌥＋點：單獨顯示']
 				]
 			: [
-					['drag', '拖曳建立關聯', '把一張卡片拖到另一張；拖到空白處可順手新增節點'],
-					['mouse', '右鍵', '節點、邊、空白處都有就地選單'],
-					['target', '滑過節點', '浮出工具列：連到、聚焦、刪除']
+					['drag', '拖曳建立關聯', '拖到節點建立關聯；拖到空白處新增節點'],
+					['mouse', '右鍵', '節點、邊、畫布皆有選單'],
+					['target', '滑過節點', '工具列：連到、聚焦、刪除']
 				]
 	);
 	const SHORTCUTS = $derived([
@@ -267,22 +267,14 @@
 				class="mx-5 mb-1 flex gap-2 rounded-md border border-yellow-400/25 bg-yellow-400/5 px-3 py-2 text-xs leading-relaxed text-yellow-200"
 			>
 				<Icon name="warn" class="mt-0.5 size-3.5" />
-				<span
-					>未處理：{graph
-						? '沒連到「TPKC 大樓」，加入編輯頁後補邊。'
-						: '把這張卡片拖到主圖上的節點，就能接上「TPKC 大樓」。'}</span
-				>
+				<span>未處理：未連到「TPKC 大樓」</span>
 			</p>
 		{:else if editor.unreachable.has(node.id)}
 			<p
 				class="mx-5 mb-1 flex gap-2 rounded-md border border-rose-500/25 bg-rose-500/5 px-3 py-2 text-xs leading-relaxed text-rose-200"
 			>
 				<Icon name="broken" class="mt-0.5 size-3.5" />
-				<span
-					>{UNREACHABLE_LABEL}：{graph
-						? '沿方向走不到客戶，加入編輯頁後補邊。'
-						: '拖到下游節點補一條邊即可接上。'}</span
-				>
+				<span>{UNREACHABLE_LABEL}：下游無客戶</span>
 			</p>
 		{/if}
 
@@ -291,7 +283,7 @@
 				<button
 					class="btn-primary px-2.5"
 					aria-label="找客戶"
-					title="找客戶：它壞了影響哪些客戶（F）"
+					title="找客戶：受影響客戶（F）"
 					onclick={() => editor.findCustomers(node.id)}
 				>
 					<Icon name="target" />找客戶
@@ -299,7 +291,7 @@
 			{:else}
 				{@render act(
 					'連到…',
-					'連到…：再點目標節點（或直接拖曳卡片）',
+					'連到…（或拖曳卡片）',
 					'link',
 					() => (editor.connecting = editor.connecting === node.id ? null : node.id),
 					editor.connecting === node.id
@@ -332,7 +324,7 @@
 			{:else}
 				<button
 					class="ml-auto btn-ghost px-2 py-1 text-xs"
-					title="只從編輯頁拿掉，不刪除資料"
+					title="移出編輯頁（資料保留）"
 					onclick={() => editor.removeFromWork([node.id])}>移出編輯頁</button
 				>
 				{#if !armed('node', node.id)}
@@ -347,13 +339,13 @@
 			{/if}
 		</div>
 		{#if outsideNode}
-			<p class="mx-5 mb-3 text-[11px] text-slate-400">不在編輯頁：先加入編輯頁才能修改</p>
+			<p class="mx-5 mb-3 text-[11px] text-slate-400">不在編輯頁・唯讀</p>
 		{/if}
 		{#if armed('node', node.id) && !graph && !outsideNode}
 			{@render confirmDelete(
 				`永久刪除「${node.name}」${
 					nodeEdges
-						? `，連同 ${nodeEdges} 條邊${hiddenEdges ? `（含編輯頁外 ${hiddenEdges} 條）` : ''}一起刪除`
+						? `及 ${nodeEdges} 條邊${hiddenEdges ? `（編輯頁外 ${hiddenEdges} 條）` : ''}`
 						: '（沒有相連的邊）'
 				}？無法復原`
 			)}
@@ -415,7 +407,7 @@
 		</header>
 		{#if idc}{@render idcBanner()}{:else if outsideEdge}
 			<div class="mx-5 mb-1 flex items-center gap-2 text-[11px] text-slate-400">
-				<span>有一端不在編輯頁：先把兩端都加入編輯頁才能修改這條邊</span>
+				<span>端點不在編輯頁・唯讀</span>
 				<button
 					class="ml-auto btn-ghost shrink-0 px-2 py-1 text-[11px]"
 					onclick={() => editor.admitEdgeEnds(edge.id)}>將兩端加入編輯頁</button

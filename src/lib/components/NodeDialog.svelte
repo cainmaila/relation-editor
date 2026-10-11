@@ -24,7 +24,6 @@
 	<form onsubmit={submit} aria-label="新增節點" class="flex flex-col gap-4 p-5">
 		<div>
 			<p class="eyebrow">新增節點</p>
-			<p class="mt-1 text-xs text-slate-400">選類型、填名稱。系統由類型決定。</p>
 		</div>
 		<label class="flex flex-col gap-1.5 text-xs text-slate-400">
 			類型
@@ -56,7 +55,7 @@
 					系統 <b class="text-slate-200">{lane}</b>
 				</span>
 			{:else}
-				<span class="text-xs text-slate-500">機框、主機、客戶由 IDC 維護，不能在此新增</span>
+				<span class="text-xs text-slate-500">機框、主機、客戶由 IDC 維護</span>
 			{/if}
 			<button type="button" class="ml-auto btn-ghost" onclick={() => (editor.dialog = null)}
 				>取消</button

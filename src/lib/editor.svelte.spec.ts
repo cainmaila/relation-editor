@@ -818,7 +818,7 @@ describe('編輯頁：工作區外的定位與修改', () => {
 		e.select({ kind: 'edge', id: edge.id });
 		const view = e.view.seq;
 		expect(e.locate(edge.to)).toBe(false);
-		expect(e.message).toBe(`「${e.node(edge.to)!.name}」不在編輯頁：先將兩端加入編輯頁才能定位`);
+		expect(e.message).toBe(`「${e.node(edge.to)!.name}」不在編輯頁`);
 		expect(e.working).toEqual([edge.from]);
 		expect(e.selected).toEqual({ kind: 'edge', id: edge.id });
 		expect(e.view.seq).toBe(view);
@@ -829,10 +829,10 @@ describe('編輯頁：工作區外的定位與修改', () => {
 	it('定位已不存在的節點：明確的過期選取錯誤', () => {
 		const e = new Editor(csvSeed());
 		expect(e.locate('nope')).toBe(false);
-		expect(e.message).toBe('節點已不存在：nope（選取已過期，請重新選取）');
+		expect(e.message).toBe('節點已不存在：nope，請重新選取');
 		e.setPage('edit');
 		expect(e.locate('nope')).toBe(false);
-		expect(e.message).toBe('節點已不存在：nope（選取已過期，請重新選取）');
+		expect(e.message).toBe('節點已不存在：nope，請重新選取');
 	});
 
 	it('將兩端加入編輯頁：原子加入、保留邊選取；滿額時整批擋下不變', () => {
@@ -853,7 +853,7 @@ describe('編輯頁：工作區外的定位與修改', () => {
 		expect(e.working).toEqual(before);
 		expect(e.message).toBe('編輯頁最多 200 個節點：要新增 2 個，只剩 1 個名額');
 		expect(e.admitEdgeEnds('nope')).toBe(false);
-		expect(e.message).toBe('邊已不存在：nope（選取已過期，請重新選取）');
+		expect(e.message).toBe('邊已不存在：nope，請重新選取');
 	});
 
 	it('工作區外的節點在編輯頁不能改名或刪除；工作區內節點有外部邊仍可刪除', () => {
@@ -1059,7 +1059,7 @@ describe('P7 全圖追查與跨視圖一致性', () => {
 		expect(e.working).toEqual([PDU, RACK]);
 		expect(e.result?.edges.has(FEED)).toBe(true);
 		expect(e.focusEdge('nope')).toBe(false);
-		expect(e.message).toBe('邊已不存在：nope（選取已過期，請重新選取）');
+		expect(e.message).toBe('邊已不存在：nope，請重新選取');
 	});
 
 	it('加入兩端超過預算時什麼都不改，追查與選取保留', () => {

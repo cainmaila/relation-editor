@@ -98,7 +98,7 @@
 	<div class="mt-2 border-t border-white/6 px-4 py-2 text-[11px] text-slate-400">
 		<p>完整查詢：沿途 {nodes.length} 個節點、{edges.length} 條邊</p>
 		<p class="pt-0.5 text-slate-500">
-			畫布高亮最多畫 {LOD.maxHighlightEdges.toLocaleString('en-US')} 條、隱藏系統的不畫；已畫／省略／系統隱藏數見畫布「細節層級」的高亮連線。清單永遠是完整結果
+			畫布最多高亮 {LOD.maxHighlightEdges.toLocaleString('en-US')} 條，隱藏系統不繪製；清單為完整結果
 		</p>
 	</div>
 	<details bind:open={showNodes} class="border-t border-white/6 px-4 py-2 text-xs">

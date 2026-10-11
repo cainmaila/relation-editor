@@ -298,12 +298,12 @@ export class Editor {
 	 */
 	locate(id: string): boolean {
 		const n = this.node(id);
-		if (!n) return this.fail(`節點已不存在：${id}（選取已過期，請重新選取）`);
+		if (!n) return this.fail(`節點已不存在：${id}，請重新選取`);
 		if (this.page === 'graph') {
 			this.reveal(id);
 			return true;
 		}
-		if (!this.inWork(id)) return this.fail(`「${n.name}」不在編輯頁：先將兩端加入編輯頁才能定位`);
+		if (!this.inWork(id)) return this.fail(`「${n.name}」不在編輯頁`);
 		this.select({ kind: 'node', id });
 		this.fit([id]);
 		return true;
@@ -312,7 +312,7 @@ export class Editor {
 	/** 「將兩端加入編輯頁」：邊的兩端整批 admission（200／1,000 預算），保留邊選取；失敗什麼都不改 */
 	admitEdgeEnds(id: string): boolean {
 		const e = this.edge(id);
-		if (!e) return this.fail(`邊已不存在：${id}（選取已過期，請重新選取）`);
+		if (!e) return this.fail(`邊已不存在：${id}，請重新選取`);
 		return this.addToWork([e.from, e.to]);
 	}
 
@@ -470,7 +470,7 @@ export class Editor {
 	 */
 	focusEdge(id: string): boolean {
 		const e = this.edge(id);
-		if (!e) return this.fail(`邊已不存在：${id}（選取已過期，請重新選取）`);
+		if (!e) return this.fail(`邊已不存在：${id}，請重新選取`);
 		this.#showSystemOf(e.from);
 		this.#showSystemOf(e.to);
 		this.select({ kind: 'edge', id });

@@ -179,7 +179,7 @@
 	const phaseText = (s: LayoutStatus) => {
 		const t = `${s.tick}/${s.budget}`;
 		if (s.phase === 'running') return `初始版面・背景整理中 ${t}`;
-		if (s.phase === 'done') return `版面已凍結（計算預算 ${s.budget} 步，非保證收斂）`;
+		if (s.phase === 'done') return `版面已凍結（上限 ${s.budget} 步）`;
 		if (s.phase === 'error') return `版面整理失敗：${s.message ?? ''}`;
 		if (s.phase === 'stopped')
 			return s.reason === 'topology'
@@ -663,7 +663,7 @@
 								</dd>
 							{/if}
 							<dd class="col-span-2 text-slate-500">
-								連線全部常駐；拉近到節點 ≥{LOD.detailEnterPx}px 才顯示名稱與加亮連線
+								拉近至 ≥{LOD.detailEnterPx}px 顯示名稱與加亮連線
 							</dd>
 						</dl>
 					{/if}
@@ -691,7 +691,7 @@
 			{/if}
 			<button
 				class="rounded px-2 py-0.5 hover:bg-slate-700"
-				title="相機看全部可見節點（不重算版面）"
+				title="全景（不重算版面）"
 				onclick={() => editor.fit()}>全景</button
 			>
 		</div>
@@ -705,10 +705,7 @@
 				<p>{failure}</p>
 				<p class="text-xs text-slate-400">搜尋與編輯仍可使用</p>
 				{#if needsReload}
-					<p class="text-xs text-amber-300">
-						瀏覽器已記住 3D 程式庫共用模組的載入失敗，這個分頁內重試不會成功；
-						請自行重新整理頁面（重新整理會遺失本分頁的所有編輯）。
-					</p>
+					<p class="text-xs text-amber-300">模組載入失敗，請重新整理頁面（未存檔編輯將遺失）</p>
 				{:else}
 					<button
 						class="rounded border border-slate-600 px-3 py-1 hover:bg-slate-700"

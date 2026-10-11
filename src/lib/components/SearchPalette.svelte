@@ -141,6 +141,6 @@
 	<p class="flex gap-3 border-t border-white/6 px-4 py-2 text-[10px] text-slate-500">
 		<span><span class="kbd">↑↓</span> 移動</span>
 		<span><span class="kbd">Enter</span> {graph ? '定位' : '加入並定位'}</span>
-		<span>勾選可跨頁，再一次加入編輯頁</span>
+		<span>可跨頁勾選</span>
 	</p>
 </Modal>

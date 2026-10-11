@@ -393,7 +393,7 @@
 			<p
 				class="pointer-events-none absolute inset-0 z-10 grid place-items-center px-6 text-center text-sm text-slate-400"
 			>
-				編輯頁是空的：用 ⌘K 搜尋節點加入，或到全圖選取節點加入
+				編輯頁無節點・⌘K 搜尋加入
 			</p>
 		{/if}
 		{#if toolbarNode}
@@ -405,7 +405,7 @@
 					onpointerenter={() => hover(toolbarNode)}
 					onpointerleave={() => hover(null)}
 				>
-					{@render tool('連到…（或直接拖曳卡片到目標）', 'link', () => {
+					{@render tool('連到…（或拖曳卡片）', 'link', () => {
 						editor.select({ kind: 'node', id: toolbarNode });
 						editor.connecting = toolbarNode;
 					})}
