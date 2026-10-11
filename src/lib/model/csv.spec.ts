@@ -84,6 +84,18 @@ describe('buildGraph', () => {
 			'edges/供電.csv 第 2 列：起點或終點空白'
 		);
 	});
+	it('引號沒關、欄數超過表頭、雙向填錯、欄中引號與空白', () => {
+		expect(() => buildGraph([['nodes/空間.csv', '類型,名稱\n機櫃,"a']])).toThrow(
+			'nodes/空間.csv：引號沒有關閉'
+		);
+		expect(() => buildGraph([['nodes/空間.csv', '類型,名稱\n機櫃,a,b']])).toThrow(
+			'nodes/空間.csv 第 2 列：欄數超過表頭'
+		);
+		expect(() =>
+			buildGraph(files([['edges/供電.csv', '起點,終點,雙向\n機櫃 A-01,機櫃 A-02,Yes']]))
+		).toThrow('edges/供電.csv 第 2 列：雙向只能填「是」或留空');
+		expect(parseCsv('a,x"y", b \n')).toEqual([['a', 'x"y"', 'b']]);
+	});
 	it('邊端點找不到帶檔名與列號', () => {
 		expect(() => buildGraph(files([['edges/供電.csv', '起點,終點,雙向\n機櫃 A-01,鬼,']]))).toThrow(
 			'edges/供電.csv 第 2 列：找不到節點「鬼」'

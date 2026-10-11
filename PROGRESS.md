@@ -3,7 +3,7 @@
 ## 節點資料改 CSV（分支 cainmaila/main）
 
 - **Goal:** 節點／邊由多份 CSV 在執行期 fetch 組成，部署後換檔即生效；計畫 `~/.claude/plans/temporal-nibbling-sonnet.md`
-- **Done（已驗證：check／lint 綠、unit 368、e2e 97、build 過；CSV 與舊 mock 逐筆等價後才刪 `mock.ts`）:**
+- **Done（已驗證：check／lint 綠、unit 369、e2e 97、build 過；CSV 與舊 mock 逐筆等價後才刪 `mock.ts`）:**
   - `static/data/` 24 份 CSV＋`index.json`；`model/csv.ts`（parser＋`buildGraph`＋驗證）、`model/load.ts`（fetch）、`routes/+page.ts`；`Editor` 建構子必須傳圖
   - 測試／量測用同步來源 `model/csv-seed.ts`（glob 讀 `static/data`）；README 加「資料檔」
 - **Done（已驗證）:** 一般節點檔改依系統合併（13 檔→7 檔：空間、電力、空調、網路、消防、CCTV、通用；多一欄 `類型`，驗證類型屬於該系統）；IDC 與邊維持一類型一檔。合併前後圖逐筆相等（2,066 節點、4,020 邊）

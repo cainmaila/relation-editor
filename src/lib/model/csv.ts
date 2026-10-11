@@ -2,33 +2,37 @@
 import { EDGE_TYPES, NODE_TYPES, SYSTEMS, nodeType } from './config';
 import type { GEdge, GNode, Graph, Props } from './types';
 
-/** RFC 4180：引號、"" 跳脫、欄內換行；去 BOM；略過空白列 */
+/** RFC 4180：引號（只在欄首開啟）、"" 跳脫、欄內換行；去 BOM、每格 trim；略過空白列；引號沒關就 throw */
 export function parseCsv(text: string): string[][] {
 	const rows: string[][] = [];
 	let row: string[] = [];
 	let cell = '';
 	let quoted = false;
 	const s = text.replace(/^\uFEFF/, '');
+	const flush = () => {
+		row.push(cell);
+		cell = '';
+		row = row.map((x) => x.trim());
+		if (row.some((x) => x !== '')) rows.push(row);
+		row = [];
+	};
 	for (let i = 0; i < s.length; i++) {
 		const c = s[i];
 		if (quoted) {
 			if (c !== '"') cell += c;
 			else if (s[i + 1] === '"') cell += s[++i];
 			else quoted = false;
-		} else if (c === '"') quoted = true;
+		} else if (c === '"' && cell === '') quoted = true;
 		else if (c === ',') {
 			row.push(cell);
 			cell = '';
 		} else if (c === '\n' || c === '\r') {
 			if (c === '\r' && s[i + 1] === '\n') i++;
-			row.push(cell);
-			cell = '';
-			if (row.some((x) => x !== '')) rows.push(row);
-			row = [];
+			flush();
 		} else cell += c;
 	}
-	row.push(cell);
-	if (row.some((x) => x !== '')) rows.push(row);
+	if (quoted) throw new Error('引號沒有關閉');
+	flush();
 	return rows;
 }
 
@@ -71,9 +75,16 @@ export function buildGraph(files: [path: string, text: string][]): Graph {
 			throw new Error(
 				`${path}：未知的${system !== undefined ? '系統' : kind === 'nodes' ? '節點類型' : '邊類型'}「${file}」`
 			);
-		const [header, ...rows] = parseCsv(text);
+		let table: string[][];
+		try {
+			table = parseCsv(text);
+		} catch (e) {
+			throw new Error(`${path}：${(e as Error).message}`, { cause: e });
+		}
+		const [header, ...rows] = table;
 		rows.forEach((row, i) => {
 			const line = i + 2;
+			if (row.length > header.length) throw new Error(`${path} 第 ${line} 列：欄數超過表頭`);
 			if (kind === 'nodes') {
 				const at = system !== undefined ? 1 : 0;
 				const type = system !== undefined ? row[0] : file;
@@ -92,6 +103,7 @@ export function buildGraph(files: [path: string, text: string][]): Graph {
 				});
 			} else {
 				const [from, to, bi] = row;
+				if (bi && bi !== '是') throw new Error(`${path} 第 ${line} 列：雙向只能填「是」或留空`);
 				if (!from || !to) throw new Error(`${path} 第 ${line} 列：起點或終點空白`);
 				const edge: GEdge = {
 					id: `${file}:${from}>${to}`,
