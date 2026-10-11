@@ -1,5 +1,20 @@
 # PROGRESS
 
+## 節點資料改 CSV（分支 cainmaila/main）
+
+- **Goal:** 節點／邊由多份 CSV 在執行期 fetch 組成，部署後換檔即生效；計畫 `~/.claude/plans/temporal-nibbling-sonnet.md`
+- **Done（已驗證：check／lint 綠、unit 369、e2e 97、build 過；CSV 與舊 mock 逐筆等價後才刪 `mock.ts`）:**
+  - `static/data/` 24 份 CSV＋`index.json`；`model/csv.ts`（parser＋`buildGraph`＋驗證）、`model/load.ts`（fetch）、`routes/+page.ts`；`Editor` 建構子必須傳圖
+  - 測試／量測用同步來源 `model/csv-seed.ts`（glob 讀 `static/data`）；README 加「資料檔」
+- **Done（已驗證）:** 一般節點檔改依系統合併（13 檔→7 檔：空間、電力、空調、網路、消防、CCTV、通用；多一欄 `類型`，驗證類型屬於該系統）；IDC 與邊維持一類型一檔。合併前後圖逐筆相等（2,066 節點、4,020 邊）
+- **Todo（PR #9 code review 留下，另開 PR；已修的 🔴 見 commit `49a1887`）:**
+  - 邊 id `類型:起點>終點` 在節點名含 `>` 時會撞（`A>B→C` 與 `A→B>C`），誤報「邊重複」；改成不會撞的 key
+  - `load.ts`：`index.json` 沒驗證（非 JSON、非陣列、非字串項目錯誤不帶檔名）；靜態主機對缺檔回 200 HTML 時 `res.ok` 擋不住
+  - `csv.ts`：表頭沒驗證（欄位按位置讀，順序錯、重名、空檔 `header` 為 undefined 都會過）；`parseCsv` 丟掉空白列，錯誤列號遇空行會偏
+  - 先 `pnpm build` 實測：正式環境 SvelteKit 可能把 load 錯誤換成「Internal Error」，README 說的「錯誤頁帶檔名與列號」可能只在 dev 成立；若是，加 `handleError`／`+error.svelte` 或改 README
+  - 補測試：404、`index.json` 格式錯、表頭／欄數不符、空行列號
+- **Notes:** vitest／dev 會印「Assets in public directory cannot be imported from JavaScript」警告（`csv-seed.ts` 讀 public 目錄），不影響結果；`pnpm build` 無警告。dev 下故意寫錯端點，錯誤頁帶 `edges/供電.csv`，還原後恢復 200；部署後換檔的瀏覽器實操未做
+
 ## 試玩回饋 10-11 第二批（分支 main-3）
 
 - **Goal:** 5 項修改，驗收 T-A7a、T-C6a、T-B2a、T-B2b、T-B12、T-E3a；計畫 `~/.claude/plans/pasted-content-id-e026-glistening-token.md`

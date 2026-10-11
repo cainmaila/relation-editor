@@ -1,0 +1,1327 @@
+起點,終點,雙向,確認狀態,路別
+台電市電,UPS-1,,推定,
+UPS-1,樓層 PDU 2F-A,,推定,
+UPS-1,樓層 PDU 2F-B,,推定,
+UPS-1,樓層 PDU 2F-C,,推定,
+UPS-1,樓層 PDU 2F-D,,推定,
+UPS-1,樓層 PDU 2F-E,,推定,
+UPS-1,樓層 PDU 2F-F,,推定,
+UPS-1,樓層 PDU 2F-G,,推定,
+UPS-1,樓層 PDU 2F-H,,推定,
+UPS-1,樓層 PDU 2F-I,,推定,
+UPS-1,樓層 PDU 2F-J,,推定,
+UPS-1,樓層 PDU 2F-K,,推定,
+UPS-1,樓層 PDU 2F-L,,推定,
+UPS-1,樓層 PDU 2F-M,,推定,
+UPS-1,樓層 PDU 2F-N,,推定,
+UPS-1,樓層 PDU 2F-O,,推定,
+UPS-1,樓層 PDU 2F-P,,推定,
+樓層 PDU 2F-A,機櫃 PDU A-01-A,,推定,
+機櫃 PDU A-01-A,機櫃 A-01,,已確認,A
+樓層 PDU 2F-A,機櫃 PDU A-01-B,,推定,
+機櫃 PDU A-01-B,機櫃 A-01,,已確認,B
+樓層 PDU 2F-A,機櫃 PDU A-02-A,,推定,
+機櫃 PDU A-02-A,機櫃 A-02,,已確認,A
+樓層 PDU 2F-A,機櫃 PDU A-02-B,,推定,
+機櫃 PDU A-02-B,機櫃 A-02,,已確認,B
+樓層 PDU 2F-A,機櫃 PDU A-03-A,,推定,
+機櫃 PDU A-03-A,機櫃 A-03,,已確認,A
+樓層 PDU 2F-A,機櫃 PDU A-03-B,,推定,
+機櫃 PDU A-03-B,機櫃 A-03,,已確認,B
+樓層 PDU 2F-A,機櫃 PDU A-04-A,,推定,
+機櫃 PDU A-04-A,機櫃 A-04,,已確認,A
+樓層 PDU 2F-A,機櫃 PDU A-04-B,,推定,
+機櫃 PDU A-04-B,機櫃 A-04,,已確認,B
+樓層 PDU 2F-A,機櫃 PDU A-05-A,,推定,
+機櫃 PDU A-05-A,機櫃 A-05,,已確認,A
+樓層 PDU 2F-A,機櫃 PDU A-05-B,,推定,
+機櫃 PDU A-05-B,機櫃 A-05,,已確認,B
+樓層 PDU 2F-A,機櫃 PDU A-06-A,,推定,
+機櫃 PDU A-06-A,機櫃 A-06,,已確認,A
+樓層 PDU 2F-A,機櫃 PDU A-06-B,,推定,
+機櫃 PDU A-06-B,機櫃 A-06,,已確認,B
+樓層 PDU 2F-A,機櫃 PDU A-07-A,,推定,
+機櫃 PDU A-07-A,機櫃 A-07,,已確認,A
+樓層 PDU 2F-A,機櫃 PDU A-07-B,,推定,
+機櫃 PDU A-07-B,機櫃 A-07,,已確認,B
+樓層 PDU 2F-A,機櫃 PDU A-08-A,,推定,
+機櫃 PDU A-08-A,機櫃 A-08,,已確認,A
+樓層 PDU 2F-A,機櫃 PDU A-08-B,,推定,
+機櫃 PDU A-08-B,機櫃 A-08,,已確認,B
+樓層 PDU 2F-A,機櫃 PDU A-09-A,,推定,
+機櫃 PDU A-09-A,機櫃 A-09,,已確認,A
+樓層 PDU 2F-A,機櫃 PDU A-09-B,,推定,
+機櫃 PDU A-09-B,機櫃 A-09,,已確認,B
+樓層 PDU 2F-A,機櫃 PDU A-10-A,,推定,
+機櫃 PDU A-10-A,機櫃 A-10,,已確認,A
+樓層 PDU 2F-A,機櫃 PDU A-10-B,,推定,
+機櫃 PDU A-10-B,機櫃 A-10,,已確認,B
+樓層 PDU 2F-A,機櫃 PDU A-11-A,,推定,
+機櫃 PDU A-11-A,機櫃 A-11,,已確認,A
+樓層 PDU 2F-A,機櫃 PDU A-11-B,,推定,
+機櫃 PDU A-11-B,機櫃 A-11,,已確認,B
+樓層 PDU 2F-A,機櫃 PDU A-12-A,,推定,
+機櫃 PDU A-12-A,機櫃 A-12,,已確認,A
+樓層 PDU 2F-A,機櫃 PDU A-12-B,,推定,
+機櫃 PDU A-12-B,機櫃 A-12,,已確認,B
+樓層 PDU 2F-A,機櫃 PDU A-13-A,,推定,
+機櫃 PDU A-13-A,機櫃 A-13,,已確認,A
+樓層 PDU 2F-A,機櫃 PDU A-13-B,,推定,
+機櫃 PDU A-13-B,機櫃 A-13,,已確認,B
+樓層 PDU 2F-A,機櫃 PDU A-14-A,,推定,
+機櫃 PDU A-14-A,機櫃 A-14,,已確認,A
+樓層 PDU 2F-A,機櫃 PDU A-14-B,,推定,
+機櫃 PDU A-14-B,機櫃 A-14,,已確認,B
+樓層 PDU 2F-A,機櫃 PDU A-15-A,,推定,
+機櫃 PDU A-15-A,機櫃 A-15,,已確認,A
+樓層 PDU 2F-A,機櫃 PDU A-15-B,,推定,
+機櫃 PDU A-15-B,機櫃 A-15,,已確認,B
+樓層 PDU 2F-A,機櫃 PDU A-16-A,,推定,
+機櫃 PDU A-16-A,機櫃 A-16,,已確認,A
+樓層 PDU 2F-A,機櫃 PDU A-16-B,,推定,
+機櫃 PDU A-16-B,機櫃 A-16,,已確認,B
+樓層 PDU 2F-A,機櫃 PDU A-17-A,,推定,
+機櫃 PDU A-17-A,機櫃 A-17,,已確認,A
+樓層 PDU 2F-A,機櫃 PDU A-17-B,,推定,
+機櫃 PDU A-17-B,機櫃 A-17,,已確認,B
+樓層 PDU 2F-A,機櫃 PDU A-18-A,,推定,
+機櫃 PDU A-18-A,機櫃 A-18,,已確認,A
+樓層 PDU 2F-A,機櫃 PDU A-18-B,,推定,
+機櫃 PDU A-18-B,機櫃 A-18,,已確認,B
+樓層 PDU 2F-A,機櫃 PDU A-19-A,,推定,
+機櫃 PDU A-19-A,機櫃 A-19,,已確認,A
+樓層 PDU 2F-A,機櫃 PDU A-19-B,,推定,
+機櫃 PDU A-19-B,機櫃 A-19,,已確認,B
+樓層 PDU 2F-A,機櫃 PDU A-20-A,,推定,
+機櫃 PDU A-20-A,機櫃 A-20,,已確認,A
+樓層 PDU 2F-A,機櫃 PDU A-20-B,,推定,
+機櫃 PDU A-20-B,機櫃 A-20,,已確認,B
+樓層 PDU 2F-A,機櫃 PDU A-21-A,,推定,
+機櫃 PDU A-21-A,機櫃 A-21,,已確認,A
+樓層 PDU 2F-A,機櫃 PDU A-21-B,,推定,
+機櫃 PDU A-21-B,機櫃 A-21,,已確認,B
+樓層 PDU 2F-A,機櫃 PDU A-22-A,,推定,
+機櫃 PDU A-22-A,機櫃 A-22,,已確認,A
+樓層 PDU 2F-A,機櫃 PDU A-22-B,,推定,
+機櫃 PDU A-22-B,機櫃 A-22,,已確認,B
+樓層 PDU 2F-B,機櫃 PDU B-01-A,,推定,
+機櫃 PDU B-01-A,機櫃 B-01,,已確認,A
+樓層 PDU 2F-B,機櫃 PDU B-01-B,,推定,
+機櫃 PDU B-01-B,機櫃 B-01,,已確認,B
+樓層 PDU 2F-B,機櫃 PDU B-02-A,,推定,
+機櫃 PDU B-02-A,機櫃 B-02,,已確認,A
+樓層 PDU 2F-B,機櫃 PDU B-02-B,,推定,
+機櫃 PDU B-02-B,機櫃 B-02,,已確認,B
+樓層 PDU 2F-B,機櫃 PDU B-03-A,,推定,
+機櫃 PDU B-03-A,機櫃 B-03,,已確認,A
+樓層 PDU 2F-B,機櫃 PDU B-03-B,,推定,
+機櫃 PDU B-03-B,機櫃 B-03,,已確認,B
+樓層 PDU 2F-B,機櫃 PDU B-04-A,,推定,
+機櫃 PDU B-04-A,機櫃 B-04,,已確認,A
+樓層 PDU 2F-B,機櫃 PDU B-04-B,,推定,
+機櫃 PDU B-04-B,機櫃 B-04,,已確認,B
+樓層 PDU 2F-B,機櫃 PDU B-05-A,,推定,
+機櫃 PDU B-05-A,機櫃 B-05,,已確認,A
+樓層 PDU 2F-B,機櫃 PDU B-05-B,,推定,
+機櫃 PDU B-05-B,機櫃 B-05,,已確認,B
+樓層 PDU 2F-B,機櫃 PDU B-06-A,,推定,
+機櫃 PDU B-06-A,機櫃 B-06,,已確認,A
+樓層 PDU 2F-B,機櫃 PDU B-06-B,,推定,
+機櫃 PDU B-06-B,機櫃 B-06,,已確認,B
+樓層 PDU 2F-B,機櫃 PDU B-07-A,,推定,
+機櫃 PDU B-07-A,機櫃 B-07,,已確認,A
+樓層 PDU 2F-B,機櫃 PDU B-07-B,,推定,
+機櫃 PDU B-07-B,機櫃 B-07,,已確認,B
+樓層 PDU 2F-B,機櫃 PDU B-08-A,,推定,
+機櫃 PDU B-08-A,機櫃 B-08,,已確認,A
+樓層 PDU 2F-B,機櫃 PDU B-08-B,,推定,
+機櫃 PDU B-08-B,機櫃 B-08,,已確認,B
+樓層 PDU 2F-B,機櫃 PDU B-09-A,,推定,
+機櫃 PDU B-09-A,機櫃 B-09,,已確認,A
+樓層 PDU 2F-B,機櫃 PDU B-09-B,,推定,
+機櫃 PDU B-09-B,機櫃 B-09,,已確認,B
+樓層 PDU 2F-B,機櫃 PDU B-10-A,,推定,
+機櫃 PDU B-10-A,機櫃 B-10,,已確認,A
+樓層 PDU 2F-B,機櫃 PDU B-10-B,,推定,
+機櫃 PDU B-10-B,機櫃 B-10,,已確認,B
+樓層 PDU 2F-B,機櫃 PDU B-11-A,,推定,
+機櫃 PDU B-11-A,機櫃 B-11,,已確認,A
+樓層 PDU 2F-B,機櫃 PDU B-11-B,,推定,
+機櫃 PDU B-11-B,機櫃 B-11,,已確認,B
+樓層 PDU 2F-B,機櫃 PDU B-12-A,,推定,
+機櫃 PDU B-12-A,機櫃 B-12,,已確認,A
+樓層 PDU 2F-B,機櫃 PDU B-12-B,,推定,
+機櫃 PDU B-12-B,機櫃 B-12,,已確認,B
+樓層 PDU 2F-B,機櫃 PDU B-13-A,,推定,
+機櫃 PDU B-13-A,機櫃 B-13,,已確認,A
+樓層 PDU 2F-B,機櫃 PDU B-13-B,,推定,
+機櫃 PDU B-13-B,機櫃 B-13,,已確認,B
+樓層 PDU 2F-B,機櫃 PDU B-14-A,,推定,
+機櫃 PDU B-14-A,機櫃 B-14,,已確認,A
+樓層 PDU 2F-B,機櫃 PDU B-14-B,,推定,
+機櫃 PDU B-14-B,機櫃 B-14,,已確認,B
+樓層 PDU 2F-B,機櫃 PDU B-15-A,,推定,
+機櫃 PDU B-15-A,機櫃 B-15,,已確認,A
+樓層 PDU 2F-B,機櫃 PDU B-15-B,,推定,
+機櫃 PDU B-15-B,機櫃 B-15,,已確認,B
+樓層 PDU 2F-B,機櫃 PDU B-16-A,,推定,
+機櫃 PDU B-16-A,機櫃 B-16,,已確認,A
+樓層 PDU 2F-B,機櫃 PDU B-16-B,,推定,
+機櫃 PDU B-16-B,機櫃 B-16,,已確認,B
+樓層 PDU 2F-B,機櫃 PDU B-17-A,,推定,
+機櫃 PDU B-17-A,機櫃 B-17,,已確認,A
+樓層 PDU 2F-B,機櫃 PDU B-17-B,,推定,
+機櫃 PDU B-17-B,機櫃 B-17,,已確認,B
+樓層 PDU 2F-B,機櫃 PDU B-18-A,,推定,
+機櫃 PDU B-18-A,機櫃 B-18,,已確認,A
+樓層 PDU 2F-B,機櫃 PDU B-18-B,,推定,
+機櫃 PDU B-18-B,機櫃 B-18,,已確認,B
+樓層 PDU 2F-B,機櫃 PDU B-19-A,,推定,
+機櫃 PDU B-19-A,機櫃 B-19,,已確認,A
+樓層 PDU 2F-B,機櫃 PDU B-19-B,,推定,
+機櫃 PDU B-19-B,機櫃 B-19,,已確認,B
+樓層 PDU 2F-B,機櫃 PDU B-20-A,,推定,
+機櫃 PDU B-20-A,機櫃 B-20,,已確認,A
+樓層 PDU 2F-B,機櫃 PDU B-20-B,,推定,
+機櫃 PDU B-20-B,機櫃 B-20,,已確認,B
+樓層 PDU 2F-B,機櫃 PDU B-21-A,,推定,
+機櫃 PDU B-21-A,機櫃 B-21,,已確認,A
+樓層 PDU 2F-B,機櫃 PDU B-21-B,,推定,
+機櫃 PDU B-21-B,機櫃 B-21,,已確認,B
+樓層 PDU 2F-B,機櫃 PDU B-22-A,,推定,
+機櫃 PDU B-22-A,機櫃 B-22,,已確認,A
+樓層 PDU 2F-B,機櫃 PDU B-22-B,,推定,
+機櫃 PDU B-22-B,機櫃 B-22,,已確認,B
+樓層 PDU 2F-C,機櫃 PDU C-01-A,,推定,
+機櫃 PDU C-01-A,機櫃 C-01,,已確認,A
+樓層 PDU 2F-C,機櫃 PDU C-01-B,,推定,
+機櫃 PDU C-01-B,機櫃 C-01,,已確認,B
+樓層 PDU 2F-C,機櫃 PDU C-02-A,,推定,
+機櫃 PDU C-02-A,機櫃 C-02,,已確認,A
+樓層 PDU 2F-C,機櫃 PDU C-02-B,,推定,
+機櫃 PDU C-02-B,機櫃 C-02,,已確認,B
+樓層 PDU 2F-C,機櫃 PDU C-03-A,,推定,
+機櫃 PDU C-03-A,機櫃 C-03,,已確認,A
+樓層 PDU 2F-C,機櫃 PDU C-03-B,,推定,
+機櫃 PDU C-03-B,機櫃 C-03,,已確認,B
+樓層 PDU 2F-C,機櫃 PDU C-04-A,,推定,
+機櫃 PDU C-04-A,機櫃 C-04,,已確認,A
+樓層 PDU 2F-C,機櫃 PDU C-04-B,,推定,
+機櫃 PDU C-04-B,機櫃 C-04,,已確認,B
+樓層 PDU 2F-C,機櫃 PDU C-05-A,,推定,
+機櫃 PDU C-05-A,機櫃 C-05,,已確認,A
+樓層 PDU 2F-C,機櫃 PDU C-05-B,,推定,
+機櫃 PDU C-05-B,機櫃 C-05,,已確認,B
+樓層 PDU 2F-C,機櫃 PDU C-06-A,,推定,
+機櫃 PDU C-06-A,機櫃 C-06,,已確認,A
+樓層 PDU 2F-C,機櫃 PDU C-06-B,,推定,
+機櫃 PDU C-06-B,機櫃 C-06,,已確認,B
+樓層 PDU 2F-C,機櫃 PDU C-07-A,,推定,
+機櫃 PDU C-07-A,機櫃 C-07,,已確認,A
+樓層 PDU 2F-C,機櫃 PDU C-07-B,,推定,
+機櫃 PDU C-07-B,機櫃 C-07,,已確認,B
+樓層 PDU 2F-C,機櫃 PDU C-08-A,,推定,
+機櫃 PDU C-08-A,機櫃 C-08,,已確認,A
+樓層 PDU 2F-C,機櫃 PDU C-08-B,,推定,
+機櫃 PDU C-08-B,機櫃 C-08,,已確認,B
+樓層 PDU 2F-C,機櫃 PDU C-09-A,,推定,
+機櫃 PDU C-09-A,機櫃 C-09,,已確認,A
+樓層 PDU 2F-C,機櫃 PDU C-09-B,,推定,
+機櫃 PDU C-09-B,機櫃 C-09,,已確認,B
+樓層 PDU 2F-C,機櫃 PDU C-10-A,,推定,
+機櫃 PDU C-10-A,機櫃 C-10,,已確認,A
+樓層 PDU 2F-C,機櫃 PDU C-10-B,,推定,
+機櫃 PDU C-10-B,機櫃 C-10,,已確認,B
+樓層 PDU 2F-C,機櫃 PDU C-11-A,,推定,
+機櫃 PDU C-11-A,機櫃 C-11,,已確認,A
+樓層 PDU 2F-C,機櫃 PDU C-11-B,,推定,
+機櫃 PDU C-11-B,機櫃 C-11,,已確認,B
+樓層 PDU 2F-C,機櫃 PDU C-12-A,,推定,
+機櫃 PDU C-12-A,機櫃 C-12,,已確認,A
+樓層 PDU 2F-C,機櫃 PDU C-12-B,,推定,
+機櫃 PDU C-12-B,機櫃 C-12,,已確認,B
+樓層 PDU 2F-C,機櫃 PDU C-13-A,,推定,
+機櫃 PDU C-13-A,機櫃 C-13,,已確認,A
+樓層 PDU 2F-C,機櫃 PDU C-13-B,,推定,
+機櫃 PDU C-13-B,機櫃 C-13,,已確認,B
+樓層 PDU 2F-C,機櫃 PDU C-14-A,,推定,
+機櫃 PDU C-14-A,機櫃 C-14,,已確認,A
+樓層 PDU 2F-C,機櫃 PDU C-14-B,,推定,
+機櫃 PDU C-14-B,機櫃 C-14,,已確認,B
+樓層 PDU 2F-C,機櫃 PDU C-15-A,,推定,
+機櫃 PDU C-15-A,機櫃 C-15,,已確認,A
+樓層 PDU 2F-C,機櫃 PDU C-15-B,,推定,
+機櫃 PDU C-15-B,機櫃 C-15,,已確認,B
+樓層 PDU 2F-C,機櫃 PDU C-16-A,,推定,
+機櫃 PDU C-16-A,機櫃 C-16,,已確認,A
+樓層 PDU 2F-C,機櫃 PDU C-16-B,,推定,
+機櫃 PDU C-16-B,機櫃 C-16,,已確認,B
+樓層 PDU 2F-C,機櫃 PDU C-17-A,,推定,
+機櫃 PDU C-17-A,機櫃 C-17,,已確認,A
+樓層 PDU 2F-C,機櫃 PDU C-17-B,,推定,
+機櫃 PDU C-17-B,機櫃 C-17,,已確認,B
+樓層 PDU 2F-C,機櫃 PDU C-18-A,,推定,
+機櫃 PDU C-18-A,機櫃 C-18,,已確認,A
+樓層 PDU 2F-C,機櫃 PDU C-18-B,,推定,
+機櫃 PDU C-18-B,機櫃 C-18,,已確認,B
+樓層 PDU 2F-C,機櫃 PDU C-19-A,,推定,
+機櫃 PDU C-19-A,機櫃 C-19,,已確認,A
+樓層 PDU 2F-C,機櫃 PDU C-19-B,,推定,
+機櫃 PDU C-19-B,機櫃 C-19,,已確認,B
+樓層 PDU 2F-C,機櫃 PDU C-20-A,,推定,
+機櫃 PDU C-20-A,機櫃 C-20,,已確認,A
+樓層 PDU 2F-C,機櫃 PDU C-20-B,,推定,
+機櫃 PDU C-20-B,機櫃 C-20,,已確認,B
+樓層 PDU 2F-C,機櫃 PDU C-21-A,,推定,
+機櫃 PDU C-21-A,機櫃 C-21,,已確認,A
+樓層 PDU 2F-C,機櫃 PDU C-21-B,,推定,
+機櫃 PDU C-21-B,機櫃 C-21,,已確認,B
+樓層 PDU 2F-C,機櫃 PDU C-22-A,,推定,
+機櫃 PDU C-22-A,機櫃 C-22,,已確認,A
+樓層 PDU 2F-C,機櫃 PDU C-22-B,,推定,
+機櫃 PDU C-22-B,機櫃 C-22,,已確認,B
+樓層 PDU 2F-D,機櫃 PDU D-01-A,,推定,
+機櫃 PDU D-01-A,機櫃 D-01,,已確認,A
+樓層 PDU 2F-D,機櫃 PDU D-01-B,,推定,
+機櫃 PDU D-01-B,機櫃 D-01,,已確認,B
+樓層 PDU 2F-D,機櫃 PDU D-02-A,,推定,
+機櫃 PDU D-02-A,機櫃 D-02,,已確認,A
+樓層 PDU 2F-D,機櫃 PDU D-02-B,,推定,
+機櫃 PDU D-02-B,機櫃 D-02,,已確認,B
+樓層 PDU 2F-D,機櫃 PDU D-03-A,,推定,
+機櫃 PDU D-03-A,機櫃 D-03,,已確認,A
+樓層 PDU 2F-D,機櫃 PDU D-03-B,,推定,
+機櫃 PDU D-03-B,機櫃 D-03,,已確認,B
+樓層 PDU 2F-D,機櫃 PDU D-04-A,,推定,
+機櫃 PDU D-04-A,機櫃 D-04,,已確認,A
+樓層 PDU 2F-D,機櫃 PDU D-04-B,,推定,
+機櫃 PDU D-04-B,機櫃 D-04,,已確認,B
+樓層 PDU 2F-D,機櫃 PDU D-05-A,,推定,
+機櫃 PDU D-05-A,機櫃 D-05,,已確認,A
+樓層 PDU 2F-D,機櫃 PDU D-05-B,,推定,
+機櫃 PDU D-05-B,機櫃 D-05,,已確認,B
+樓層 PDU 2F-D,機櫃 PDU D-06-A,,推定,
+機櫃 PDU D-06-A,機櫃 D-06,,已確認,A
+樓層 PDU 2F-D,機櫃 PDU D-06-B,,推定,
+機櫃 PDU D-06-B,機櫃 D-06,,已確認,B
+樓層 PDU 2F-D,機櫃 PDU D-07-A,,推定,
+機櫃 PDU D-07-A,機櫃 D-07,,已確認,A
+樓層 PDU 2F-D,機櫃 PDU D-07-B,,推定,
+機櫃 PDU D-07-B,機櫃 D-07,,已確認,B
+樓層 PDU 2F-D,機櫃 PDU D-08-A,,推定,
+機櫃 PDU D-08-A,機櫃 D-08,,已確認,A
+樓層 PDU 2F-D,機櫃 PDU D-08-B,,推定,
+機櫃 PDU D-08-B,機櫃 D-08,,已確認,B
+樓層 PDU 2F-D,機櫃 PDU D-09-A,,推定,
+機櫃 PDU D-09-A,機櫃 D-09,,已確認,A
+樓層 PDU 2F-D,機櫃 PDU D-09-B,,推定,
+機櫃 PDU D-09-B,機櫃 D-09,,已確認,B
+樓層 PDU 2F-D,機櫃 PDU D-10-A,,推定,
+機櫃 PDU D-10-A,機櫃 D-10,,已確認,A
+樓層 PDU 2F-D,機櫃 PDU D-10-B,,推定,
+機櫃 PDU D-10-B,機櫃 D-10,,已確認,B
+樓層 PDU 2F-D,機櫃 PDU D-11-A,,推定,
+機櫃 PDU D-11-A,機櫃 D-11,,已確認,A
+樓層 PDU 2F-D,機櫃 PDU D-11-B,,推定,
+機櫃 PDU D-11-B,機櫃 D-11,,已確認,B
+樓層 PDU 2F-D,機櫃 PDU D-12-A,,推定,
+機櫃 PDU D-12-A,機櫃 D-12,,已確認,A
+樓層 PDU 2F-D,機櫃 PDU D-12-B,,推定,
+機櫃 PDU D-12-B,機櫃 D-12,,已確認,B
+樓層 PDU 2F-D,機櫃 PDU D-13-A,,推定,
+機櫃 PDU D-13-A,機櫃 D-13,,已確認,A
+樓層 PDU 2F-D,機櫃 PDU D-13-B,,推定,
+機櫃 PDU D-13-B,機櫃 D-13,,已確認,B
+樓層 PDU 2F-D,機櫃 PDU D-14-A,,推定,
+機櫃 PDU D-14-A,機櫃 D-14,,已確認,A
+樓層 PDU 2F-D,機櫃 PDU D-14-B,,推定,
+機櫃 PDU D-14-B,機櫃 D-14,,已確認,B
+樓層 PDU 2F-D,機櫃 PDU D-15-A,,推定,
+機櫃 PDU D-15-A,機櫃 D-15,,已確認,A
+樓層 PDU 2F-D,機櫃 PDU D-15-B,,推定,
+機櫃 PDU D-15-B,機櫃 D-15,,已確認,B
+樓層 PDU 2F-D,機櫃 PDU D-16-A,,推定,
+機櫃 PDU D-16-A,機櫃 D-16,,已確認,A
+樓層 PDU 2F-D,機櫃 PDU D-16-B,,推定,
+機櫃 PDU D-16-B,機櫃 D-16,,已確認,B
+樓層 PDU 2F-D,機櫃 PDU D-17-A,,推定,
+機櫃 PDU D-17-A,機櫃 D-17,,已確認,A
+樓層 PDU 2F-D,機櫃 PDU D-17-B,,推定,
+機櫃 PDU D-17-B,機櫃 D-17,,已確認,B
+樓層 PDU 2F-D,機櫃 PDU D-18-A,,推定,
+機櫃 PDU D-18-A,機櫃 D-18,,已確認,A
+樓層 PDU 2F-D,機櫃 PDU D-18-B,,推定,
+機櫃 PDU D-18-B,機櫃 D-18,,已確認,B
+樓層 PDU 2F-E,機櫃 PDU E-01-A,,推定,
+機櫃 PDU E-01-A,機櫃 E-01,,已確認,A
+樓層 PDU 2F-E,機櫃 PDU E-01-B,,推定,
+機櫃 PDU E-01-B,機櫃 E-01,,已確認,B
+樓層 PDU 2F-E,機櫃 PDU E-02-A,,推定,
+機櫃 PDU E-02-A,機櫃 E-02,,已確認,A
+樓層 PDU 2F-E,機櫃 PDU E-02-B,,推定,
+機櫃 PDU E-02-B,機櫃 E-02,,已確認,B
+樓層 PDU 2F-E,機櫃 PDU E-03-A,,推定,
+機櫃 PDU E-03-A,機櫃 E-03,,已確認,A
+樓層 PDU 2F-E,機櫃 PDU E-03-B,,推定,
+機櫃 PDU E-03-B,機櫃 E-03,,已確認,B
+樓層 PDU 2F-E,機櫃 PDU E-04-A,,推定,
+機櫃 PDU E-04-A,機櫃 E-04,,已確認,A
+樓層 PDU 2F-E,機櫃 PDU E-04-B,,推定,
+機櫃 PDU E-04-B,機櫃 E-04,,已確認,B
+樓層 PDU 2F-E,機櫃 PDU E-05-A,,推定,
+機櫃 PDU E-05-A,機櫃 E-05,,已確認,A
+樓層 PDU 2F-E,機櫃 PDU E-05-B,,推定,
+機櫃 PDU E-05-B,機櫃 E-05,,已確認,B
+樓層 PDU 2F-E,機櫃 PDU E-06-A,,推定,
+機櫃 PDU E-06-A,機櫃 E-06,,已確認,A
+樓層 PDU 2F-E,機櫃 PDU E-06-B,,推定,
+機櫃 PDU E-06-B,機櫃 E-06,,已確認,B
+樓層 PDU 2F-E,機櫃 PDU E-07-A,,推定,
+機櫃 PDU E-07-A,機櫃 E-07,,已確認,A
+樓層 PDU 2F-E,機櫃 PDU E-07-B,,推定,
+機櫃 PDU E-07-B,機櫃 E-07,,已確認,B
+樓層 PDU 2F-E,機櫃 PDU E-08-A,,推定,
+機櫃 PDU E-08-A,機櫃 E-08,,已確認,A
+樓層 PDU 2F-E,機櫃 PDU E-08-B,,推定,
+機櫃 PDU E-08-B,機櫃 E-08,,已確認,B
+樓層 PDU 2F-E,機櫃 PDU E-09-A,,推定,
+機櫃 PDU E-09-A,機櫃 E-09,,已確認,A
+樓層 PDU 2F-E,機櫃 PDU E-09-B,,推定,
+機櫃 PDU E-09-B,機櫃 E-09,,已確認,B
+樓層 PDU 2F-E,機櫃 PDU E-10-A,,推定,
+機櫃 PDU E-10-A,機櫃 E-10,,已確認,A
+樓層 PDU 2F-E,機櫃 PDU E-10-B,,推定,
+機櫃 PDU E-10-B,機櫃 E-10,,已確認,B
+樓層 PDU 2F-E,機櫃 PDU E-11-A,,推定,
+機櫃 PDU E-11-A,機櫃 E-11,,已確認,A
+樓層 PDU 2F-E,機櫃 PDU E-11-B,,推定,
+機櫃 PDU E-11-B,機櫃 E-11,,已確認,B
+樓層 PDU 2F-E,機櫃 PDU E-12-A,,推定,
+機櫃 PDU E-12-A,機櫃 E-12,,已確認,A
+樓層 PDU 2F-E,機櫃 PDU E-12-B,,推定,
+機櫃 PDU E-12-B,機櫃 E-12,,已確認,B
+樓層 PDU 2F-E,機櫃 PDU E-13-A,,推定,
+機櫃 PDU E-13-A,機櫃 E-13,,已確認,A
+樓層 PDU 2F-E,機櫃 PDU E-13-B,,推定,
+機櫃 PDU E-13-B,機櫃 E-13,,已確認,B
+樓層 PDU 2F-E,機櫃 PDU E-14-A,,推定,
+機櫃 PDU E-14-A,機櫃 E-14,,已確認,A
+樓層 PDU 2F-E,機櫃 PDU E-14-B,,推定,
+機櫃 PDU E-14-B,機櫃 E-14,,已確認,B
+樓層 PDU 2F-E,機櫃 PDU E-15-A,,推定,
+機櫃 PDU E-15-A,機櫃 E-15,,已確認,A
+樓層 PDU 2F-E,機櫃 PDU E-15-B,,推定,
+機櫃 PDU E-15-B,機櫃 E-15,,已確認,B
+樓層 PDU 2F-E,機櫃 PDU E-16-A,,推定,
+機櫃 PDU E-16-A,機櫃 E-16,,已確認,A
+樓層 PDU 2F-E,機櫃 PDU E-16-B,,推定,
+機櫃 PDU E-16-B,機櫃 E-16,,已確認,B
+樓層 PDU 2F-E,機櫃 PDU E-17-A,,推定,
+機櫃 PDU E-17-A,機櫃 E-17,,已確認,A
+樓層 PDU 2F-E,機櫃 PDU E-17-B,,推定,
+機櫃 PDU E-17-B,機櫃 E-17,,已確認,B
+樓層 PDU 2F-E,機櫃 PDU E-18-A,,推定,
+機櫃 PDU E-18-A,機櫃 E-18,,已確認,A
+樓層 PDU 2F-E,機櫃 PDU E-18-B,,推定,
+機櫃 PDU E-18-B,機櫃 E-18,,已確認,B
+樓層 PDU 2F-E,機櫃 PDU E-19-A,,推定,
+機櫃 PDU E-19-A,機櫃 E-19,,已確認,A
+樓層 PDU 2F-E,機櫃 PDU E-19-B,,推定,
+機櫃 PDU E-19-B,機櫃 E-19,,已確認,B
+樓層 PDU 2F-E,機櫃 PDU E-20-A,,推定,
+機櫃 PDU E-20-A,機櫃 E-20,,已確認,A
+樓層 PDU 2F-E,機櫃 PDU E-20-B,,推定,
+機櫃 PDU E-20-B,機櫃 E-20,,已確認,B
+樓層 PDU 2F-E,機櫃 PDU E-21-A,,推定,
+機櫃 PDU E-21-A,機櫃 E-21,,已確認,A
+樓層 PDU 2F-E,機櫃 PDU E-21-B,,推定,
+機櫃 PDU E-21-B,機櫃 E-21,,已確認,B
+樓層 PDU 2F-E,機櫃 PDU E-22-A,,推定,
+機櫃 PDU E-22-A,機櫃 E-22,,已確認,A
+樓層 PDU 2F-E,機櫃 PDU E-22-B,,推定,
+機櫃 PDU E-22-B,機櫃 E-22,,已確認,B
+樓層 PDU 2F-F,機櫃 PDU F-01-A,,推定,
+機櫃 PDU F-01-A,機櫃 F-01,,已確認,A
+樓層 PDU 2F-F,機櫃 PDU F-01-B,,推定,
+機櫃 PDU F-01-B,機櫃 F-01,,已確認,B
+樓層 PDU 2F-F,機櫃 PDU F-02-A,,推定,
+機櫃 PDU F-02-A,機櫃 F-02,,已確認,A
+樓層 PDU 2F-F,機櫃 PDU F-02-B,,推定,
+機櫃 PDU F-02-B,機櫃 F-02,,已確認,B
+樓層 PDU 2F-F,機櫃 PDU F-03-A,,推定,
+機櫃 PDU F-03-A,機櫃 F-03,,已確認,A
+樓層 PDU 2F-F,機櫃 PDU F-03-B,,推定,
+機櫃 PDU F-03-B,機櫃 F-03,,已確認,B
+樓層 PDU 2F-F,機櫃 PDU F-04-A,,推定,
+機櫃 PDU F-04-A,機櫃 F-04,,已確認,A
+樓層 PDU 2F-F,機櫃 PDU F-04-B,,推定,
+機櫃 PDU F-04-B,機櫃 F-04,,已確認,B
+樓層 PDU 2F-F,機櫃 PDU F-05-A,,推定,
+機櫃 PDU F-05-A,機櫃 F-05,,已確認,A
+樓層 PDU 2F-F,機櫃 PDU F-05-B,,推定,
+機櫃 PDU F-05-B,機櫃 F-05,,已確認,B
+樓層 PDU 2F-F,機櫃 PDU F-06-A,,推定,
+機櫃 PDU F-06-A,機櫃 F-06,,已確認,A
+樓層 PDU 2F-F,機櫃 PDU F-06-B,,推定,
+機櫃 PDU F-06-B,機櫃 F-06,,已確認,B
+樓層 PDU 2F-F,機櫃 PDU F-07-A,,推定,
+機櫃 PDU F-07-A,機櫃 F-07,,已確認,A
+樓層 PDU 2F-F,機櫃 PDU F-07-B,,推定,
+機櫃 PDU F-07-B,機櫃 F-07,,已確認,B
+樓層 PDU 2F-F,機櫃 PDU F-08-A,,推定,
+機櫃 PDU F-08-A,機櫃 F-08,,已確認,A
+樓層 PDU 2F-F,機櫃 PDU F-08-B,,推定,
+機櫃 PDU F-08-B,機櫃 F-08,,已確認,B
+樓層 PDU 2F-F,機櫃 PDU F-09-A,,推定,
+機櫃 PDU F-09-A,機櫃 F-09,,已確認,A
+樓層 PDU 2F-F,機櫃 PDU F-09-B,,推定,
+機櫃 PDU F-09-B,機櫃 F-09,,已確認,B
+樓層 PDU 2F-F,機櫃 PDU F-10-A,,推定,
+機櫃 PDU F-10-A,機櫃 F-10,,已確認,A
+樓層 PDU 2F-F,機櫃 PDU F-10-B,,推定,
+機櫃 PDU F-10-B,機櫃 F-10,,已確認,B
+樓層 PDU 2F-F,機櫃 PDU F-11-A,,推定,
+機櫃 PDU F-11-A,機櫃 F-11,,已確認,A
+樓層 PDU 2F-F,機櫃 PDU F-11-B,,推定,
+機櫃 PDU F-11-B,機櫃 F-11,,已確認,B
+樓層 PDU 2F-F,機櫃 PDU F-12-A,,推定,
+機櫃 PDU F-12-A,機櫃 F-12,,已確認,A
+樓層 PDU 2F-F,機櫃 PDU F-12-B,,推定,
+機櫃 PDU F-12-B,機櫃 F-12,,已確認,B
+樓層 PDU 2F-F,機櫃 PDU F-13-A,,推定,
+機櫃 PDU F-13-A,機櫃 F-13,,已確認,A
+樓層 PDU 2F-F,機櫃 PDU F-13-B,,推定,
+機櫃 PDU F-13-B,機櫃 F-13,,已確認,B
+樓層 PDU 2F-F,機櫃 PDU F-14-A,,推定,
+機櫃 PDU F-14-A,機櫃 F-14,,已確認,A
+樓層 PDU 2F-F,機櫃 PDU F-14-B,,推定,
+機櫃 PDU F-14-B,機櫃 F-14,,已確認,B
+樓層 PDU 2F-F,機櫃 PDU F-15-A,,推定,
+機櫃 PDU F-15-A,機櫃 F-15,,已確認,A
+樓層 PDU 2F-F,機櫃 PDU F-15-B,,推定,
+機櫃 PDU F-15-B,機櫃 F-15,,已確認,B
+樓層 PDU 2F-F,機櫃 PDU F-16-A,,推定,
+機櫃 PDU F-16-A,機櫃 F-16,,已確認,A
+樓層 PDU 2F-F,機櫃 PDU F-16-B,,推定,
+機櫃 PDU F-16-B,機櫃 F-16,,已確認,B
+樓層 PDU 2F-F,機櫃 PDU F-17-A,,推定,
+機櫃 PDU F-17-A,機櫃 F-17,,已確認,A
+樓層 PDU 2F-F,機櫃 PDU F-17-B,,推定,
+機櫃 PDU F-17-B,機櫃 F-17,,已確認,B
+樓層 PDU 2F-F,機櫃 PDU F-18-A,,推定,
+機櫃 PDU F-18-A,機櫃 F-18,,已確認,A
+樓層 PDU 2F-F,機櫃 PDU F-18-B,,推定,
+機櫃 PDU F-18-B,機櫃 F-18,,已確認,B
+樓層 PDU 2F-F,機櫃 PDU F-19-A,,推定,
+機櫃 PDU F-19-A,機櫃 F-19,,已確認,A
+樓層 PDU 2F-F,機櫃 PDU F-19-B,,推定,
+機櫃 PDU F-19-B,機櫃 F-19,,已確認,B
+樓層 PDU 2F-F,機櫃 PDU F-20-A,,推定,
+機櫃 PDU F-20-A,機櫃 F-20,,已確認,A
+樓層 PDU 2F-F,機櫃 PDU F-20-B,,推定,
+機櫃 PDU F-20-B,機櫃 F-20,,已確認,B
+樓層 PDU 2F-F,機櫃 PDU F-21-A,,推定,
+機櫃 PDU F-21-A,機櫃 F-21,,已確認,A
+樓層 PDU 2F-F,機櫃 PDU F-21-B,,推定,
+機櫃 PDU F-21-B,機櫃 F-21,,已確認,B
+樓層 PDU 2F-F,機櫃 PDU F-22-A,,推定,
+機櫃 PDU F-22-A,機櫃 F-22,,已確認,A
+樓層 PDU 2F-F,機櫃 PDU F-22-B,,推定,
+機櫃 PDU F-22-B,機櫃 F-22,,已確認,B
+樓層 PDU 2F-G,機櫃 PDU G-01-A,,推定,
+機櫃 PDU G-01-A,機櫃 G-01,,已確認,A
+樓層 PDU 2F-G,機櫃 PDU G-01-B,,推定,
+機櫃 PDU G-01-B,機櫃 G-01,,已確認,B
+樓層 PDU 2F-G,機櫃 PDU G-02-A,,推定,
+機櫃 PDU G-02-A,機櫃 G-02,,已確認,A
+樓層 PDU 2F-G,機櫃 PDU G-02-B,,推定,
+機櫃 PDU G-02-B,機櫃 G-02,,已確認,B
+樓層 PDU 2F-G,機櫃 PDU G-03-A,,推定,
+機櫃 PDU G-03-A,機櫃 G-03,,已確認,A
+樓層 PDU 2F-G,機櫃 PDU G-03-B,,推定,
+機櫃 PDU G-03-B,機櫃 G-03,,已確認,B
+樓層 PDU 2F-G,機櫃 PDU G-04-A,,推定,
+機櫃 PDU G-04-A,機櫃 G-04,,已確認,A
+樓層 PDU 2F-G,機櫃 PDU G-04-B,,推定,
+機櫃 PDU G-04-B,機櫃 G-04,,已確認,B
+樓層 PDU 2F-G,機櫃 PDU G-05-A,,推定,
+機櫃 PDU G-05-A,機櫃 G-05,,已確認,A
+樓層 PDU 2F-G,機櫃 PDU G-05-B,,推定,
+機櫃 PDU G-05-B,機櫃 G-05,,已確認,B
+樓層 PDU 2F-G,機櫃 PDU G-06-A,,推定,
+機櫃 PDU G-06-A,機櫃 G-06,,已確認,A
+樓層 PDU 2F-G,機櫃 PDU G-06-B,,推定,
+機櫃 PDU G-06-B,機櫃 G-06,,已確認,B
+樓層 PDU 2F-G,機櫃 PDU G-07-A,,推定,
+機櫃 PDU G-07-A,機櫃 G-07,,已確認,A
+樓層 PDU 2F-G,機櫃 PDU G-07-B,,推定,
+機櫃 PDU G-07-B,機櫃 G-07,,已確認,B
+樓層 PDU 2F-G,機櫃 PDU G-08-A,,推定,
+機櫃 PDU G-08-A,機櫃 G-08,,已確認,A
+樓層 PDU 2F-G,機櫃 PDU G-08-B,,推定,
+機櫃 PDU G-08-B,機櫃 G-08,,已確認,B
+樓層 PDU 2F-G,機櫃 PDU G-09-A,,推定,
+機櫃 PDU G-09-A,機櫃 G-09,,已確認,A
+樓層 PDU 2F-G,機櫃 PDU G-09-B,,推定,
+機櫃 PDU G-09-B,機櫃 G-09,,已確認,B
+樓層 PDU 2F-G,機櫃 PDU G-10-A,,推定,
+機櫃 PDU G-10-A,機櫃 G-10,,已確認,A
+樓層 PDU 2F-G,機櫃 PDU G-10-B,,推定,
+機櫃 PDU G-10-B,機櫃 G-10,,已確認,B
+樓層 PDU 2F-G,機櫃 PDU G-11-A,,推定,
+機櫃 PDU G-11-A,機櫃 G-11,,已確認,A
+樓層 PDU 2F-G,機櫃 PDU G-11-B,,推定,
+機櫃 PDU G-11-B,機櫃 G-11,,已確認,B
+樓層 PDU 2F-G,機櫃 PDU G-12-A,,推定,
+機櫃 PDU G-12-A,機櫃 G-12,,已確認,A
+樓層 PDU 2F-G,機櫃 PDU G-12-B,,推定,
+機櫃 PDU G-12-B,機櫃 G-12,,已確認,B
+樓層 PDU 2F-G,機櫃 PDU G-13-A,,推定,
+機櫃 PDU G-13-A,機櫃 G-13,,已確認,A
+樓層 PDU 2F-G,機櫃 PDU G-13-B,,推定,
+機櫃 PDU G-13-B,機櫃 G-13,,已確認,B
+樓層 PDU 2F-G,機櫃 PDU G-14-A,,推定,
+機櫃 PDU G-14-A,機櫃 G-14,,已確認,A
+樓層 PDU 2F-G,機櫃 PDU G-14-B,,推定,
+機櫃 PDU G-14-B,機櫃 G-14,,已確認,B
+樓層 PDU 2F-G,機櫃 PDU G-15-A,,推定,
+機櫃 PDU G-15-A,機櫃 G-15,,已確認,A
+樓層 PDU 2F-G,機櫃 PDU G-15-B,,推定,
+機櫃 PDU G-15-B,機櫃 G-15,,已確認,B
+樓層 PDU 2F-G,機櫃 PDU G-16-A,,推定,
+機櫃 PDU G-16-A,機櫃 G-16,,已確認,A
+樓層 PDU 2F-G,機櫃 PDU G-16-B,,推定,
+機櫃 PDU G-16-B,機櫃 G-16,,已確認,B
+樓層 PDU 2F-G,機櫃 PDU G-17-A,,推定,
+機櫃 PDU G-17-A,機櫃 G-17,,已確認,A
+樓層 PDU 2F-G,機櫃 PDU G-17-B,,推定,
+機櫃 PDU G-17-B,機櫃 G-17,,已確認,B
+樓層 PDU 2F-G,機櫃 PDU G-18-A,,推定,
+機櫃 PDU G-18-A,機櫃 G-18,,已確認,A
+樓層 PDU 2F-G,機櫃 PDU G-18-B,,推定,
+機櫃 PDU G-18-B,機櫃 G-18,,已確認,B
+樓層 PDU 2F-G,機櫃 PDU G-19-A,,推定,
+機櫃 PDU G-19-A,機櫃 G-19,,已確認,A
+樓層 PDU 2F-G,機櫃 PDU G-19-B,,推定,
+機櫃 PDU G-19-B,機櫃 G-19,,已確認,B
+樓層 PDU 2F-G,機櫃 PDU G-20-A,,推定,
+機櫃 PDU G-20-A,機櫃 G-20,,已確認,A
+樓層 PDU 2F-G,機櫃 PDU G-20-B,,推定,
+機櫃 PDU G-20-B,機櫃 G-20,,已確認,B
+樓層 PDU 2F-G,機櫃 PDU G-21-A,,推定,
+機櫃 PDU G-21-A,機櫃 G-21,,已確認,A
+樓層 PDU 2F-G,機櫃 PDU G-21-B,,推定,
+機櫃 PDU G-21-B,機櫃 G-21,,已確認,B
+樓層 PDU 2F-G,機櫃 PDU G-22-A,,推定,
+機櫃 PDU G-22-A,機櫃 G-22,,已確認,A
+樓層 PDU 2F-G,機櫃 PDU G-22-B,,推定,
+機櫃 PDU G-22-B,機櫃 G-22,,已確認,B
+樓層 PDU 2F-H,機櫃 PDU H-01-A,,推定,
+機櫃 PDU H-01-A,機櫃 H-01,,已確認,A
+樓層 PDU 2F-H,機櫃 PDU H-01-B,,推定,
+機櫃 PDU H-01-B,機櫃 H-01,,已確認,B
+樓層 PDU 2F-H,機櫃 PDU H-02-A,,推定,
+機櫃 PDU H-02-A,機櫃 H-02,,已確認,A
+樓層 PDU 2F-H,機櫃 PDU H-02-B,,推定,
+機櫃 PDU H-02-B,機櫃 H-02,,已確認,B
+樓層 PDU 2F-H,機櫃 PDU H-03-A,,推定,
+機櫃 PDU H-03-A,機櫃 H-03,,已確認,A
+樓層 PDU 2F-H,機櫃 PDU H-03-B,,推定,
+機櫃 PDU H-03-B,機櫃 H-03,,已確認,B
+樓層 PDU 2F-H,機櫃 PDU H-04-A,,推定,
+機櫃 PDU H-04-A,機櫃 H-04,,已確認,A
+樓層 PDU 2F-H,機櫃 PDU H-04-B,,推定,
+機櫃 PDU H-04-B,機櫃 H-04,,已確認,B
+樓層 PDU 2F-H,機櫃 PDU H-05-A,,推定,
+機櫃 PDU H-05-A,機櫃 H-05,,已確認,A
+樓層 PDU 2F-H,機櫃 PDU H-05-B,,推定,
+機櫃 PDU H-05-B,機櫃 H-05,,已確認,B
+樓層 PDU 2F-H,機櫃 PDU H-06-A,,推定,
+機櫃 PDU H-06-A,機櫃 H-06,,已確認,A
+樓層 PDU 2F-H,機櫃 PDU H-06-B,,推定,
+機櫃 PDU H-06-B,機櫃 H-06,,已確認,B
+樓層 PDU 2F-H,機櫃 PDU H-07-A,,推定,
+機櫃 PDU H-07-A,機櫃 H-07,,已確認,A
+樓層 PDU 2F-H,機櫃 PDU H-07-B,,推定,
+機櫃 PDU H-07-B,機櫃 H-07,,已確認,B
+樓層 PDU 2F-H,機櫃 PDU H-08-A,,推定,
+機櫃 PDU H-08-A,機櫃 H-08,,已確認,A
+樓層 PDU 2F-H,機櫃 PDU H-08-B,,推定,
+機櫃 PDU H-08-B,機櫃 H-08,,已確認,B
+樓層 PDU 2F-H,機櫃 PDU H-09-A,,推定,
+機櫃 PDU H-09-A,機櫃 H-09,,已確認,A
+樓層 PDU 2F-H,機櫃 PDU H-09-B,,推定,
+機櫃 PDU H-09-B,機櫃 H-09,,已確認,B
+樓層 PDU 2F-H,機櫃 PDU H-10-A,,推定,
+機櫃 PDU H-10-A,機櫃 H-10,,已確認,A
+樓層 PDU 2F-H,機櫃 PDU H-10-B,,推定,
+機櫃 PDU H-10-B,機櫃 H-10,,已確認,B
+樓層 PDU 2F-H,機櫃 PDU H-11-A,,推定,
+機櫃 PDU H-11-A,機櫃 H-11,,已確認,A
+樓層 PDU 2F-H,機櫃 PDU H-11-B,,推定,
+機櫃 PDU H-11-B,機櫃 H-11,,已確認,B
+樓層 PDU 2F-H,機櫃 PDU H-12-A,,推定,
+機櫃 PDU H-12-A,機櫃 H-12,,已確認,A
+樓層 PDU 2F-H,機櫃 PDU H-12-B,,推定,
+機櫃 PDU H-12-B,機櫃 H-12,,已確認,B
+樓層 PDU 2F-H,機櫃 PDU H-13-A,,推定,
+機櫃 PDU H-13-A,機櫃 H-13,,已確認,A
+樓層 PDU 2F-H,機櫃 PDU H-13-B,,推定,
+機櫃 PDU H-13-B,機櫃 H-13,,已確認,B
+樓層 PDU 2F-H,機櫃 PDU H-14-A,,推定,
+機櫃 PDU H-14-A,機櫃 H-14,,已確認,A
+樓層 PDU 2F-H,機櫃 PDU H-14-B,,推定,
+機櫃 PDU H-14-B,機櫃 H-14,,已確認,B
+樓層 PDU 2F-H,機櫃 PDU H-15-A,,推定,
+機櫃 PDU H-15-A,機櫃 H-15,,已確認,A
+樓層 PDU 2F-H,機櫃 PDU H-15-B,,推定,
+機櫃 PDU H-15-B,機櫃 H-15,,已確認,B
+樓層 PDU 2F-H,機櫃 PDU H-16-A,,推定,
+機櫃 PDU H-16-A,機櫃 H-16,,已確認,A
+樓層 PDU 2F-H,機櫃 PDU H-16-B,,推定,
+機櫃 PDU H-16-B,機櫃 H-16,,已確認,B
+樓層 PDU 2F-H,機櫃 PDU H-17-A,,推定,
+機櫃 PDU H-17-A,機櫃 H-17,,已確認,A
+樓層 PDU 2F-H,機櫃 PDU H-17-B,,推定,
+機櫃 PDU H-17-B,機櫃 H-17,,已確認,B
+樓層 PDU 2F-H,機櫃 PDU H-18-A,,推定,
+機櫃 PDU H-18-A,機櫃 H-18,,已確認,A
+樓層 PDU 2F-H,機櫃 PDU H-18-B,,推定,
+機櫃 PDU H-18-B,機櫃 H-18,,已確認,B
+樓層 PDU 2F-I,機櫃 PDU I-01-A,,推定,
+機櫃 PDU I-01-A,機櫃 I-01,,已確認,A
+樓層 PDU 2F-I,機櫃 PDU I-01-B,,推定,
+機櫃 PDU I-01-B,機櫃 I-01,,已確認,B
+樓層 PDU 2F-I,機櫃 PDU I-02-A,,推定,
+機櫃 PDU I-02-A,機櫃 I-02,,已確認,A
+樓層 PDU 2F-I,機櫃 PDU I-02-B,,推定,
+機櫃 PDU I-02-B,機櫃 I-02,,已確認,B
+樓層 PDU 2F-I,機櫃 PDU I-03-A,,推定,
+機櫃 PDU I-03-A,機櫃 I-03,,已確認,A
+樓層 PDU 2F-I,機櫃 PDU I-03-B,,推定,
+機櫃 PDU I-03-B,機櫃 I-03,,已確認,B
+樓層 PDU 2F-I,機櫃 PDU I-04-A,,推定,
+機櫃 PDU I-04-A,機櫃 I-04,,已確認,A
+樓層 PDU 2F-I,機櫃 PDU I-04-B,,推定,
+機櫃 PDU I-04-B,機櫃 I-04,,已確認,B
+樓層 PDU 2F-I,機櫃 PDU I-05-A,,推定,
+機櫃 PDU I-05-A,機櫃 I-05,,已確認,A
+樓層 PDU 2F-I,機櫃 PDU I-05-B,,推定,
+機櫃 PDU I-05-B,機櫃 I-05,,已確認,B
+樓層 PDU 2F-I,機櫃 PDU I-06-A,,推定,
+機櫃 PDU I-06-A,機櫃 I-06,,已確認,A
+樓層 PDU 2F-I,機櫃 PDU I-06-B,,推定,
+機櫃 PDU I-06-B,機櫃 I-06,,已確認,B
+樓層 PDU 2F-I,機櫃 PDU I-07-A,,推定,
+機櫃 PDU I-07-A,機櫃 I-07,,已確認,A
+樓層 PDU 2F-I,機櫃 PDU I-07-B,,推定,
+機櫃 PDU I-07-B,機櫃 I-07,,已確認,B
+樓層 PDU 2F-I,機櫃 PDU I-08-A,,推定,
+機櫃 PDU I-08-A,機櫃 I-08,,已確認,A
+樓層 PDU 2F-I,機櫃 PDU I-08-B,,推定,
+機櫃 PDU I-08-B,機櫃 I-08,,已確認,B
+樓層 PDU 2F-I,機櫃 PDU I-09-A,,推定,
+機櫃 PDU I-09-A,機櫃 I-09,,已確認,A
+樓層 PDU 2F-I,機櫃 PDU I-09-B,,推定,
+機櫃 PDU I-09-B,機櫃 I-09,,已確認,B
+樓層 PDU 2F-I,機櫃 PDU I-10-A,,推定,
+機櫃 PDU I-10-A,機櫃 I-10,,已確認,A
+樓層 PDU 2F-I,機櫃 PDU I-10-B,,推定,
+機櫃 PDU I-10-B,機櫃 I-10,,已確認,B
+樓層 PDU 2F-I,機櫃 PDU I-11-A,,推定,
+機櫃 PDU I-11-A,機櫃 I-11,,已確認,A
+樓層 PDU 2F-I,機櫃 PDU I-11-B,,推定,
+機櫃 PDU I-11-B,機櫃 I-11,,已確認,B
+樓層 PDU 2F-I,機櫃 PDU I-12-A,,推定,
+機櫃 PDU I-12-A,機櫃 I-12,,已確認,A
+樓層 PDU 2F-I,機櫃 PDU I-12-B,,推定,
+機櫃 PDU I-12-B,機櫃 I-12,,已確認,B
+樓層 PDU 2F-I,機櫃 PDU I-13-A,,推定,
+機櫃 PDU I-13-A,機櫃 I-13,,已確認,A
+樓層 PDU 2F-I,機櫃 PDU I-13-B,,推定,
+機櫃 PDU I-13-B,機櫃 I-13,,已確認,B
+樓層 PDU 2F-I,機櫃 PDU I-14-A,,推定,
+機櫃 PDU I-14-A,機櫃 I-14,,已確認,A
+樓層 PDU 2F-I,機櫃 PDU I-14-B,,推定,
+機櫃 PDU I-14-B,機櫃 I-14,,已確認,B
+樓層 PDU 2F-I,機櫃 PDU I-15-A,,推定,
+機櫃 PDU I-15-A,機櫃 I-15,,已確認,A
+樓層 PDU 2F-I,機櫃 PDU I-15-B,,推定,
+機櫃 PDU I-15-B,機櫃 I-15,,已確認,B
+樓層 PDU 2F-I,機櫃 PDU I-16-A,,推定,
+機櫃 PDU I-16-A,機櫃 I-16,,已確認,A
+樓層 PDU 2F-I,機櫃 PDU I-16-B,,推定,
+機櫃 PDU I-16-B,機櫃 I-16,,已確認,B
+樓層 PDU 2F-I,機櫃 PDU I-17-A,,推定,
+機櫃 PDU I-17-A,機櫃 I-17,,已確認,A
+樓層 PDU 2F-I,機櫃 PDU I-17-B,,推定,
+機櫃 PDU I-17-B,機櫃 I-17,,已確認,B
+樓層 PDU 2F-I,機櫃 PDU I-18-A,,推定,
+機櫃 PDU I-18-A,機櫃 I-18,,已確認,A
+樓層 PDU 2F-I,機櫃 PDU I-18-B,,推定,
+機櫃 PDU I-18-B,機櫃 I-18,,已確認,B
+樓層 PDU 2F-I,機櫃 PDU I-19-A,,推定,
+機櫃 PDU I-19-A,機櫃 I-19,,已確認,A
+樓層 PDU 2F-I,機櫃 PDU I-19-B,,推定,
+機櫃 PDU I-19-B,機櫃 I-19,,已確認,B
+樓層 PDU 2F-I,機櫃 PDU I-20-A,,推定,
+機櫃 PDU I-20-A,機櫃 I-20,,已確認,A
+樓層 PDU 2F-I,機櫃 PDU I-20-B,,推定,
+機櫃 PDU I-20-B,機櫃 I-20,,已確認,B
+樓層 PDU 2F-J,機櫃 PDU J-01-A,,推定,
+機櫃 PDU J-01-A,機櫃 J-01,,已確認,A
+樓層 PDU 2F-J,機櫃 PDU J-01-B,,推定,
+機櫃 PDU J-01-B,機櫃 J-01,,已確認,B
+樓層 PDU 2F-J,機櫃 PDU J-02-A,,推定,
+機櫃 PDU J-02-A,機櫃 J-02,,已確認,A
+樓層 PDU 2F-J,機櫃 PDU J-02-B,,推定,
+機櫃 PDU J-02-B,機櫃 J-02,,已確認,B
+樓層 PDU 2F-J,機櫃 PDU J-03-A,,推定,
+機櫃 PDU J-03-A,機櫃 J-03,,已確認,A
+樓層 PDU 2F-J,機櫃 PDU J-03-B,,推定,
+機櫃 PDU J-03-B,機櫃 J-03,,已確認,B
+樓層 PDU 2F-J,機櫃 PDU J-04-A,,推定,
+機櫃 PDU J-04-A,機櫃 J-04,,已確認,A
+樓層 PDU 2F-J,機櫃 PDU J-04-B,,推定,
+機櫃 PDU J-04-B,機櫃 J-04,,已確認,B
+樓層 PDU 2F-J,機櫃 PDU J-05-A,,推定,
+機櫃 PDU J-05-A,機櫃 J-05,,已確認,A
+樓層 PDU 2F-J,機櫃 PDU J-05-B,,推定,
+機櫃 PDU J-05-B,機櫃 J-05,,已確認,B
+樓層 PDU 2F-J,機櫃 PDU J-06-A,,推定,
+機櫃 PDU J-06-A,機櫃 J-06,,已確認,A
+樓層 PDU 2F-J,機櫃 PDU J-06-B,,推定,
+機櫃 PDU J-06-B,機櫃 J-06,,已確認,B
+樓層 PDU 2F-J,機櫃 PDU J-07-A,,推定,
+機櫃 PDU J-07-A,機櫃 J-07,,已確認,A
+樓層 PDU 2F-J,機櫃 PDU J-07-B,,推定,
+機櫃 PDU J-07-B,機櫃 J-07,,已確認,B
+樓層 PDU 2F-J,機櫃 PDU J-08-A,,推定,
+機櫃 PDU J-08-A,機櫃 J-08,,已確認,A
+樓層 PDU 2F-J,機櫃 PDU J-08-B,,推定,
+機櫃 PDU J-08-B,機櫃 J-08,,已確認,B
+樓層 PDU 2F-J,機櫃 PDU J-09-A,,推定,
+機櫃 PDU J-09-A,機櫃 J-09,,已確認,A
+樓層 PDU 2F-J,機櫃 PDU J-09-B,,推定,
+機櫃 PDU J-09-B,機櫃 J-09,,已確認,B
+樓層 PDU 2F-J,機櫃 PDU J-10-A,,推定,
+機櫃 PDU J-10-A,機櫃 J-10,,已確認,A
+樓層 PDU 2F-J,機櫃 PDU J-10-B,,推定,
+機櫃 PDU J-10-B,機櫃 J-10,,已確認,B
+樓層 PDU 2F-J,機櫃 PDU J-11-A,,推定,
+機櫃 PDU J-11-A,機櫃 J-11,,已確認,A
+樓層 PDU 2F-J,機櫃 PDU J-11-B,,推定,
+機櫃 PDU J-11-B,機櫃 J-11,,已確認,B
+樓層 PDU 2F-J,機櫃 PDU J-12-A,,推定,
+機櫃 PDU J-12-A,機櫃 J-12,,已確認,A
+樓層 PDU 2F-J,機櫃 PDU J-12-B,,推定,
+機櫃 PDU J-12-B,機櫃 J-12,,已確認,B
+樓層 PDU 2F-J,機櫃 PDU J-13-A,,推定,
+機櫃 PDU J-13-A,機櫃 J-13,,已確認,A
+樓層 PDU 2F-J,機櫃 PDU J-13-B,,推定,
+機櫃 PDU J-13-B,機櫃 J-13,,已確認,B
+樓層 PDU 2F-J,機櫃 PDU J-14-A,,推定,
+機櫃 PDU J-14-A,機櫃 J-14,,已確認,A
+樓層 PDU 2F-J,機櫃 PDU J-14-B,,推定,
+機櫃 PDU J-14-B,機櫃 J-14,,已確認,B
+樓層 PDU 2F-J,機櫃 PDU J-15-A,,推定,
+機櫃 PDU J-15-A,機櫃 J-15,,已確認,A
+樓層 PDU 2F-J,機櫃 PDU J-15-B,,推定,
+機櫃 PDU J-15-B,機櫃 J-15,,已確認,B
+樓層 PDU 2F-J,機櫃 PDU J-16-A,,推定,
+機櫃 PDU J-16-A,機櫃 J-16,,已確認,A
+樓層 PDU 2F-J,機櫃 PDU J-16-B,,推定,
+機櫃 PDU J-16-B,機櫃 J-16,,已確認,B
+樓層 PDU 2F-J,機櫃 PDU J-17-A,,推定,
+機櫃 PDU J-17-A,機櫃 J-17,,已確認,A
+樓層 PDU 2F-J,機櫃 PDU J-17-B,,推定,
+機櫃 PDU J-17-B,機櫃 J-17,,已確認,B
+樓層 PDU 2F-J,機櫃 PDU J-18-A,,推定,
+機櫃 PDU J-18-A,機櫃 J-18,,已確認,A
+樓層 PDU 2F-J,機櫃 PDU J-18-B,,推定,
+機櫃 PDU J-18-B,機櫃 J-18,,已確認,B
+樓層 PDU 2F-J,機櫃 PDU J-19-A,,推定,
+機櫃 PDU J-19-A,機櫃 J-19,,已確認,A
+樓層 PDU 2F-J,機櫃 PDU J-19-B,,推定,
+機櫃 PDU J-19-B,機櫃 J-19,,已確認,B
+樓層 PDU 2F-J,機櫃 PDU J-20-A,,推定,
+機櫃 PDU J-20-A,機櫃 J-20,,已確認,A
+樓層 PDU 2F-J,機櫃 PDU J-20-B,,推定,
+機櫃 PDU J-20-B,機櫃 J-20,,已確認,B
+樓層 PDU 2F-K,機櫃 PDU K-01-A,,推定,
+機櫃 PDU K-01-A,機櫃 K-01,,已確認,A
+樓層 PDU 2F-K,機櫃 PDU K-01-B,,推定,
+機櫃 PDU K-01-B,機櫃 K-01,,已確認,B
+樓層 PDU 2F-K,機櫃 PDU K-02-A,,推定,
+機櫃 PDU K-02-A,機櫃 K-02,,已確認,A
+樓層 PDU 2F-K,機櫃 PDU K-02-B,,推定,
+機櫃 PDU K-02-B,機櫃 K-02,,已確認,B
+樓層 PDU 2F-K,機櫃 PDU K-03-A,,推定,
+機櫃 PDU K-03-A,機櫃 K-03,,已確認,A
+樓層 PDU 2F-K,機櫃 PDU K-03-B,,推定,
+機櫃 PDU K-03-B,機櫃 K-03,,已確認,B
+樓層 PDU 2F-K,機櫃 PDU K-04-A,,推定,
+機櫃 PDU K-04-A,機櫃 K-04,,已確認,A
+樓層 PDU 2F-K,機櫃 PDU K-04-B,,推定,
+機櫃 PDU K-04-B,機櫃 K-04,,已確認,B
+樓層 PDU 2F-K,機櫃 PDU K-05-A,,推定,
+機櫃 PDU K-05-A,機櫃 K-05,,已確認,A
+樓層 PDU 2F-K,機櫃 PDU K-05-B,,推定,
+機櫃 PDU K-05-B,機櫃 K-05,,已確認,B
+樓層 PDU 2F-K,機櫃 PDU K-06-A,,推定,
+機櫃 PDU K-06-A,機櫃 K-06,,已確認,A
+樓層 PDU 2F-K,機櫃 PDU K-06-B,,推定,
+機櫃 PDU K-06-B,機櫃 K-06,,已確認,B
+樓層 PDU 2F-K,機櫃 PDU K-07-A,,推定,
+機櫃 PDU K-07-A,機櫃 K-07,,已確認,A
+樓層 PDU 2F-K,機櫃 PDU K-07-B,,推定,
+機櫃 PDU K-07-B,機櫃 K-07,,已確認,B
+樓層 PDU 2F-K,機櫃 PDU K-08-A,,推定,
+機櫃 PDU K-08-A,機櫃 K-08,,已確認,A
+樓層 PDU 2F-K,機櫃 PDU K-08-B,,推定,
+機櫃 PDU K-08-B,機櫃 K-08,,已確認,B
+樓層 PDU 2F-K,機櫃 PDU K-09-A,,推定,
+機櫃 PDU K-09-A,機櫃 K-09,,已確認,A
+樓層 PDU 2F-K,機櫃 PDU K-09-B,,推定,
+機櫃 PDU K-09-B,機櫃 K-09,,已確認,B
+樓層 PDU 2F-K,機櫃 PDU K-10-A,,推定,
+機櫃 PDU K-10-A,機櫃 K-10,,已確認,A
+樓層 PDU 2F-K,機櫃 PDU K-10-B,,推定,
+機櫃 PDU K-10-B,機櫃 K-10,,已確認,B
+樓層 PDU 2F-K,機櫃 PDU K-11-A,,推定,
+機櫃 PDU K-11-A,機櫃 K-11,,已確認,A
+樓層 PDU 2F-K,機櫃 PDU K-11-B,,推定,
+機櫃 PDU K-11-B,機櫃 K-11,,已確認,B
+樓層 PDU 2F-K,機櫃 PDU K-12-A,,推定,
+機櫃 PDU K-12-A,機櫃 K-12,,已確認,A
+樓層 PDU 2F-K,機櫃 PDU K-12-B,,推定,
+機櫃 PDU K-12-B,機櫃 K-12,,已確認,B
+樓層 PDU 2F-K,機櫃 PDU K-13-A,,推定,
+機櫃 PDU K-13-A,機櫃 K-13,,已確認,A
+樓層 PDU 2F-K,機櫃 PDU K-13-B,,推定,
+機櫃 PDU K-13-B,機櫃 K-13,,已確認,B
+樓層 PDU 2F-K,機櫃 PDU K-14-A,,推定,
+機櫃 PDU K-14-A,機櫃 K-14,,已確認,A
+樓層 PDU 2F-K,機櫃 PDU K-14-B,,推定,
+機櫃 PDU K-14-B,機櫃 K-14,,已確認,B
+樓層 PDU 2F-K,機櫃 PDU K-15-A,,推定,
+機櫃 PDU K-15-A,機櫃 K-15,,已確認,A
+樓層 PDU 2F-K,機櫃 PDU K-15-B,,推定,
+機櫃 PDU K-15-B,機櫃 K-15,,已確認,B
+樓層 PDU 2F-K,機櫃 PDU K-16-A,,推定,
+機櫃 PDU K-16-A,機櫃 K-16,,已確認,A
+樓層 PDU 2F-K,機櫃 PDU K-16-B,,推定,
+機櫃 PDU K-16-B,機櫃 K-16,,已確認,B
+樓層 PDU 2F-K,機櫃 PDU K-17-A,,推定,
+機櫃 PDU K-17-A,機櫃 K-17,,已確認,A
+樓層 PDU 2F-K,機櫃 PDU K-17-B,,推定,
+機櫃 PDU K-17-B,機櫃 K-17,,已確認,B
+樓層 PDU 2F-K,機櫃 PDU K-18-A,,推定,
+機櫃 PDU K-18-A,機櫃 K-18,,已確認,A
+樓層 PDU 2F-K,機櫃 PDU K-18-B,,推定,
+機櫃 PDU K-18-B,機櫃 K-18,,已確認,B
+樓層 PDU 2F-K,機櫃 PDU K-19-A,,推定,
+機櫃 PDU K-19-A,機櫃 K-19,,已確認,A
+樓層 PDU 2F-K,機櫃 PDU K-19-B,,推定,
+機櫃 PDU K-19-B,機櫃 K-19,,已確認,B
+樓層 PDU 2F-K,機櫃 PDU K-20-A,,推定,
+機櫃 PDU K-20-A,機櫃 K-20,,已確認,A
+樓層 PDU 2F-K,機櫃 PDU K-20-B,,推定,
+機櫃 PDU K-20-B,機櫃 K-20,,已確認,B
+樓層 PDU 2F-L,機櫃 PDU L-01-A,,推定,
+機櫃 PDU L-01-A,機櫃 L-01,,已確認,A
+樓層 PDU 2F-L,機櫃 PDU L-01-B,,推定,
+機櫃 PDU L-01-B,機櫃 L-01,,已確認,B
+樓層 PDU 2F-L,機櫃 PDU L-02-A,,推定,
+機櫃 PDU L-02-A,機櫃 L-02,,已確認,A
+樓層 PDU 2F-L,機櫃 PDU L-02-B,,推定,
+機櫃 PDU L-02-B,機櫃 L-02,,已確認,B
+樓層 PDU 2F-L,機櫃 PDU L-03-A,,推定,
+機櫃 PDU L-03-A,機櫃 L-03,,已確認,A
+樓層 PDU 2F-L,機櫃 PDU L-03-B,,推定,
+機櫃 PDU L-03-B,機櫃 L-03,,已確認,B
+樓層 PDU 2F-L,機櫃 PDU L-04-A,,推定,
+機櫃 PDU L-04-A,機櫃 L-04,,已確認,A
+樓層 PDU 2F-L,機櫃 PDU L-04-B,,推定,
+機櫃 PDU L-04-B,機櫃 L-04,,已確認,B
+樓層 PDU 2F-L,機櫃 PDU L-05-A,,推定,
+機櫃 PDU L-05-A,機櫃 L-05,,已確認,A
+樓層 PDU 2F-L,機櫃 PDU L-05-B,,推定,
+機櫃 PDU L-05-B,機櫃 L-05,,已確認,B
+樓層 PDU 2F-L,機櫃 PDU L-06-A,,推定,
+機櫃 PDU L-06-A,機櫃 L-06,,已確認,A
+樓層 PDU 2F-L,機櫃 PDU L-06-B,,推定,
+機櫃 PDU L-06-B,機櫃 L-06,,已確認,B
+樓層 PDU 2F-L,機櫃 PDU L-07-A,,推定,
+機櫃 PDU L-07-A,機櫃 L-07,,已確認,A
+樓層 PDU 2F-L,機櫃 PDU L-07-B,,推定,
+機櫃 PDU L-07-B,機櫃 L-07,,已確認,B
+樓層 PDU 2F-L,機櫃 PDU L-08-A,,推定,
+機櫃 PDU L-08-A,機櫃 L-08,,已確認,A
+樓層 PDU 2F-L,機櫃 PDU L-08-B,,推定,
+機櫃 PDU L-08-B,機櫃 L-08,,已確認,B
+樓層 PDU 2F-L,機櫃 PDU L-09-A,,推定,
+機櫃 PDU L-09-A,機櫃 L-09,,已確認,A
+樓層 PDU 2F-L,機櫃 PDU L-09-B,,推定,
+機櫃 PDU L-09-B,機櫃 L-09,,已確認,B
+樓層 PDU 2F-L,機櫃 PDU L-10-A,,推定,
+機櫃 PDU L-10-A,機櫃 L-10,,已確認,A
+樓層 PDU 2F-L,機櫃 PDU L-10-B,,推定,
+機櫃 PDU L-10-B,機櫃 L-10,,已確認,B
+樓層 PDU 2F-L,機櫃 PDU L-11-A,,推定,
+機櫃 PDU L-11-A,機櫃 L-11,,已確認,A
+樓層 PDU 2F-L,機櫃 PDU L-11-B,,推定,
+機櫃 PDU L-11-B,機櫃 L-11,,已確認,B
+樓層 PDU 2F-L,機櫃 PDU L-12-A,,推定,
+機櫃 PDU L-12-A,機櫃 L-12,,已確認,A
+樓層 PDU 2F-L,機櫃 PDU L-12-B,,推定,
+機櫃 PDU L-12-B,機櫃 L-12,,已確認,B
+樓層 PDU 2F-L,機櫃 PDU L-13-A,,推定,
+機櫃 PDU L-13-A,機櫃 L-13,,已確認,A
+樓層 PDU 2F-L,機櫃 PDU L-13-B,,推定,
+機櫃 PDU L-13-B,機櫃 L-13,,已確認,B
+樓層 PDU 2F-L,機櫃 PDU L-14-A,,推定,
+機櫃 PDU L-14-A,機櫃 L-14,,已確認,A
+樓層 PDU 2F-L,機櫃 PDU L-14-B,,推定,
+機櫃 PDU L-14-B,機櫃 L-14,,已確認,B
+樓層 PDU 2F-L,機櫃 PDU L-15-A,,推定,
+機櫃 PDU L-15-A,機櫃 L-15,,已確認,A
+樓層 PDU 2F-L,機櫃 PDU L-15-B,,推定,
+機櫃 PDU L-15-B,機櫃 L-15,,已確認,B
+樓層 PDU 2F-L,機櫃 PDU L-16-A,,推定,
+機櫃 PDU L-16-A,機櫃 L-16,,已確認,A
+樓層 PDU 2F-L,機櫃 PDU L-16-B,,推定,
+機櫃 PDU L-16-B,機櫃 L-16,,已確認,B
+樓層 PDU 2F-L,機櫃 PDU L-17-A,,推定,
+機櫃 PDU L-17-A,機櫃 L-17,,已確認,A
+樓層 PDU 2F-L,機櫃 PDU L-17-B,,推定,
+機櫃 PDU L-17-B,機櫃 L-17,,已確認,B
+樓層 PDU 2F-L,機櫃 PDU L-18-A,,推定,
+機櫃 PDU L-18-A,機櫃 L-18,,已確認,A
+樓層 PDU 2F-L,機櫃 PDU L-18-B,,推定,
+機櫃 PDU L-18-B,機櫃 L-18,,已確認,B
+樓層 PDU 2F-M,機櫃 PDU M-01-A,,推定,
+機櫃 PDU M-01-A,機櫃 M-01,,已確認,A
+樓層 PDU 2F-M,機櫃 PDU M-01-B,,推定,
+機櫃 PDU M-01-B,機櫃 M-01,,已確認,B
+樓層 PDU 2F-M,機櫃 PDU M-02-A,,推定,
+機櫃 PDU M-02-A,機櫃 M-02,,已確認,A
+樓層 PDU 2F-M,機櫃 PDU M-02-B,,推定,
+機櫃 PDU M-02-B,機櫃 M-02,,已確認,B
+樓層 PDU 2F-M,機櫃 PDU M-03-A,,推定,
+機櫃 PDU M-03-A,機櫃 M-03,,已確認,A
+樓層 PDU 2F-M,機櫃 PDU M-03-B,,推定,
+機櫃 PDU M-03-B,機櫃 M-03,,已確認,B
+樓層 PDU 2F-M,機櫃 PDU M-04-A,,推定,
+機櫃 PDU M-04-A,機櫃 M-04,,已確認,A
+樓層 PDU 2F-M,機櫃 PDU M-04-B,,推定,
+機櫃 PDU M-04-B,機櫃 M-04,,已確認,B
+樓層 PDU 2F-M,機櫃 PDU M-05-A,,推定,
+機櫃 PDU M-05-A,機櫃 M-05,,已確認,A
+樓層 PDU 2F-M,機櫃 PDU M-05-B,,推定,
+機櫃 PDU M-05-B,機櫃 M-05,,已確認,B
+樓層 PDU 2F-M,機櫃 PDU M-06-A,,推定,
+機櫃 PDU M-06-A,機櫃 M-06,,已確認,A
+樓層 PDU 2F-M,機櫃 PDU M-06-B,,推定,
+機櫃 PDU M-06-B,機櫃 M-06,,已確認,B
+樓層 PDU 2F-M,機櫃 PDU M-07-A,,推定,
+機櫃 PDU M-07-A,機櫃 M-07,,已確認,A
+樓層 PDU 2F-M,機櫃 PDU M-07-B,,推定,
+機櫃 PDU M-07-B,機櫃 M-07,,已確認,B
+樓層 PDU 2F-M,機櫃 PDU M-08-A,,推定,
+機櫃 PDU M-08-A,機櫃 M-08,,已確認,A
+樓層 PDU 2F-M,機櫃 PDU M-08-B,,推定,
+機櫃 PDU M-08-B,機櫃 M-08,,已確認,B
+樓層 PDU 2F-M,機櫃 PDU M-09-A,,推定,
+機櫃 PDU M-09-A,機櫃 M-09,,已確認,A
+樓層 PDU 2F-M,機櫃 PDU M-09-B,,推定,
+機櫃 PDU M-09-B,機櫃 M-09,,已確認,B
+樓層 PDU 2F-M,機櫃 PDU M-10-A,,推定,
+機櫃 PDU M-10-A,機櫃 M-10,,已確認,A
+樓層 PDU 2F-M,機櫃 PDU M-10-B,,推定,
+機櫃 PDU M-10-B,機櫃 M-10,,已確認,B
+樓層 PDU 2F-M,機櫃 PDU M-11-A,,推定,
+機櫃 PDU M-11-A,機櫃 M-11,,已確認,A
+樓層 PDU 2F-M,機櫃 PDU M-11-B,,推定,
+機櫃 PDU M-11-B,機櫃 M-11,,已確認,B
+樓層 PDU 2F-M,機櫃 PDU M-12-A,,推定,
+機櫃 PDU M-12-A,機櫃 M-12,,已確認,A
+樓層 PDU 2F-M,機櫃 PDU M-12-B,,推定,
+機櫃 PDU M-12-B,機櫃 M-12,,已確認,B
+樓層 PDU 2F-M,機櫃 PDU M-13-A,,推定,
+機櫃 PDU M-13-A,機櫃 M-13,,已確認,A
+樓層 PDU 2F-M,機櫃 PDU M-13-B,,推定,
+機櫃 PDU M-13-B,機櫃 M-13,,已確認,B
+樓層 PDU 2F-M,機櫃 PDU M-14-A,,推定,
+機櫃 PDU M-14-A,機櫃 M-14,,已確認,A
+樓層 PDU 2F-M,機櫃 PDU M-14-B,,推定,
+機櫃 PDU M-14-B,機櫃 M-14,,已確認,B
+樓層 PDU 2F-M,機櫃 PDU M-15-A,,推定,
+機櫃 PDU M-15-A,機櫃 M-15,,已確認,A
+樓層 PDU 2F-M,機櫃 PDU M-15-B,,推定,
+機櫃 PDU M-15-B,機櫃 M-15,,已確認,B
+樓層 PDU 2F-M,機櫃 PDU M-16-A,,推定,
+機櫃 PDU M-16-A,機櫃 M-16,,已確認,A
+樓層 PDU 2F-M,機櫃 PDU M-16-B,,推定,
+機櫃 PDU M-16-B,機櫃 M-16,,已確認,B
+樓層 PDU 2F-M,機櫃 PDU M-17-A,,推定,
+機櫃 PDU M-17-A,機櫃 M-17,,已確認,A
+樓層 PDU 2F-M,機櫃 PDU M-17-B,,推定,
+機櫃 PDU M-17-B,機櫃 M-17,,已確認,B
+樓層 PDU 2F-M,機櫃 PDU M-18-A,,推定,
+機櫃 PDU M-18-A,機櫃 M-18,,已確認,A
+樓層 PDU 2F-M,機櫃 PDU M-18-B,,推定,
+機櫃 PDU M-18-B,機櫃 M-18,,已確認,B
+樓層 PDU 2F-M,機櫃 PDU M-19-A,,推定,
+機櫃 PDU M-19-A,機櫃 M-19,,已確認,A
+樓層 PDU 2F-M,機櫃 PDU M-19-B,,推定,
+機櫃 PDU M-19-B,機櫃 M-19,,已確認,B
+樓層 PDU 2F-M,機櫃 PDU M-20-A,,推定,
+機櫃 PDU M-20-A,機櫃 M-20,,已確認,A
+樓層 PDU 2F-M,機櫃 PDU M-20-B,,推定,
+機櫃 PDU M-20-B,機櫃 M-20,,已確認,B
+樓層 PDU 2F-M,機櫃 PDU M-21-A,,推定,
+機櫃 PDU M-21-A,機櫃 M-21,,已確認,A
+樓層 PDU 2F-M,機櫃 PDU M-21-B,,推定,
+機櫃 PDU M-21-B,機櫃 M-21,,已確認,B
+樓層 PDU 2F-N,機櫃 PDU N-01-A,,推定,
+機櫃 PDU N-01-A,機櫃 N-01,,已確認,A
+樓層 PDU 2F-N,機櫃 PDU N-01-B,,推定,
+機櫃 PDU N-01-B,機櫃 N-01,,已確認,B
+樓層 PDU 2F-N,機櫃 PDU N-02-A,,推定,
+機櫃 PDU N-02-A,機櫃 N-02,,已確認,A
+樓層 PDU 2F-N,機櫃 PDU N-02-B,,推定,
+機櫃 PDU N-02-B,機櫃 N-02,,已確認,B
+樓層 PDU 2F-N,機櫃 PDU N-03-A,,推定,
+機櫃 PDU N-03-A,機櫃 N-03,,已確認,A
+樓層 PDU 2F-N,機櫃 PDU N-03-B,,推定,
+機櫃 PDU N-03-B,機櫃 N-03,,已確認,B
+樓層 PDU 2F-N,機櫃 PDU N-04-A,,推定,
+機櫃 PDU N-04-A,機櫃 N-04,,已確認,A
+樓層 PDU 2F-N,機櫃 PDU N-04-B,,推定,
+機櫃 PDU N-04-B,機櫃 N-04,,已確認,B
+樓層 PDU 2F-N,機櫃 PDU N-05-A,,推定,
+機櫃 PDU N-05-A,機櫃 N-05,,已確認,A
+樓層 PDU 2F-N,機櫃 PDU N-05-B,,推定,
+機櫃 PDU N-05-B,機櫃 N-05,,已確認,B
+樓層 PDU 2F-N,機櫃 PDU N-06-A,,推定,
+機櫃 PDU N-06-A,機櫃 N-06,,已確認,A
+樓層 PDU 2F-N,機櫃 PDU N-06-B,,推定,
+機櫃 PDU N-06-B,機櫃 N-06,,已確認,B
+樓層 PDU 2F-N,機櫃 PDU N-07-A,,推定,
+機櫃 PDU N-07-A,機櫃 N-07,,已確認,A
+樓層 PDU 2F-N,機櫃 PDU N-07-B,,推定,
+機櫃 PDU N-07-B,機櫃 N-07,,已確認,B
+樓層 PDU 2F-N,機櫃 PDU N-08-A,,推定,
+機櫃 PDU N-08-A,機櫃 N-08,,已確認,A
+樓層 PDU 2F-N,機櫃 PDU N-08-B,,推定,
+機櫃 PDU N-08-B,機櫃 N-08,,已確認,B
+樓層 PDU 2F-N,機櫃 PDU N-09-A,,推定,
+機櫃 PDU N-09-A,機櫃 N-09,,已確認,A
+樓層 PDU 2F-N,機櫃 PDU N-09-B,,推定,
+機櫃 PDU N-09-B,機櫃 N-09,,已確認,B
+樓層 PDU 2F-N,機櫃 PDU N-10-A,,推定,
+機櫃 PDU N-10-A,機櫃 N-10,,已確認,A
+樓層 PDU 2F-N,機櫃 PDU N-10-B,,推定,
+機櫃 PDU N-10-B,機櫃 N-10,,已確認,B
+樓層 PDU 2F-N,機櫃 PDU N-11-A,,推定,
+機櫃 PDU N-11-A,機櫃 N-11,,已確認,A
+樓層 PDU 2F-N,機櫃 PDU N-11-B,,推定,
+機櫃 PDU N-11-B,機櫃 N-11,,已確認,B
+樓層 PDU 2F-N,機櫃 PDU N-12-A,,推定,
+機櫃 PDU N-12-A,機櫃 N-12,,已確認,A
+樓層 PDU 2F-N,機櫃 PDU N-12-B,,推定,
+機櫃 PDU N-12-B,機櫃 N-12,,已確認,B
+樓層 PDU 2F-N,機櫃 PDU N-13-A,,推定,
+機櫃 PDU N-13-A,機櫃 N-13,,已確認,A
+樓層 PDU 2F-N,機櫃 PDU N-13-B,,推定,
+機櫃 PDU N-13-B,機櫃 N-13,,已確認,B
+樓層 PDU 2F-N,機櫃 PDU N-14-A,,推定,
+機櫃 PDU N-14-A,機櫃 N-14,,已確認,A
+樓層 PDU 2F-N,機櫃 PDU N-14-B,,推定,
+機櫃 PDU N-14-B,機櫃 N-14,,已確認,B
+樓層 PDU 2F-N,機櫃 PDU N-15-A,,推定,
+機櫃 PDU N-15-A,機櫃 N-15,,已確認,A
+樓層 PDU 2F-N,機櫃 PDU N-15-B,,推定,
+機櫃 PDU N-15-B,機櫃 N-15,,已確認,B
+樓層 PDU 2F-N,機櫃 PDU N-16-A,,推定,
+機櫃 PDU N-16-A,機櫃 N-16,,已確認,A
+樓層 PDU 2F-N,機櫃 PDU N-16-B,,推定,
+機櫃 PDU N-16-B,機櫃 N-16,,已確認,B
+樓層 PDU 2F-N,機櫃 PDU N-17-A,,推定,
+機櫃 PDU N-17-A,機櫃 N-17,,已確認,A
+樓層 PDU 2F-N,機櫃 PDU N-17-B,,推定,
+機櫃 PDU N-17-B,機櫃 N-17,,已確認,B
+樓層 PDU 2F-N,機櫃 PDU N-18-A,,推定,
+機櫃 PDU N-18-A,機櫃 N-18,,已確認,A
+樓層 PDU 2F-N,機櫃 PDU N-18-B,,推定,
+機櫃 PDU N-18-B,機櫃 N-18,,已確認,B
+樓層 PDU 2F-N,機櫃 PDU N-19-A,,推定,
+機櫃 PDU N-19-A,機櫃 N-19,,已確認,A
+樓層 PDU 2F-N,機櫃 PDU N-19-B,,推定,
+機櫃 PDU N-19-B,機櫃 N-19,,已確認,B
+樓層 PDU 2F-N,機櫃 PDU N-20-A,,推定,
+機櫃 PDU N-20-A,機櫃 N-20,,已確認,A
+樓層 PDU 2F-N,機櫃 PDU N-20-B,,推定,
+機櫃 PDU N-20-B,機櫃 N-20,,已確認,B
+樓層 PDU 2F-O,機櫃 PDU O-01-A,,推定,
+機櫃 PDU O-01-A,機櫃 O-01,,已確認,A
+樓層 PDU 2F-O,機櫃 PDU O-01-B,,推定,
+機櫃 PDU O-01-B,機櫃 O-01,,已確認,B
+樓層 PDU 2F-O,機櫃 PDU O-02-A,,推定,
+機櫃 PDU O-02-A,機櫃 O-02,,已確認,A
+樓層 PDU 2F-O,機櫃 PDU O-02-B,,推定,
+機櫃 PDU O-02-B,機櫃 O-02,,已確認,B
+樓層 PDU 2F-O,機櫃 PDU O-03-A,,推定,
+機櫃 PDU O-03-A,機櫃 O-03,,已確認,A
+樓層 PDU 2F-O,機櫃 PDU O-03-B,,推定,
+機櫃 PDU O-03-B,機櫃 O-03,,已確認,B
+樓層 PDU 2F-O,機櫃 PDU O-04-A,,推定,
+機櫃 PDU O-04-A,機櫃 O-04,,已確認,A
+樓層 PDU 2F-O,機櫃 PDU O-04-B,,推定,
+機櫃 PDU O-04-B,機櫃 O-04,,已確認,B
+樓層 PDU 2F-O,機櫃 PDU O-05-A,,推定,
+機櫃 PDU O-05-A,機櫃 O-05,,已確認,A
+樓層 PDU 2F-O,機櫃 PDU O-05-B,,推定,
+機櫃 PDU O-05-B,機櫃 O-05,,已確認,B
+樓層 PDU 2F-O,機櫃 PDU O-06-A,,推定,
+機櫃 PDU O-06-A,機櫃 O-06,,已確認,A
+樓層 PDU 2F-O,機櫃 PDU O-06-B,,推定,
+機櫃 PDU O-06-B,機櫃 O-06,,已確認,B
+樓層 PDU 2F-O,機櫃 PDU O-07-A,,推定,
+機櫃 PDU O-07-A,機櫃 O-07,,已確認,A
+樓層 PDU 2F-O,機櫃 PDU O-07-B,,推定,
+機櫃 PDU O-07-B,機櫃 O-07,,已確認,B
+樓層 PDU 2F-O,機櫃 PDU O-08-A,,推定,
+機櫃 PDU O-08-A,機櫃 O-08,,已確認,A
+樓層 PDU 2F-O,機櫃 PDU O-08-B,,推定,
+機櫃 PDU O-08-B,機櫃 O-08,,已確認,B
+樓層 PDU 2F-O,機櫃 PDU O-09-A,,推定,
+機櫃 PDU O-09-A,機櫃 O-09,,已確認,A
+樓層 PDU 2F-O,機櫃 PDU O-09-B,,推定,
+機櫃 PDU O-09-B,機櫃 O-09,,已確認,B
+樓層 PDU 2F-O,機櫃 PDU O-10-A,,推定,
+機櫃 PDU O-10-A,機櫃 O-10,,已確認,A
+樓層 PDU 2F-O,機櫃 PDU O-10-B,,推定,
+機櫃 PDU O-10-B,機櫃 O-10,,已確認,B
+樓層 PDU 2F-O,機櫃 PDU O-11-A,,推定,
+機櫃 PDU O-11-A,機櫃 O-11,,已確認,A
+樓層 PDU 2F-O,機櫃 PDU O-11-B,,推定,
+機櫃 PDU O-11-B,機櫃 O-11,,已確認,B
+樓層 PDU 2F-O,機櫃 PDU O-12-A,,推定,
+機櫃 PDU O-12-A,機櫃 O-12,,已確認,A
+樓層 PDU 2F-O,機櫃 PDU O-12-B,,推定,
+機櫃 PDU O-12-B,機櫃 O-12,,已確認,B
+樓層 PDU 2F-O,機櫃 PDU O-13-A,,推定,
+機櫃 PDU O-13-A,機櫃 O-13,,已確認,A
+樓層 PDU 2F-O,機櫃 PDU O-13-B,,推定,
+機櫃 PDU O-13-B,機櫃 O-13,,已確認,B
+樓層 PDU 2F-O,機櫃 PDU O-14-A,,推定,
+機櫃 PDU O-14-A,機櫃 O-14,,已確認,A
+樓層 PDU 2F-O,機櫃 PDU O-14-B,,推定,
+機櫃 PDU O-14-B,機櫃 O-14,,已確認,B
+樓層 PDU 2F-O,機櫃 PDU O-15-A,,推定,
+機櫃 PDU O-15-A,機櫃 O-15,,已確認,A
+樓層 PDU 2F-O,機櫃 PDU O-15-B,,推定,
+機櫃 PDU O-15-B,機櫃 O-15,,已確認,B
+樓層 PDU 2F-O,機櫃 PDU O-16-A,,推定,
+機櫃 PDU O-16-A,機櫃 O-16,,已確認,A
+樓層 PDU 2F-O,機櫃 PDU O-16-B,,推定,
+機櫃 PDU O-16-B,機櫃 O-16,,已確認,B
+樓層 PDU 2F-O,機櫃 PDU O-17-A,,推定,
+機櫃 PDU O-17-A,機櫃 O-17,,已確認,A
+樓層 PDU 2F-O,機櫃 PDU O-17-B,,推定,
+機櫃 PDU O-17-B,機櫃 O-17,,已確認,B
+樓層 PDU 2F-O,機櫃 PDU O-18-A,,推定,
+機櫃 PDU O-18-A,機櫃 O-18,,已確認,A
+樓層 PDU 2F-O,機櫃 PDU O-18-B,,推定,
+機櫃 PDU O-18-B,機櫃 O-18,,已確認,B
+樓層 PDU 2F-O,機櫃 PDU O-19-A,,推定,
+機櫃 PDU O-19-A,機櫃 O-19,,已確認,A
+樓層 PDU 2F-O,機櫃 PDU O-19-B,,推定,
+機櫃 PDU O-19-B,機櫃 O-19,,已確認,B
+樓層 PDU 2F-O,機櫃 PDU O-20-A,,推定,
+機櫃 PDU O-20-A,機櫃 O-20,,已確認,A
+樓層 PDU 2F-O,機櫃 PDU O-20-B,,推定,
+機櫃 PDU O-20-B,機櫃 O-20,,已確認,B
+樓層 PDU 2F-P,機櫃 PDU P-01-A,,推定,
+機櫃 PDU P-01-A,機櫃 P-01,,已確認,A
+樓層 PDU 2F-P,機櫃 PDU P-01-B,,推定,
+機櫃 PDU P-01-B,機櫃 P-01,,已確認,B
+樓層 PDU 2F-P,機櫃 PDU P-02-A,,推定,
+機櫃 PDU P-02-A,機櫃 P-02,,已確認,A
+樓層 PDU 2F-P,機櫃 PDU P-02-B,,推定,
+機櫃 PDU P-02-B,機櫃 P-02,,已確認,B
+樓層 PDU 2F-P,機櫃 PDU P-03-A,,推定,
+機櫃 PDU P-03-A,機櫃 P-03,,已確認,A
+樓層 PDU 2F-P,機櫃 PDU P-03-B,,推定,
+機櫃 PDU P-03-B,機櫃 P-03,,已確認,B
+樓層 PDU 2F-P,機櫃 PDU P-04-A,,推定,
+機櫃 PDU P-04-A,機櫃 P-04,,已確認,A
+樓層 PDU 2F-P,機櫃 PDU P-04-B,,推定,
+機櫃 PDU P-04-B,機櫃 P-04,,已確認,B
+樓層 PDU 2F-P,機櫃 PDU P-05-A,,推定,
+機櫃 PDU P-05-A,機櫃 P-05,,已確認,A
+樓層 PDU 2F-P,機櫃 PDU P-05-B,,推定,
+機櫃 PDU P-05-B,機櫃 P-05,,已確認,B
+樓層 PDU 2F-P,機櫃 PDU P-06-A,,推定,
+機櫃 PDU P-06-A,機櫃 P-06,,已確認,A
+樓層 PDU 2F-P,機櫃 PDU P-06-B,,推定,
+機櫃 PDU P-06-B,機櫃 P-06,,已確認,B
+樓層 PDU 2F-P,機櫃 PDU P-07-A,,推定,
+機櫃 PDU P-07-A,機櫃 P-07,,已確認,A
+樓層 PDU 2F-P,機櫃 PDU P-07-B,,推定,
+機櫃 PDU P-07-B,機櫃 P-07,,已確認,B
+樓層 PDU 2F-P,機櫃 PDU P-08-A,,推定,
+機櫃 PDU P-08-A,機櫃 P-08,,已確認,A
+樓層 PDU 2F-P,機櫃 PDU P-08-B,,推定,
+機櫃 PDU P-08-B,機櫃 P-08,,已確認,B
+樓層 PDU 2F-P,機櫃 PDU P-09-A,,推定,
+機櫃 PDU P-09-A,機櫃 P-09,,已確認,A
+樓層 PDU 2F-P,機櫃 PDU P-09-B,,推定,
+機櫃 PDU P-09-B,機櫃 P-09,,已確認,B
+樓層 PDU 2F-P,機櫃 PDU P-10-A,,推定,
+機櫃 PDU P-10-A,機櫃 P-10,,已確認,A
+樓層 PDU 2F-P,機櫃 PDU P-10-B,,推定,
+機櫃 PDU P-10-B,機櫃 P-10,,已確認,B
+樓層 PDU 2F-P,機櫃 PDU P-11-A,,推定,
+機櫃 PDU P-11-A,機櫃 P-11,,已確認,A
+樓層 PDU 2F-P,機櫃 PDU P-11-B,,推定,
+機櫃 PDU P-11-B,機櫃 P-11,,已確認,B
+樓層 PDU 2F-P,機櫃 PDU P-12-A,,推定,
+機櫃 PDU P-12-A,機櫃 P-12,,已確認,A
+樓層 PDU 2F-P,機櫃 PDU P-12-B,,推定,
+機櫃 PDU P-12-B,機櫃 P-12,,已確認,B
+樓層 PDU 2F-P,機櫃 PDU P-13-A,,推定,
+機櫃 PDU P-13-A,機櫃 P-13,,已確認,A
+樓層 PDU 2F-P,機櫃 PDU P-13-B,,推定,
+機櫃 PDU P-13-B,機櫃 P-13,,已確認,B
+樓層 PDU 2F-P,機櫃 PDU P-14-A,,推定,
+機櫃 PDU P-14-A,機櫃 P-14,,已確認,A
+樓層 PDU 2F-P,機櫃 PDU P-14-B,,推定,
+機櫃 PDU P-14-B,機櫃 P-14,,已確認,B
+樓層 PDU 2F-P,機櫃 PDU P-15-A,,推定,
+機櫃 PDU P-15-A,機櫃 P-15,,已確認,A
+樓層 PDU 2F-P,機櫃 PDU P-15-B,,推定,
+機櫃 PDU P-15-B,機櫃 P-15,,已確認,B
+樓層 PDU 2F-P,機櫃 PDU P-16-A,,推定,
+機櫃 PDU P-16-A,機櫃 P-16,,已確認,A
+樓層 PDU 2F-P,機櫃 PDU P-16-B,,推定,
+機櫃 PDU P-16-B,機櫃 P-16,,已確認,B
+樓層 PDU 2F-P,機櫃 PDU P-17-A,,推定,
+機櫃 PDU P-17-A,機櫃 P-17,,已確認,A
+樓層 PDU 2F-P,機櫃 PDU P-17-B,,推定,
+機櫃 PDU P-17-B,機櫃 P-17,,已確認,B
+樓層 PDU 2F-P,機櫃 PDU P-18-A,,推定,
+機櫃 PDU P-18-A,機櫃 P-18,,已確認,A
+樓層 PDU 2F-P,機櫃 PDU P-18-B,,推定,
+機櫃 PDU P-18-B,機櫃 P-18,,已確認,B
+樓層 PDU 2F-P,機櫃 PDU P-19-A,,推定,
+機櫃 PDU P-19-A,機櫃 P-19,,已確認,A
+樓層 PDU 2F-P,機櫃 PDU P-19-B,,推定,
+機櫃 PDU P-19-B,機櫃 P-19,,已確認,B
+樓層 PDU 2F-P,機櫃 PDU P-20-A,,推定,
+機櫃 PDU P-20-A,機櫃 P-20,,已確認,A
+樓層 PDU 2F-P,機櫃 PDU P-20-B,,推定,
+機櫃 PDU P-20-B,機櫃 P-20,,已確認,B
+UPS-1,空調箱 AHU-2F-1,,推定,

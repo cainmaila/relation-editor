@@ -1,13 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { buildGraphIndex } from './graph-index';
-import { graphMock, idcMock } from './mock';
+import { csvSeed } from './csv-seed';
 import type { Graph } from './types';
 
-const full = (): Graph => {
-	const a = graphMock();
-	const b = idcMock();
-	return { nodes: [...a.nodes, ...b.nodes], edges: [...a.edges, ...b.edges] };
-};
+const full = (): Graph => csvSeed();
 
 describe('buildGraphIndex', () => {
 	it('ID 對應與鄰接表與整張圖一致', () => {

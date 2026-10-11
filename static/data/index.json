@@ -1,0 +1,20 @@
+[
+	"nodes/空間.csv",
+	"nodes/電力.csv",
+	"nodes/空調.csv",
+	"nodes/網路.csv",
+	"nodes/消防.csv",
+	"nodes/CCTV.csv",
+	"nodes/通用.csv",
+	"edges/包含.csv",
+	"edges/供電.csv",
+	"edges/冷卻.csv",
+	"edges/連線.csv",
+	"edges/監測.csv",
+	"idc/nodes/機框.csv",
+	"idc/nodes/主機.csv",
+	"idc/nodes/客戶.csv",
+	"idc/edges/包含.csv",
+	"idc/edges/承載.csv",
+	"idc/edges/服務.csv"
+]
