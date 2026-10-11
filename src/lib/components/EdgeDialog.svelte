@@ -134,6 +134,8 @@
 							aria-hidden="true"
 							class="ml-auto truncate text-[11px] text-rose-300/80">{err}</span
 						>
+					{:else if t.hint}
+						<span class="ml-auto truncate text-[11px] text-slate-500">{t.hint}</span>
 					{/if}
 				</label>
 			{/each}

@@ -15,6 +15,8 @@
 		keys?: string;
 		/** 停用原因；有值即停用 */
 		why?: string | null;
+		/** 可用時的補充說明 */
+		hint?: string;
 		danger?: boolean;
 		run?: () => void;
 		sub?: Item[];
@@ -178,6 +180,7 @@
 						icon: t.name,
 						color: EDGE_COLORS[t.name],
 						why: errs.get(t.name),
+						hint: t.hint,
 						run: done(() => editor.addEdge(from, to, t.name))
 					})),
 				{
@@ -267,7 +270,9 @@
 				</span>
 				<span class="flex min-w-0 flex-col">
 					<span class="truncate">{it.label}</span>
-					{#if it.why}<span class="text-[11px] leading-snug text-rose-300/70">{it.why}</span>{/if}
+					{#if it.why}<span class="text-[11px] leading-snug text-rose-300/70">{it.why}</span
+						>{:else if it.hint}<span class="text-[11px] leading-snug text-slate-500">{it.hint}</span
+						>{/if}
 				</span>
 				{#if it.sub}
 					<Icon name="chevron" class="ml-auto size-3 text-slate-500" />

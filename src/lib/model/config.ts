@@ -43,6 +43,8 @@ export interface EdgeType {
 	toLabel?: string;
 	/** 只由 IDC 資料產生，不能在編輯器新增 */
 	idc?: boolean;
+	/** 選單上的一句用意：通用節點一端不受限制時，同時能選的類型靠這句分辨 */
+	hint?: string;
 }
 
 // 本 POC 所有邊類型預設方向皆為單向
@@ -52,20 +54,30 @@ export const EDGE_TYPES: EdgeType[] = [
 		from: ['空間', '通用節點', '機框'],
 		fromLabel: '空間、通用節點、機櫃或機框',
 		to: ['空間', 'Switch', '機框', '主機'],
-		toLabel: '空間、網路設備、機框或主機'
+		toLabel: '空間、網路設備、機框或主機',
+		hint: '範圍內有這個對象'
 	},
 	{
 		name: '供電',
 		from: ['電力'],
-		fromLabel: '電力設備'
+		fromLabel: '電力設備',
+		hint: '電源供電給這個負載'
 	},
-	{ name: '冷卻', from: ['空調'], fromLabel: '空調設備', to: ['空間'], toLabel: '空間' },
+	{
+		name: '冷卻',
+		from: ['空調'],
+		fromLabel: '空調設備',
+		to: ['空間'],
+		toLabel: '空間',
+		hint: '空調設備冷卻這個空間'
+	},
 	{
 		name: '連線',
 		from: ['Switch'],
 		fromLabel: 'Switch',
 		to: ['Switch', '主機'],
-		toLabel: 'Switch 或主機'
+		toLabel: 'Switch 或主機',
+		hint: '網路設備連到這台設備'
 	},
 	{ name: '服務', from: ['機框'], fromLabel: '機框', to: ['客戶'], toLabel: '客戶', idc: true },
 	{ name: '承載', from: ['主機'], fromLabel: '主機', to: ['機框'], toLabel: '機框', idc: true },
@@ -74,7 +86,8 @@ export const EDGE_TYPES: EdgeType[] = [
 		from: ['偵測器', '攝影機'],
 		fromLabel: '偵測器或攝影機',
 		to: ['空間', '通用節點'],
-		toLabel: '空間或通用節點'
+		toLabel: '空間或通用節點',
+		hint: '偵測器／攝影機看這個對象'
 	}
 ];
 

@@ -255,6 +255,13 @@ describe('Editor.setPage', () => {
 		expect(e.connecting).toBeNull();
 	});
 
+	it('文字篩選不跨畫面', () => {
+		const e = new Editor();
+		e.outline.set({ text: 'A-01' });
+		e.setPage('edit');
+		expect(e.outline.text).toBe('');
+	});
+
 	it('編輯頁看不到的選取在切頁時清掉', () => {
 		const e = new Editor();
 		e.select({ kind: 'node', id: e.graph.nodes[0].id });
@@ -299,6 +306,19 @@ describe('編輯頁版面與視野', () => {
 		e.setPage('edit');
 		expect(e.canvasViewport).toEqual({ x: 10, y: 20, zoom: 0.5 });
 		expect(e.editPositions.get('機櫃 A-01')).toEqual(p2.get('機櫃 A-01'));
+	});
+
+	it('建邊後整張重排：新節點落到通用節點左邊（流向由左往右）', () => {
+		const e = new Editor();
+		const G = '2F A 排監視與偵測範圍';
+		e.addToWork([G]);
+		e.setPage('edit');
+		const cam = e.addNode('攝影機', '攝影機 CAM-04')!;
+		void e.editPositions;
+		expect(e.addEdge(cam, G, '監測')).toBe(true);
+		const p = e.editPositions;
+		expect(p).toEqual(e.editLayout.pos);
+		expect(p.get(cam)!.x).toBeLessThan(p.get(G)!.x);
 	});
 
 	it('畫面外的邊不能在編輯頁被改拓撲（刪除／改方向）', () => {

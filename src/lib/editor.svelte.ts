@@ -260,8 +260,9 @@ export class Editor {
 		this.menu = null;
 		this.dialog = null;
 		this.hoverEdge = this.hoverNode = null;
-		// 問題篩選只在全圖
+		// 問題篩選只在全圖；文字篩選兩個畫面各自獨立，不帶過去
 		if (page === 'edit') this.issue = null;
+		this.outline.set({ text: '' });
 		// 視野不重設：編輯頁沿用上次的位置與縮放（第一次進入由畫布整張入鏡）
 		if (!keep) this.selected = null;
 	}
@@ -357,13 +358,15 @@ export class Editor {
 		void [this.topologyRevision, this.working, this.#shape];
 		return untrack(() => layout(this.canvas));
 	});
-	/** 檢視操作（收疊、展開、重新排版）才整張重排；系統勾選不影響編輯頁 */
+	/** 檢視操作（收疊、展開、重新排版）與建／刪邊才整張重排；系統勾選不影響編輯頁 */
 	#viewKey = $derived(
 		[
 			// 疊卡消失時的過期 key 清除不算檢視操作
 			this.expanded.filter((k) => this.stacks.has(k)).join(),
 			this.stacking,
-			this.relayout
+			this.relayout,
+			// 建／刪邊（含刪節點帶走的邊）後整張重排，新節點才落在流向上正確的欄
+			this.graph.edges.length
 		].join('/')
 	);
 	#lastPos: { key: string; pos: ReturnType<typeof layout>['pos'] } | undefined;

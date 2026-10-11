@@ -1208,7 +1208,7 @@ test.describe('手測回報', () => {
 		).toHaveAttribute('style', /stroke-width: 1.25/);
 	});
 
-	test('選取疊卡成員、新增邊都不重排；右鍵「重新排版」才重排', async ({ page }) => {
+	test('選取疊卡成員不重排；新增邊後整張重排（與右鍵「重新排版」結果相同）', async ({ page }) => {
 		await toEdit(page, [
 			'樓層 PDU 2F-A',
 			'機櫃 PDU A-05-A',
@@ -1227,11 +1227,11 @@ test.describe('手測回報', () => {
 		await outline(page).getByRole('button', { name: '機櫃 PDU A-05-A' }).click();
 		expect(await at()).toEqual(before);
 		await addEdge(page, '偵測器 SD-01', '機櫃 A-03', '監測');
-		expect(await at()).toEqual(before);
+		const after = await at();
 		await page.keyboard.press('Escape');
 		await pane(page).click({ button: 'right', position: { x: 5, y: 5 } });
 		await menu(page).getByRole('menuitem', { name: '重新排版' }).click();
-		expect(await at()).not.toEqual(before);
+		expect(await at()).toEqual(after);
 	});
 
 	test('系統隱藏時從大綱點節點，自動勾回該系統並選取（全圖）', async ({ page }) => {
