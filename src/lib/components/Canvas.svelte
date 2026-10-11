@@ -1,22 +1,22 @@
 <script lang="ts" module>
 	export const EDGE_COLORS: Record<string, string> = {
 		包含: '#94a3b8',
-		供電: '#fb923c',
+		供電: '#c084fc',
 		冷卻: '#22d3ee',
 		連線: '#60a5fa',
 		服務: '#4ade80',
 		承載: '#e879f9',
-		監測: '#f472b6'
+		監測: '#2dd4bf'
 	};
-	/** 系統識別色：節點色條、篩選膠囊、圖例共用 */
+	/** 系統識別色：節點色條、篩選膠囊、圖例共用。只用冷色：紅／橘／黃保留給告警 */
 	export const SYSTEM_COLORS: Record<string, string> = {
 		空間: '#a5b4fc',
 		通用: '#e2e8f0',
-		電力: '#fb923c',
+		電力: '#c084fc',
 		空調: '#22d3ee',
 		網路: '#60a5fa',
-		消防: '#fb7185',
-		CCTV: '#f472b6',
+		消防: '#2dd4bf',
+		CCTV: '#e879f9',
 		IDC: '#4ade80'
 	};
 </script>

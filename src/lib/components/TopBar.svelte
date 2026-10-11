@@ -56,7 +56,7 @@
 		>
 		<h1 class="text-sm font-semibold text-slate-50">關係鏈編輯器</h1>
 		<span
-			class="rounded-full border border-amber-300/20 px-1.5 py-px text-[10px] text-amber-200/80"
+			class="rounded-full border border-slate-500/40 px-1.5 py-px text-[10px] text-slate-300/80"
 			title="示意資料，重新整理即還原，不會存檔">示意</span
 		>
 	</div>

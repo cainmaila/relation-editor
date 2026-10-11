@@ -8,6 +8,7 @@
   - 遠景點改柔光核心＋光暈（疊加混色）；detail 球改不打光；星塵背景；標籤細框
   - `GraphView.svelte`：UnrealBloom＋OutputPass；背景 `#05070f` 改走 `scene.background`（透過 composer 時 clear color 會被二次編碼成灰）；軟體 GL（SwiftShader，headless 測試）略過 bloom，否則 GraphView 元件測試慢 3 倍逾時
   - 實機 M2：10k 節點／100k 邊，拖曳／滾輪／拉近 p95 17.7ms
+  - 冷色系：電力紫 `#c084fc`、消防青綠 `#2dd4bf`、CCTV 洋紅 `#e879f9`；邊 供電紫、監測青綠；「示意」徽章改 slate。紅／橘／黃只留給告警語意（未處理、無客戶路徑、刪除、錯誤）
 - **Todo:** 使用者看過視覺後再調
 - **Notes:** 未做：idle 自轉、高亮邊流動光點、fog（自轉會讓 e2e／量測相機不穩定）；背景有極淡的 bloom 色階帶
 
