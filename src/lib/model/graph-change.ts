@@ -1,7 +1,7 @@
 // 圖的命令、變更集與 revision 分類：所有標準圖寫入都經 applyCommand，先驗證完全部欄位才產生新狀態。
 import { CONFIRM_STATES, IDC_MESSAGE, NODE_TYPES } from './config';
 import { checkDeleteNode, validateEdge } from './graph';
-import { buildGraphIndex, type EdgeId, type GraphIndex, type NodeId } from './graph-index';
+import { buildGraphIndex, edgesOf, type EdgeId, type GraphIndex, type NodeId } from './graph-index';
 import type { GEdge, GNode, Graph, Props } from './types';
 
 export type { EdgeId, GraphIndex, NodeId } from './graph-index';
@@ -167,6 +167,17 @@ function plan(s: GraphState, cmd: GraphCommand): CommandResult<Plan> {
 			const { bidirectional, props } = cmd.patch;
 			const err = checkProps(props);
 			if (err) return fail(err);
+			if (bidirectional && !cur.bidirectional) {
+				const back = edgesOf(index, index.outgoing.get(cur.to)).find(
+					(e) => e.to === cur.from && e.type === cur.type
+				);
+				if (back) {
+					const name = (id: string) => index.nodeById.get(id)?.name ?? id;
+					return fail(
+						`反方向已有一條「${cur.type}」邊，請先刪除「${name(back.from)} → ${name(back.to)}」才能改為雙向`
+					);
+				}
+			}
 			const next: GEdge = {
 				...cur,
 				...(bidirectional !== undefined && { bidirectional }),

@@ -68,6 +68,24 @@ describe('revision 分類', () => {
 		consistent(s2);
 	});
 
+	it('T-B5c：兩條反向單向邊都在時，改雙向擋下並指出要先刪哪條', () => {
+		const s0 = initialGraphState(full());
+		const s1 = run(s0, {
+			kind: 'addEdge',
+			edge: {
+				id: 'back',
+				type: '連線',
+				from: '匯聚 Switch AGG-A',
+				to: 'Core Switch-1',
+				bidirectional: false,
+				props: {}
+			}
+		}).state;
+		expect(reject(s1, { kind: 'updateEdge', id: LINK, patch: { bidirectional: true } })).toBe(
+			'反方向已有一條「連線」邊，請先刪除「匯聚 Switch AGG-A → Core Switch-1」才能改為雙向'
+		);
+	});
+
 	it('節點／邊增刪是拓撲變更，索引維持一致', () => {
 		const s0 = initialGraphState(full());
 		const s1 = run(s0, {

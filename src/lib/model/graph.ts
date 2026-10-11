@@ -110,6 +110,9 @@ export function validateEdge(
 	if (!matches(t.to, b)) return `「${t.name}」只能連到${t.toLabel}`;
 	// 機櫃→機框、機框→主機的包含關係屬 IDC 資料
 	if (t.name === '包含' && b.readonly) return IDC_MESSAGE;
+	// 同方向同類型重複；反方向只在原邊雙向時算重複（單向的反方向是另一個影響方向）
+	for (const e of edgesOf(idx, idx.incident.get(from)))
+		if (e.type === type && (e.to === to || (e.from === to && e.bidirectional))) return '已有這條邊';
 	return null;
 }
 

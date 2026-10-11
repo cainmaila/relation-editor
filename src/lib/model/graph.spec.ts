@@ -105,6 +105,22 @@ describe('編輯', () => {
 		expect(cust(g, 'x')).toEqual(['客戶乙', '客戶甲']);
 	});
 
+	it('情境 9／11：重複邊（T-B5a～b、T-B13a）', () => {
+		const g = full();
+		const G = '2F A 排監視與偵測範圍';
+		// 同起點、終點、類型
+		expect(validateEdge(g, '偵測器 SD-01', G, '監測')).toBe('已有這條邊');
+		// 同兩端不同類型照常可建
+		expect(validateEdge(g, 'A 排', '機櫃 A-01', '供電')).not.toBe('已有這條邊');
+		// 原邊單向：反方向同類型可建
+		const C = 'Core Switch-1';
+		const A = '匯聚 Switch AGG-A';
+		expect(validateEdge(g, A, C, '連線')).toBeNull();
+		// 原邊雙向：反方向也算重複
+		g.edges.find((e) => e.from === C && e.to === A)!.bidirectional = true;
+		expect(validateEdge(g, A, C, '連線')).toBe('已有這條邊');
+	});
+
 	it('情境 10：連接限制', () => {
 		const g = full();
 		expect(validateEdge(g, '機櫃 A-01', 'UPS-1', '供電')).toBe('「供電」只能由電力設備連出');
@@ -146,7 +162,7 @@ describe('編輯', () => {
 	it('情境 13：IDC 唯讀', () => {
 		const g = full();
 		expect(checkDeleteNode(g, '客戶甲')).toBe('由 IDC機櫃配置管理維護');
-		expect(validateEdge(g, 'ToR Switch A-04', '主機 H-05', '連線')).toBeNull();
+		expect(validateEdge(g, 'ToR Switch A-03', '主機 H-05', '連線')).toBeNull();
 		expect(validateEdge(g, '機框 A-01-F1', '客戶乙', '服務')).toBe('由 IDC機櫃配置管理維護');
 	});
 });

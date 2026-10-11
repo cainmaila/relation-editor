@@ -425,7 +425,7 @@ test.describe('編輯（編輯頁）', () => {
 	}) => {
 		// P8：預覽線若在 viewport 裡（夾在上千條邊與卡片之間），每幀都要重畫整個 viewport；
 		// 改畫在 viewport 外的螢幕座標層，外觀與起訖點必須和原本一樣
-		await toEdit(page, ['偵測器 SD-01', G, 'UPS-1']);
+		await toEdit(page, ['偵測器 SD-01', G, 'UPS-1', '機櫃 A-01']);
 		await page.getByRole('button', { name: '全部入鏡' }).click();
 		await settle(page);
 		// 真滾輪縮放＋真拖曳平移後再拉線：座標換算要跟著相機
@@ -442,7 +442,7 @@ test.describe('編輯（編輯頁）', () => {
 		await clickPane(page);
 
 		const from = (await node(page, '偵測器 SD-01').boundingBox())!;
-		const to = (await node(page, G).boundingBox())!;
+		const to = (await node(page, '機櫃 A-01').boundingBox())!;
 		const bad = (await node(page, 'UPS-1').boundingBox())!;
 		const preview = page.locator('svg.connection-preview');
 		const path = preview.locator('path');
@@ -504,7 +504,7 @@ test.describe('編輯（編輯頁）', () => {
 		await page.mouse.up();
 		await expect(path).toHaveCount(0);
 		const m = page.getByRole('menu', { name: '建立邊' });
-		await expect(m).toContainText(`偵測器 SD-01 → ${G}`);
+		await expect(m).toContainText(`偵測器 SD-01 → 機櫃 A-01`);
 		const n0 = await graphEdges(page).count();
 		await m.getByRole('menuitem', { name: '監測' }).click();
 		await expect(graphEdges(page)).toHaveCount(n0 + 1);
@@ -518,7 +518,7 @@ test.describe('編輯（編輯頁）', () => {
 		await settle(page);
 		await clickPane(page);
 		const from = (await node(page, '偵測器 SD-01').boundingBox())!;
-		const to = (await node(page, G).boundingBox())!;
+		const to = (await node(page, '機櫃 A-01').boundingBox())!;
 		await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
 		await page.mouse.down();
 		await page.mouse.move(from.x + from.width / 2 + 20, from.y + from.height + 30, { steps: 4 });
@@ -564,7 +564,9 @@ test.describe('編輯（編輯頁）', () => {
 		await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 6 });
 		await expect(page.locator('.svelte-flow__handle.connectingto.valid')).toHaveCount(1);
 		await page.mouse.up();
-		await expect(page.getByRole('menu', { name: '建立邊' })).toContainText(`偵測器 SD-01 → ${G}`);
+		await expect(page.getByRole('menu', { name: '建立邊' })).toContainText(
+			`偵測器 SD-01 → 機櫃 A-01`
+		);
 	});
 
 	test('情境 10：違反連接限制時擋下', async ({ page }) => {

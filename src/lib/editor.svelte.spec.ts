@@ -10,7 +10,15 @@ import { idsKey } from './universe/layout';
 import type { LayoutWorkerLike } from './universe/runtime';
 
 describe('Editor.addNode', () => {
-	it('名稱留空時用「類型 N」且不重複', () => {
+	it('情境 8：對話框名稱空白擋下，不建立', () => {
+		const e = new Editor();
+		const n = e.graph.nodes.length;
+		expect(e.addNode('攝影機', '  ')).toBeNull();
+		expect(e.message).toBe('請填名稱');
+		expect(e.graph.nodes).toHaveLength(n);
+	});
+
+	it('沒給名稱（右鍵快速新增）時用「類型 N」且不重複', () => {
 		const e = new Editor();
 		const a = e.addNode('攝影機')!;
 		const b = e.addNode('攝影機')!;

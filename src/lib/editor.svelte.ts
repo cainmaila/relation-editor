@@ -550,16 +550,22 @@ export class Editor {
 		this.universe.sync(t, this.topologyRevision);
 	}
 
-	/** 新節點草稿：名稱留空時用「類型 N」；類型不可建立時回傳 null 並顯示原因 */
-	#draftNode(type: string, name = ''): GNode | null {
-		const err = !type ? '請選擇類型' : nodeType(type).idc ? IDC_MESSAGE : '';
+	/** 新節點草稿：沒給名稱（快速新增）時用「類型 N」；給了空白名稱或類型不可建立時回傳 null 並顯示原因 */
+	#draftNode(type: string, name?: string): GNode | null {
+		const err = !type
+			? '請選擇類型'
+			: nodeType(type).idc
+				? IDC_MESSAGE
+				: name !== undefined && !name.trim()
+					? '請填名稱'
+					: '';
 		if (err) {
 			this.fail(err);
 			return null;
 		}
 		let n = 1;
-		while (!name.trim() && this.graph.nodes.some((x) => x.name === `${type} ${n}`)) n++;
-		return { id: uid('n'), type, name: name.trim() || `${type} ${n}`, props: {} };
+		while (!name && this.graph.nodes.some((x) => x.name === `${type} ${n}`)) n++;
+		return { id: uid('n'), type, name: name?.trim() || `${type} ${n}`, props: {} };
 	}
 
 	/** 編輯器手拉的邊沒有資料來源，依 PRD 定義為推定 */
@@ -585,8 +591,8 @@ export class Editor {
 		return this.fail('節點不在編輯頁：先加入編輯頁才能修改');
 	}
 
-	/** 名稱留空時用「類型 N」；工作區 admission 通過才建立並加入，回傳新節點 id，失敗回傳 null */
-	addNode(type: string, name = ''): string | null {
+	/** 不給名稱時用「類型 N」（右鍵快速新增）；給了就不可空白。工作區 admission 通過才建立並加入，回傳新節點 id，失敗回傳 null */
+	addNode(type: string, name?: string): string | null {
 		const node = this.#draftNode(type, name);
 		if (!node) return null;
 		const a = this.#admit([], { newNodes: 1 });
