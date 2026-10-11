@@ -25,6 +25,7 @@ describe('Editor.addNode', () => {
 		expect(e.node(a)!.name).toBe('攝影機 1');
 		expect(e.node(b)!.name).toBe('攝影機 2');
 		expect(e.selected).toEqual({ kind: 'node', id: b });
+		expect(e.naming).toBe(b);
 	});
 
 	it('IDC 類型不能新增', () => {
@@ -222,12 +223,13 @@ describe('編輯頁 working', () => {
 		expect(e.node(id)?.type).toBe('排');
 		expect(e.working).toEqual([from, id]);
 		expect(e.revision).toBe(2);
-		expect(e.selected?.kind).toBe('edge');
-		expect(e.edge(e.selected!.id)).toMatchObject({ from, to: id, type: '包含' });
+		expect(e.selected).toEqual({ kind: 'node', id });
+		expect(e.naming).toBe(id);
+		expect(e.outgoingEdges(from).find((x) => x.to === id)).toMatchObject({ type: '包含' });
 		// 反向：新節點為起點
 		const back = e.addNodeWithEdge('攝影機', '機櫃 A-01', '監測', true)!;
 		expect(e.working.slice(-2)).toEqual(['機櫃 A-01', back]);
-		expect(e.edge(e.selected!.id)).toMatchObject({ from: back, to: '機櫃 A-01', type: '監測' });
+		expect(e.outgoingEdges(back)).toMatchObject([{ from: back, to: '機櫃 A-01', type: '監測' }]);
 		// 滿額：新節點＋缺少的端點放不下時什麼都不建
 		e.working = isolated(e, WORKSPACE_NODE_LIMIT)
 			.filter((x) => x !== '機櫃 A-02')
@@ -314,6 +316,7 @@ describe('編輯頁版面與視野', () => {
 		e.addToWork([G]);
 		e.setPage('edit');
 		const cam = e.addNode('攝影機', '攝影機 CAM-04')!;
+		expect(e.naming).toBeNull();
 		void e.editPositions;
 		expect(e.addEdge(cam, G, '監測')).toBe(true);
 		const p = e.editPositions;

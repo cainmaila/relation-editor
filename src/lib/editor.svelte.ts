@@ -114,6 +114,8 @@ export class Editor {
 	menu = $state<Menu | null>(null);
 	/** 剛新增的節點，畫布上脈衝提示 */
 	fresh = $state<string | null>(null);
+	/** 自動命名的新節點：詳情欄名稱欄位聚焦並全選，等使用者直接改名 */
+	naming = $state<string | null>(null);
 	/** 畫布視野請求：Canvas 依 seq 變化縮放到 ids（空＝全部） */
 	view = $state({ ids: [] as string[], seq: 0 });
 	panels = $state({ left: true, right: true });
@@ -602,6 +604,7 @@ export class Editor {
 		if (!a || !this.execute({ kind: 'addNode', node })) return null;
 		this.working = [...a.ids, node.id];
 		this.fresh = node.id;
+		if (name === undefined) this.naming = node.id;
 		this.dialog = null;
 		this.reveal(node.id);
 		return node.id;
@@ -626,9 +629,10 @@ export class Editor {
 		if (!this.execute({ kind: 'addNode', node }, { kind: 'addEdge', edge })) return null;
 		this.working = [...a.ids, node.id];
 		this.fresh = node.id;
+		this.naming = node.id;
 		this.dialog = null;
 		this.menu = null;
-		this.select({ kind: 'edge', id: edge.id });
+		this.select({ kind: 'node', id: node.id });
 		return node.id;
 	}
 

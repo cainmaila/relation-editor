@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import type { Editor } from '#lib/editor.svelte.js';
 	import { CONFIRM_STATES, IDC_MESSAGE, UNREACHABLE_LABEL, nodeType } from '#lib/model/config.js';
 	import { EDGE_COLORS, SYSTEM_COLORS } from './Canvas.svelte';
@@ -47,36 +48,43 @@
 		bidirectional: edge?.bidirectional ?? false,
 		props: Object.entries((node ?? edge)?.props ?? {}).map(([key, value]) => ({ key, value }))
 	});
-	/** 本地草稿：選取或標準資料換新物件時重建；儲存才經命令一次寫回，標準圖不直接 bind */
+	/** 本地草稿：選取或標準資料換新物件時重建；欄位送出（Enter／離開）或下拉一改就經命令寫回，標準圖不直接 bind */
 	const draft = $derived.by(() => {
 		const d = $state(fromEntity());
 		return d;
 	});
-	const draftProps = () => Object.fromEntries(draft.props.map((p) => [p.key, p.value]));
 	const same = (a: Record<string, string>, b: Record<string, string>) =>
 		Object.keys(a).length === Object.keys(b).length && Object.keys(a).every((k) => a[k] === b[k]);
-	const dirty = $derived(
-		node
-			? draft.name !== node.name || !same(draftProps(), node.props)
-			: edge
-				? draft.bidirectional !== edge.bidirectional || !same(draftProps(), edge.props)
-				: false
-	);
 
-	function save() {
-		if (!dirty) return;
-		const props = draftProps();
-		if (node) editor.updateNode(node.id, { name: draft.name, props }, node);
-		else if (edge) editor.updateEdge(edge.id, { bidirectional: draft.bidirectional, props }, edge);
+	/** 草稿與目前標準資料不同才寫回，以目前的實體為基準 */
+	function commit(sel: typeof editor.selected, d: Draft) {
+		const props = Object.fromEntries(d.props.map((p) => [p.key, p.value]));
+		const n = sel?.kind === 'node' ? editor.node(sel.id) : undefined;
+		const e = sel?.kind === 'edge' ? editor.edge(sel.id) : undefined;
+		if (n && (d.name !== n.name || !same(props, n.props)))
+			editor.updateNode(n.id, { name: d.name, props }, n);
+		else if (e && (d.bidirectional !== e.bidirectional || !same(props, e.props)))
+			editor.updateEdge(e.id, { bidirectional: d.bidirectional, props }, e);
 	}
+	const save = () => commit(editor.selected, draft);
 
-	function cancel() {
-		Object.assign(draft, fromEntity());
-		propKey = propValue = '';
-		editor.message = '';
-	}
+	// 保險：換選取時欄位可能沒經過 blur 就卸載，離開前把上一個實體的草稿寫回
+	$effect(() => {
+		const d = draft;
+		const sel = untrack(() => editor.selected);
+		return () => untrack(() => commit(sel, d));
+	});
 
-	/** 只加到草稿；按儲存才寫回 */
+	let nameInput = $state<HTMLInputElement>();
+	// 自動命名的新節點：等右鍵選單收起後聚焦名稱並全選，直接打字即改名
+	$effect(() => {
+		if (!node || editor.naming !== node.id || !nameInput || editor.menu) return;
+		nameInput.focus();
+		nameInput.select();
+		editor.naming = null;
+	});
+
+	/** 加到草稿後立即寫回 */
 	function addProp() {
 		const key = propKey.trim();
 		if (!key) return;
@@ -86,6 +94,7 @@
 		if (hit) hit.value = propValue;
 		else draft.props.push({ key, value: propValue });
 		propKey = propValue = '';
+		save();
 	}
 
 	/** 加入編輯頁：整批 admission，訊息由 Editor 給（新增節點與帶入邊數） */
@@ -166,11 +175,23 @@
 				<dt class="text-xs text-slate-400">{p.key}</dt>
 				<dd>
 					{#if p.key === '確認狀態'}
-						<select aria-label={p.key} bind:value={p.value} disabled={ro} class="field py-1">
+						<select
+							aria-label={p.key}
+							bind:value={p.value}
+							onchange={save}
+							disabled={ro}
+							class="field py-1"
+						>
 							{#each CONFIRM_STATES as v (v)}<option>{v}</option>{/each}
 						</select>
 					{:else}
-						<input aria-label={p.key} bind:value={p.value} disabled={ro} class="field py-1" />
+						<input
+							aria-label={p.key}
+							bind:value={p.value}
+							onchange={save}
+							disabled={ro}
+							class="field py-1"
+						/>
 					{/if}
 				</dd>
 			{:else}
@@ -190,20 +211,6 @@
 			</div>
 		{/if}
 	</section>
-	{#if !ro}
-		<div class="flex justify-end gap-1.5 border-t border-white/6 px-5 py-3">
-			{#if dirty}<span
-					role="status"
-					aria-label="草稿狀態"
-					class="mr-auto self-center text-[11px] text-amber-300"
-					>尚未儲存：切換選取或離開會捨棄（不會自動保存）</span
-				>{/if}
-			<button class="btn-ghost px-2.5 py-1 text-xs" disabled={!dirty} onclick={cancel}
-				>取消變更</button
-			>
-			<button class="btn-primary px-2.5 py-1 text-xs" disabled={!dirty} onclick={save}>儲存</button>
-		</div>
-	{/if}
 {/snippet}
 
 {#snippet idcBanner()}
@@ -236,8 +243,18 @@
 			</p>
 			<input
 				aria-label="名稱"
+				bind:this={nameInput}
 				bind:value={draft.name}
-				onkeydown={(e) => e.key === 'Enter' && save()}
+				onchange={save}
+				onkeydown={(e) => {
+					if (e.key === 'Enter') e.currentTarget.blur();
+					else if (e.key === 'Escape') {
+						// 還原並離開欄位；不往上冒，免得全域 Esc 把選取取消
+						e.stopPropagation();
+						draft.name = node.name;
+						e.currentTarget.blur();
+					}
+				}}
 				disabled={ro}
 				class="-mx-1.5 mt-1.5 field border-transparent bg-transparent px-1.5 text-lg font-semibold hover:border-white/10 disabled:mx-0 disabled:px-0"
 			/>
@@ -382,7 +399,10 @@
 					<select
 						aria-label="方向"
 						value={draft.bidirectional ? '雙向' : '單向'}
-						onchange={(e) => (draft.bidirectional = e.currentTarget.value === '雙向')}
+						onchange={(e) => {
+							draft.bidirectional = e.currentTarget.value === '雙向';
+							save();
+						}}
 						disabled={ro}
 						class="field w-28 py-1"
 					>

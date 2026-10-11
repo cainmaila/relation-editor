@@ -229,8 +229,8 @@ describe('DetailPanel P7：完整清單分頁與追查', () => {
 	});
 });
 
-describe('DetailPanel：草稿不保存（P8）', () => {
-	it('有未儲存草稿時明講「切換選取會捨棄」；切換選取後草稿確實捨棄、資料沒被改', async () => {
+describe('DetailPanel：屬性即時保存（T-B12）', () => {
+	it('沒有儲存按鈕；欄位沒離開就切換選取，編輯仍寫回', async () => {
 		const e = new Editor(graph());
 		e.addToWork(['a', 'b']);
 		e.setPage('edit');
@@ -238,13 +238,10 @@ describe('DetailPanel：草稿不保存（P8）', () => {
 		render(DetailPanel, { editor: e });
 		const name = page.getByRole('textbox', { name: '名稱', exact: true });
 		await name.fill('甲改');
-		const warn = page.getByRole('status', { name: '草稿狀態' });
-		await expect.element(warn).toHaveTextContent('尚未儲存：切換選取或離開會捨棄（不會自動保存）');
+		await expect.element(page.getByRole('button', { name: '儲存' })).not.toBeInTheDocument();
 		e.select({ kind: 'node', id: 'b' });
 		await expect.element(name).toHaveValue('乙');
-		await expect.element(warn).not.toBeInTheDocument();
-		e.select({ kind: 'node', id: 'a' });
-		await expect.element(name).toHaveValue('甲');
-		expect(e.node('a')?.name).toBe('甲');
+		expect(e.node('a')?.name).toBe('甲改');
+		expect(e.node('b')?.name).toBe('乙');
 	});
 });

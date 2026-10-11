@@ -104,6 +104,15 @@ async function pick(page: Page, name: string) {
 	// 原本點完焦點在列上；還原篩選後離開輸入框，單鍵快捷鍵（F 等）才不會打進框裡
 	await box.blur();
 }
+/** 欄位聚焦且文字全選 */
+async function expectAllSelected(input: Locator) {
+	await expect(input).toBeFocused();
+	expect(
+		await input.evaluate(
+			(el: HTMLInputElement) => el.selectionStart === 0 && el.selectionEnd === el.value.length
+		)
+	).toBe(true);
+}
 /** 點 3D 畫面左上角的空白處 */
 const clickBlank = (page: Page) => page.locator('main canvas').click({ position: { x: 3, y: 3 } });
 const pane = (page: Page) => page.locator('.svelte-flow__pane');
@@ -416,8 +425,45 @@ test.describe('編輯（編輯頁）', () => {
 		await expect(graphNodes(page)).toHaveCount(1);
 		await m.getByRole('menuitem', { name: `包含（${G} → 區域）` }).click();
 		await expect(node(page, '區域 1')).toBeVisible();
-		await expect(detail(page)).toContainText(field('終點', '區域 1'));
+		await expect(detail(page).getByLabel('名稱', { exact: true })).toHaveValue('區域 1');
+		await expect(detail(page)).toContainText(`連入（1）`);
 		await expect(tab(page, 'edit')).toHaveText('編輯頁 2/200');
+	});
+
+	test('T-B2a：右鍵快速新增後名稱欄位聚焦全選，直接打字改名', async ({ page }) => {
+		await toEdit(page);
+		await pane(page).click({ button: 'right', position: { x: 5, y: 5 } });
+		await menu(page).getByRole('menuitem', { name: '新增節點' }).hover();
+		await menu(page).getByRole('menuitem', { name: 'CCTV' }).hover();
+		await menu(page).getByRole('menuitem', { name: '攝影機' }).click();
+		const name = detail(page).getByLabel('名稱', { exact: true });
+		await expect(name).toHaveValue('攝影機 1');
+		await expectAllSelected(name);
+		await page.keyboard.type('攝影機 CAM-05');
+		await page.keyboard.press('Enter');
+		await expect(node(page, '攝影機 CAM-05')).toBeVisible();
+		await expect(name).not.toBeFocused();
+	});
+
+	test('T-B2b：拖到空白處新增後名稱欄位聚焦全選，Esc 保留原名與選取', async ({ page }) => {
+		await toEdit(page, ['A 排']);
+		const b = (await pane(page).boundingBox())!;
+		await drag(page, node(page, 'A 排'), { x: b.x + b.width / 2, y: b.y + b.height - 30 });
+		const m = page.getByRole('menu', { name: '新增節點並連線' });
+		await m.getByRole('menuitem', { name: '空間' }).hover();
+		await m.getByRole('menuitem', { name: '機櫃', exact: true }).hover();
+		await m.getByRole('menuitem', { name: '包含（A 排 → 機櫃）' }).click();
+		await expect(graphEdges(page)).toHaveCount(1);
+		const name = detail(page).getByLabel('名稱', { exact: true });
+		await expect(name).toHaveValue(/^機櫃 \d+$/);
+		const auto = await name.inputValue();
+		await expect(node(page, auto)).toBeVisible();
+		await expectAllSelected(name);
+		await page.keyboard.press('Escape');
+		await expect(name).not.toBeFocused();
+		await expect(name).toHaveValue(auto);
+		await expect(node(page, auto)).toBeVisible();
+		await expect(detail(page).getByLabel('名稱', { exact: true })).toBeVisible();
 	});
 
 	test('拉線預覽畫在 viewport 外、平移縮放後仍貼著把手與滑鼠；目標合法／不合法照舊', async ({
@@ -612,18 +658,16 @@ test.describe('編輯（編輯頁）', () => {
 		]);
 		await pick(page, '機櫃 PDU A-01-B');
 		await detail(page).getByLabel('額定電流').fill('16A');
+		await detail(page).getByLabel('額定電流').press('Enter');
 		await detail(page).getByLabel('屬性名稱').fill('品牌');
 		await detail(page).getByLabel('屬性值').fill('示意');
 		await detail(page).getByRole('button', { name: '新增屬性' }).click();
-		await detail(page).getByRole('button', { name: '儲存' }).click();
-		await expect(detail(page).getByRole('button', { name: '儲存' })).toBeDisabled();
 		await expect(detail(page).getByLabel('額定電流')).toHaveValue('16A');
 		await expect(detail(page).getByLabel('品牌')).toHaveValue('示意');
 
 		await pick(page, 'Core Switch-1');
 		await pickEdge(page, '連線：匯聚 Switch AGG-A');
 		await detail(page).getByLabel('方向').selectOption('雙向');
-		await detail(page).getByRole('button', { name: '儲存' }).click();
 		await expect(detail(page).getByLabel('方向')).toHaveValue('雙向');
 		const edge = page
 			.locator('.svelte-flow__edge[data-id="連線:Core Switch-1>匯聚 Switch AGG-A"] path')
@@ -632,7 +676,7 @@ test.describe('編輯（編輯頁）', () => {
 
 		await pick(page, '空調箱 AHU-2F-1');
 		await detail(page).getByLabel('名稱', { exact: true }).fill('空調箱 AHU-2F-01');
-		await detail(page).getByRole('button', { name: '儲存' }).click();
+		await detail(page).getByLabel('名稱', { exact: true }).press('Enter');
 		await expect(node(page, '空調箱 AHU-2F-01')).toBeVisible();
 		await expect(detail(page).getByLabel('名稱', { exact: true })).toHaveValue('空調箱 AHU-2F-01');
 	});
@@ -1272,42 +1316,36 @@ test.describe('手測回報', () => {
 		const path = page.locator('.svelte-flow__edge[data-id^="e-"] path').first();
 		await expect(path).toHaveAttribute('style', /stroke-dasharray/);
 		await s.selectOption('已確認');
-		await detail(page).getByRole('button', { name: '儲存' }).click();
 		await expect(path).not.toHaveAttribute('style', /stroke-dasharray/);
 	});
 
-	test('詳情草稿：未儲存不改圖，取消還原，儲存一次寫回', async ({ page }) => {
-		await toEdit(page, ['空調箱 AHU-2F-1']);
-		await pick(page, '空調箱 AHU-2F-1');
-		const name = detail(page).getByLabel('名稱', { exact: true });
-		const save = detail(page).getByRole('button', { name: '儲存' });
-		await expect(save).toBeDisabled();
-		await name.fill('空調箱 草稿');
+	test('T-B12：屬性即時保存，沒有儲存按鈕；切換選取不遺失', async ({ page }) => {
+		await toEdit(page, ['機櫃 PDU A-01-B', '空調箱 AHU-2F-1']);
+		await pick(page, '機櫃 PDU A-01-B');
+		await expect(detail(page).getByRole('button', { name: '儲存' })).toHaveCount(0);
+		await detail(page).getByLabel('額定電流').fill('16A');
+		await detail(page).getByLabel('額定電流').press('Enter');
 		await detail(page).getByLabel('屬性名稱').fill('品牌');
 		await detail(page).getByLabel('屬性值').fill('示意');
 		await detail(page).getByRole('button', { name: '新增屬性' }).click();
-		// 草稿只在詳情欄，畫布仍是原名
-		await expect(node(page, '空調箱 AHU-2F-1')).toBeVisible();
-		await expect(detail(page)).toContainText('尚未儲存');
-		await detail(page).getByRole('button', { name: '取消變更' }).click();
-		await expect(name).toHaveValue('空調箱 AHU-2F-1');
-		await expect(detail(page).getByLabel('品牌')).toHaveCount(0);
-		await expect(save).toBeDisabled();
-
-		await name.fill('空調箱 已存');
-		await detail(page).getByLabel('屬性名稱').fill('品牌');
-		await detail(page).getByLabel('屬性值').fill('示意');
-		await detail(page).getByRole('button', { name: '新增屬性' }).click();
-		await save.click();
-		await expect(node(page, '空調箱 已存')).toBeVisible();
+		await node(page, '空調箱 AHU-2F-1').click();
+		await expect(detail(page).getByLabel('名稱', { exact: true })).toHaveValue('空調箱 AHU-2F-1');
+		await node(page, '機櫃 PDU A-01-B').click();
+		await expect(detail(page).getByLabel('額定電流')).toHaveValue('16A');
 		await expect(detail(page).getByLabel('品牌')).toHaveValue('示意');
-		await expect(save).toBeDisabled();
 
-		// 不合法欄位整筆不寫入，畫布維持已儲存的名稱
+		// 打字後沒離開欄位就點別的節點：仍寫回
+		await detail(page).getByLabel('品牌').fill('示意二');
+		await node(page, '空調箱 AHU-2F-1').click();
+		await node(page, '機櫃 PDU A-01-B').click();
+		await expect(detail(page).getByLabel('品牌')).toHaveValue('示意二');
+
+		// 不合法欄位整筆不寫入，畫布維持原名
+		const name = detail(page).getByLabel('名稱', { exact: true });
 		await name.fill('');
-		await save.click();
+		await name.press('Enter');
 		await expect(page.getByText('名稱不可空白')).toBeVisible();
-		await expect(node(page, '空調箱 已存')).toBeVisible();
+		await expect(node(page, '機櫃 PDU A-01-B')).toBeVisible();
 	});
 });
 
