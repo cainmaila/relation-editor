@@ -1,5 +1,15 @@
 # PROGRESS
 
+## 節點資料改 CSV（分支 cainmaila/main）
+
+- **Goal:** 節點／邊由多份 CSV 在執行期 fetch 組成，部署後換檔即生效；計畫 `~/.claude/plans/temporal-nibbling-sonnet.md`
+- **Done（已驗證：check／lint 綠、unit 368、e2e 97、build 過；CSV 與舊 mock 逐筆等價後才刪 `mock.ts`）:**
+  - `static/data/` 24 份 CSV＋`index.json`；`model/csv.ts`（parser＋`buildGraph`＋驗證）、`model/load.ts`（fetch）、`routes/+page.ts`；`Editor` 建構子必須傳圖
+  - 測試／量測用同步來源 `model/csv-seed.ts`（glob 讀 `static/data`）；README 加「資料檔」
+- **Done（已驗證）:** 一般節點檔改依系統合併（13 檔→7 檔：空間、電力、空調、網路、消防、CCTV、通用；多一欄 `類型`，驗證類型屬於該系統）；IDC 與邊維持一類型一檔。合併前後圖逐筆相等（2,066 節點、4,020 邊）
+- **Todo:** 無
+- **Notes:** vitest／dev 會印「Assets in public directory cannot be imported from JavaScript」警告（`csv-seed.ts` 讀 public 目錄），不影響結果；`pnpm build` 無警告。dev 下故意寫錯端點，錯誤頁帶 `edges/供電.csv`，還原後恢復 200；部署後換檔的瀏覽器實操未做
+
 ## 試玩回饋 10-11 第二批（分支 main-3）
 
 - **Goal:** 5 項修改，驗收 T-A7a、T-C6a、T-B2a、T-B2b、T-B12、T-E3a；計畫 `~/.claude/plans/pasted-content-id-e026-glistening-token.md`

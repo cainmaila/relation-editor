@@ -31,7 +31,6 @@ import {
 	type NodePatch
 } from './model/graph-change';
 import { buildGraphIndex, edgesOf, type GraphIndex } from './model/graph-index';
-import { graphMock, idcMock } from './model/mock';
 import type { GEdge, GNode, Graph } from './model/types';
 import {
 	externalNeighbors,
@@ -147,9 +146,9 @@ export class Editor {
 	 */
 	readonly universe: UniverseRuntime;
 
-	/** 預設＝正式 mock；只有量測入口會傳入其他圖。searchWorker／layoutWorker 只給測試替換 */
+	/** searchWorker／layoutWorker 只給測試替換 */
 	constructor(
-		graph: Graph = Editor.initial(),
+		graph: Graph,
 		opts: { searchWorker?: () => WorkerLike; layoutWorker?: () => LayoutWorkerLike } = {}
 	) {
 		const s = initialGraphState(graph);
@@ -426,12 +425,6 @@ export class Editor {
 	fold(key: string) {
 		this.expanded = this.expanded.filter((k) => k !== key);
 		this.select(null);
-	}
-
-	static initial(): Graph {
-		const a = graphMock();
-		const b = idcMock();
-		return { nodes: [...a.nodes, ...b.nodes], edges: [...a.edges, ...b.edges] };
 	}
 
 	node = (id: string) => this.index.nodeById.get(id);

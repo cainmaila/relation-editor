@@ -13,15 +13,11 @@ import {
 	validateEdge
 } from './graph';
 import { buildGraphIndex } from './graph-index';
-import { graphMock, idcMock } from './mock';
+import { csvSeed } from './csv-seed';
 import { nodeType, type System } from './config';
 import type { Graph } from './types';
 
-const full = (): Graph => {
-	const a = graphMock();
-	const b = idcMock();
-	return { nodes: [...a.nodes, ...b.nodes], edges: [...a.edges, ...b.edges] };
-};
+const full = (): Graph => csvSeed();
 
 /** 只看勾選系統：節點在勾選系統或通用；邊兩端都在才顯示 */
 const visible = (g: Graph, systems: System[]) => {

@@ -6,14 +6,10 @@ import {
 	type GraphState
 } from './graph-change';
 import { buildGraphIndex } from './graph-index';
-import { graphMock, idcMock } from './mock';
+import { csvSeed } from './csv-seed';
 import type { Graph } from './types';
 
-const full = (): Graph => {
-	const a = graphMock();
-	const b = idcMock();
-	return { nodes: [...a.nodes, ...b.nodes], edges: [...a.edges, ...b.edges] };
-};
+const full = (): Graph => csvSeed();
 
 const AHU = '空調箱 AHU-2F-1';
 const LINK = '連線:Core Switch-1>匯聚 Switch AGG-A';

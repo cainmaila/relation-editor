@@ -1,6 +1,7 @@
 import { flushSync } from 'svelte';
 import { describe, expect, it, vi } from 'vitest';
 import { Editor } from './editor.svelte';
+import { csvSeed } from './model/csv-seed';
 import { WORKSPACE_NODE_LIMIT } from './model/workspace';
 import { handleSearchMessage, type SearchRequest } from './search/protocol';
 import type { SearchController, WorkerLike } from './search/search-client.svelte';
@@ -11,7 +12,7 @@ import type { LayoutWorkerLike } from './universe/runtime';
 
 describe('Editor.addNode', () => {
 	it('情境 8：對話框名稱空白擋下，不建立', () => {
-		const e = new Editor();
+		const e = new Editor(csvSeed());
 		const n = e.graph.nodes.length;
 		expect(e.addNode('攝影機', '  ')).toBeNull();
 		expect(e.message).toBe('請填名稱');
@@ -19,7 +20,7 @@ describe('Editor.addNode', () => {
 	});
 
 	it('沒給名稱（右鍵快速新增）時用「類型 N」且不重複', () => {
-		const e = new Editor();
+		const e = new Editor(csvSeed());
 		const a = e.addNode('攝影機')!;
 		const b = e.addNode('攝影機')!;
 		expect(e.node(a)!.name).toBe('攝影機 1');
@@ -29,7 +30,7 @@ describe('Editor.addNode', () => {
 	});
 
 	it('IDC 類型不能新增', () => {
-		const e = new Editor();
+		const e = new Editor(csvSeed());
 		expect(e.addNode('客戶')).toBeNull();
 		expect(e.message).toBe('由 IDC機櫃配置管理維護');
 	});
@@ -44,7 +45,7 @@ describe('編輯後的收疊', () => {
 	const cards = (e: Editor) => e.canvas.nodes.map((n) => n.id);
 
 	it('編輯湊成新的一疊時，畫面上的卡片不收起；重新排版後才收', () => {
-		const e = new Editor();
+		const e = new Editor(csvSeed());
 		const ids = [e.addNode('排')!, e.addNode('排')!, e.addNode('排')!];
 		full(e);
 		for (const id of ids) e.addEdge('A 排', id, '包含');
@@ -54,7 +55,7 @@ describe('編輯後的收疊', () => {
 	});
 
 	it('新節點加入已收起的疊卡時留在外面', () => {
-		const e = new Editor();
+		const e = new Editor(csvSeed());
 		const key = 'stack:機櫃 PDU:樓層 PDU 2F-A';
 		const id = e.addNode('機櫃 PDU')!;
 		full(e);
@@ -86,7 +87,7 @@ describe('編輯頁 working', () => {
 	});
 
 	it('加入、去重；不存在的節點整批拒絕', () => {
-		const e = new Editor();
+		const e = new Editor(csvSeed());
 		const [a, b] = ids(e, 2);
 		expect(e.addToWork([a, a])).toBe(true);
 		expect(e.addToWork([a, b])).toBe(true);
@@ -96,7 +97,7 @@ describe('編輯頁 working', () => {
 	});
 
 	it('剛好 200 可，201 整批擋下且 working 不變；訊息含需求與可用數', () => {
-		const e = new Editor();
+		const e = new Editor(csvSeed());
 		const all = isolated(e, WORKSPACE_NODE_LIMIT + 1);
 		expect(e.addToWork(all.slice(0, 150))).toBe(true);
 		const before = snapshot(e);
@@ -108,7 +109,7 @@ describe('編輯頁 working', () => {
 	});
 
 	it('已在畫面的節點重複加入不佔上限；成功訊息含實際新增與帶入的邊數', () => {
-		const e = new Editor();
+		const e = new Editor(csvSeed());
 		const edge = e.graph.edges[0];
 		expect(e.addToWork([edge.from, edge.to])).toBe(true);
 		expect(e.message).toMatch(/^已加入編輯頁：新增 2 個節點、帶入 \d+ 條邊$/);
@@ -117,7 +118,7 @@ describe('編輯頁 working', () => {
 	});
 
 	it('editVisible 是索引取得的誘導子圖：只留兩端都在 working 的邊', () => {
-		const e = new Editor();
+		const e = new Editor(csvSeed());
 		const edge = e.graph.edges[0];
 		e.addToWork([edge.from]);
 		expect(e.editVisible.edges).toHaveLength(0);
@@ -131,7 +132,7 @@ describe('編輯頁 working', () => {
 	});
 
 	it('addNode 自動加入 working；deleteNode 同步移出', () => {
-		const e = new Editor();
+		const e = new Editor(csvSeed());
 		const id = e.addNode('攝影機')!;
 		expect(e.working).toEqual([id]);
 		e.deleteNode(id);
@@ -139,7 +140,7 @@ describe('編輯頁 working', () => {
 	});
 
 	it('working 已滿時 addNode 先拒絕：圖、revision、working 完全不變', () => {
-		const e = new Editor();
+		const e = new Editor(csvSeed());
 		e.addToWork(isolated(e, WORKSPACE_NODE_LIMIT));
 		const before = snapshot(e);
 		expect(e.addNode('攝影機')).toBeNull();
@@ -148,7 +149,7 @@ describe('編輯頁 working', () => {
 	});
 
 	it('移出編輯頁只改 membership，不刪資料；清掉失效的選取與暫態', () => {
-		const e = new Editor();
+		const e = new Editor(csvSeed());
 		const edge = e.graph.edges.find((x) => !x.readonly && x.from !== x.to)!;
 		e.addToWork([edge.from, edge.to]);
 		e.setPage('edit');
@@ -177,7 +178,7 @@ describe('編輯頁 working', () => {
 	});
 
 	it('跨工作區建邊：缺少的端點與新邊一起 admission，一次提交', () => {
-		const e = new Editor();
+		const e = new Editor(csvSeed());
 		e.setPage('edit');
 		const from = '偵測器 SD-01';
 		const to = '機櫃 A-03';
@@ -188,7 +189,7 @@ describe('編輯頁 working', () => {
 	});
 
 	it('跨工作區建邊：滿額或連接規則不符時，圖與 working 都不變', () => {
-		const e = new Editor();
+		const e = new Editor(csvSeed());
 		e.setPage('edit');
 		const pool = isolated(e, WORKSPACE_NODE_LIMIT + 5).filter(
 			(id) => id !== '偵測器 SD-01' && id !== '機櫃 A-03'
@@ -207,7 +208,7 @@ describe('編輯頁 working', () => {
 	});
 
 	it('拖到空白處：新節點＋邊原子提交；不合法或滿額時什麼都不建', () => {
-		const e = new Editor();
+		const e = new Editor(csvSeed());
 		e.setPage('edit');
 		const from = 'A 排';
 		e.addToWork([from]);
@@ -246,7 +247,7 @@ describe('編輯頁 working', () => {
 
 describe('Editor.setPage', () => {
 	it('切頁保留仍存在的選取，清掉 result／connecting', () => {
-		const e = new Editor();
+		const e = new Editor(csvSeed());
 		const id = e.graph.nodes[0].id;
 		e.select({ kind: 'node', id });
 		e.findCustomers(id);
@@ -261,21 +262,21 @@ describe('Editor.setPage', () => {
 	});
 
 	it('文字篩選不跨畫面', () => {
-		const e = new Editor();
+		const e = new Editor(csvSeed());
 		e.outline.set({ text: 'A-01' });
 		e.setPage('edit');
 		expect(e.outline.text).toBe('');
 	});
 
 	it('編輯頁看不到的選取在切頁時清掉', () => {
-		const e = new Editor();
+		const e = new Editor(csvSeed());
 		e.select({ kind: 'node', id: e.graph.nodes[0].id });
 		e.setPage('edit');
 		expect(e.selected).toBeNull();
 	});
 
 	it('收疊預設關閉；手動收疊時切頁來回選取仍是同一個節點（P0 回報）', () => {
-		const e = new Editor();
+		const e = new Editor(csvSeed());
 		expect(e.stacking).toBe(false);
 		const names = ['樓層 PDU 2F-A', '機櫃 PDU A-05-A', '機櫃 PDU A-06-A', '機櫃 PDU A-07-A'];
 		for (const n of names) {
@@ -294,7 +295,7 @@ describe('Editor.setPage', () => {
 
 describe('編輯頁版面與視野', () => {
 	it('增量加入不搬動既有卡片；改名不重排；位置與視野跨切頁保留', () => {
-		const e = new Editor();
+		const e = new Editor(csvSeed());
 		e.addToWork(['機櫃 A-01', '機櫃 PDU A-01-A']);
 		e.setPage('edit');
 		const p1 = new Map(e.editPositions);
@@ -314,7 +315,7 @@ describe('編輯頁版面與視野', () => {
 	});
 
 	it('建邊後整張重排：新節點落到通用節點左邊（流向由左往右）', () => {
-		const e = new Editor();
+		const e = new Editor(csvSeed());
 		const G = '2F A 排監視與偵測範圍';
 		e.addToWork([G]);
 		e.setPage('edit');
@@ -328,7 +329,7 @@ describe('編輯頁版面與視野', () => {
 	});
 
 	it('畫面外的邊不能在編輯頁被改拓撲（刪除／改方向）', () => {
-		const e = new Editor();
+		const e = new Editor(csvSeed());
 		const edge = e.graph.edges.find((x) => !x.readonly && x.from !== x.to)!;
 		e.addToWork([edge.from]);
 		e.setPage('edit');
@@ -340,7 +341,7 @@ describe('編輯頁版面與視野', () => {
 	});
 
 	it('外部鄰居數量完整（不受分頁）', () => {
-		const e = new Editor();
+		const e = new Editor(csvSeed());
 		e.addToWork(['機櫃 A-01']);
 		const all = new Set(
 			e.incidentEdges('機櫃 A-01').map((x) => (x.from === '機櫃 A-01' ? x.to : x.from))
@@ -351,7 +352,7 @@ describe('編輯頁版面與視野', () => {
 
 describe('Editor 初始圖', () => {
 	it('預設是 mock；量測入口可傳入指定的圖', () => {
-		expect(new Editor().graph.nodes.length).toBe(2066);
+		expect(new Editor(csvSeed()).graph.nodes.length).toBe(2066);
 		const g = {
 			nodes: [{ id: 'TPKC 大樓', type: '大樓', name: 'TPKC 大樓', props: {} }],
 			edges: []
@@ -367,13 +368,13 @@ describe('Editor 命令與 revision', () => {
 	const LINK = '連線:Core Switch-1>匯聚 Switch AGG-A';
 
 	it('節點查詢走共用索引', () => {
-		const e = new Editor();
+		const e = new Editor(csvSeed());
 		expect(e.node(AHU)).toBe(e.index.nodeById.get(AHU));
 		expect(e.edge(LINK)).toBe(e.index.edgeById.get(LINK));
 	});
 
 	it('updateNode 一次寫入名稱與屬性；只增 revision', () => {
-		const e = new Editor();
+		const e = new Editor(csvSeed());
 		const base = e.node(AHU)!;
 		const top = e.topologyRevision;
 		expect(e.updateNode(AHU, { name: '空調箱 AHU-2F-01', props: { 型號: 'X' } }, base)).toBe(true);
@@ -384,7 +385,7 @@ describe('Editor 命令與 revision', () => {
 	});
 
 	it('任一欄位不合法時整筆不寫入，並顯示原因', () => {
-		const e = new Editor();
+		const e = new Editor(csvSeed());
 		const before = e.graph;
 		expect(e.updateEdge(LINK, { bidirectional: true, props: { 確認狀態: '亂填' } })).toBe(false);
 		expect(e.graph).toBe(before);
@@ -393,7 +394,7 @@ describe('Editor 命令與 revision', () => {
 	});
 
 	it('過期草稿拒絕寫入', () => {
-		const e = new Editor();
+		const e = new Editor(csvSeed());
 		const base = e.node(AHU)!;
 		e.updateNode(AHU, { name: 'A' }, base);
 		expect(e.updateNode(AHU, { name: 'B' }, base)).toBe(false);
@@ -401,7 +402,7 @@ describe('Editor 命令與 revision', () => {
 	});
 
 	it('改名不重算拓撲分析；改方向才重算', () => {
-		const e = new Editor();
+		const e = new Editor(csvSeed());
 		const u = e.unprocessed;
 		const r = e.unreachable;
 		e.updateNode(AHU, { name: '改名' });
@@ -412,7 +413,7 @@ describe('Editor 命令與 revision', () => {
 	});
 
 	it('改名／屬性不讓 3D 繪製輸入失效；系統篩選只換繪製子圖（spy）', () => {
-		const e = new Editor();
+		const e = new Editor(csvSeed());
 		const spy = vi.fn();
 		const stop = $effect.root(() => {
 			$effect(() => spy(e.sceneGraph));
@@ -499,7 +500,7 @@ describe('Editor 搜尋服務（Worker 協定）', () => {
 
 	it('同一 tick 兩筆命令都送進 Worker；結果反映兩筆', async () => {
 		const { f, create } = fakeWorker();
-		const e = new Editor(undefined, { searchWorker: create });
+		const e = new Editor(csvSeed(), { searchWorker: create });
 		const PDU = '機櫃 PDU A-01-A';
 		const victim = '機櫃 PDU A-01-B';
 		e.palette.set({ text: '機櫃 PDU' });
@@ -528,7 +529,7 @@ describe('Editor 搜尋服務（Worker 協定）', () => {
 
 	it('改名只送 metadata，不帶問題 ID sets（不重算拓撲分析）', async () => {
 		const { f, create } = fakeWorker();
-		const e = new Editor(undefined, { searchWorker: create });
+		const e = new Editor(csvSeed(), { searchWorker: create });
 		e.palette.set({ text: AHU });
 		await ready(e.palette);
 		e.updateNode(AHU, { name: 'X', props: { 型號: 'Y' } });
@@ -540,7 +541,7 @@ describe('Editor 搜尋服務（Worker 協定）', () => {
 
 	it('過期回覆不覆蓋最新結果；各 UI 區塊的查詢互不覆蓋', async () => {
 		const { f, create } = fakeWorker();
-		const e = new Editor(undefined, { searchWorker: create });
+		const e = new Editor(csvSeed(), { searchWorker: create });
 		f.hold = true;
 		e.palette.set({ text: 'UPS' });
 		e.palette.set({ text: '攝影機' });
@@ -560,7 +561,7 @@ describe('Editor 搜尋服務（Worker 協定）', () => {
 
 	it('資料版本變更後，舊版本的回覆不標成最新', async () => {
 		const { f, create } = fakeWorker();
-		const e = new Editor(undefined, { searchWorker: create });
+		const e = new Editor(csvSeed(), { searchWorker: create });
 		e.palette.set({ text: AHU });
 		await ready(e.palette);
 		f.hold = true;
@@ -581,7 +582,7 @@ describe('Editor 搜尋服務（Worker 協定）', () => {
 
 	it('版本不連續時整份重建', async () => {
 		const { f, create } = fakeWorker();
-		const e = new Editor(undefined, { searchWorker: create });
+		const e = new Editor(csvSeed(), { searchWorker: create });
 		e.palette.set({ text: '' });
 		await ready(e.palette);
 		e.search.publish({
@@ -599,7 +600,7 @@ describe('Editor 搜尋服務（Worker 協定）', () => {
 
 	it('Worker 錯誤時顯示錯誤，重試後重建並恢復', async () => {
 		const { f, create } = fakeWorker();
-		const e = new Editor(undefined, { searchWorker: create });
+		const e = new Editor(csvSeed(), { searchWorker: create });
 		f.crash = true;
 		e.palette.set({ text: 'UPS' });
 		await expect.poll(() => e.palette.status).toBe('error');
@@ -614,7 +615,7 @@ describe('Editor 搜尋服務（Worker 協定）', () => {
 	it('壞掉的 Worker 收不掉時明確記錄，不吞掉；仍轉錯誤且可重試', async () => {
 		const { f, create } = fakeWorker();
 		const log = vi.spyOn(console, 'error').mockImplementation(() => {});
-		const e = new Editor(undefined, { searchWorker: create });
+		const e = new Editor(csvSeed(), { searchWorker: create });
 		f.crash = true;
 		f.throwOnTerminate = true;
 		e.palette.set({ text: 'UPS' });
@@ -630,7 +631,7 @@ describe('Editor 搜尋服務（Worker 協定）', () => {
 
 	it('跨頁勾選保留到主動清除；刪除節點時移出', async () => {
 		const { create } = fakeWorker();
-		const e = new Editor(undefined, { searchWorker: create });
+		const e = new Editor(csvSeed(), { searchWorker: create });
 		e.palette.set({ text: '' });
 		await ready(e.palette);
 		const a = e.palette.ids[0];
@@ -650,7 +651,7 @@ describe('Editor 搜尋服務（Worker 協定）', () => {
 	});
 
 	it('加入工作區不改系統篩選、不換畫面', () => {
-		const e = new Editor(undefined, { searchWorker: fakeWorker().create });
+		const e = new Editor(csvSeed(), { searchWorker: fakeWorker().create });
 		e.systems = ['電力'];
 		expect(e.addToWorkspace([AHU, '機櫃 A-01'])).toBe(true);
 		expect(e.working).toEqual([AHU, '機櫃 A-01']);
@@ -660,7 +661,7 @@ describe('Editor 搜尋服務（Worker 協定）', () => {
 	});
 
 	it('定位可穿越系統隱藏', () => {
-		const e = new Editor(undefined, { searchWorker: fakeWorker().create });
+		const e = new Editor(csvSeed(), { searchWorker: fakeWorker().create });
 		e.systems = ['電力'];
 		e.locate(AHU);
 		expect(e.systems).toContain('空調');
@@ -668,7 +669,7 @@ describe('Editor 搜尋服務（Worker 協定）', () => {
 	});
 
 	it('編輯頁大綱只查工作區，畫布淡化用全部命中（不只當頁）', async () => {
-		const e = new Editor(undefined, { searchWorker: fakeWorker().create });
+		const e = new Editor(csvSeed(), { searchWorker: fakeWorker().create });
 		const many = e.graph.nodes
 			.filter((n) => n.type === '機櫃 PDU')
 			.slice(0, 120)
@@ -685,7 +686,7 @@ describe('Editor 搜尋服務（Worker 協定）', () => {
 
 	it('邊只改屬性、無變更命令也推進 Worker 版本；穿插節點改名；不重算拓撲', async () => {
 		const { f, create } = fakeWorker();
-		const e = new Editor(undefined, { searchWorker: create });
+		const e = new Editor(csvSeed(), { searchWorker: create });
 		const both = async () => {
 			await ready(e.palette);
 			await ready(e.outline);
@@ -727,7 +728,7 @@ describe('Editor 搜尋服務（Worker 協定）', () => {
 
 	it('Worker 建立時同步丟例外：不外洩，所有作用中的查詢轉錯誤，重試恢復', async () => {
 		const { f, create } = fakeWorker();
-		const e = new Editor(undefined, { searchWorker: create });
+		const e = new Editor(csvSeed(), { searchWorker: create });
 		f.failCreate = true;
 		expect(() => e.palette.set({ text: 'UPS' })).not.toThrow();
 		expect(() => e.outline.set({ text: 'Switch' })).not.toThrow();
@@ -745,7 +746,7 @@ describe('Editor 搜尋服務（Worker 協定）', () => {
 
 	it('init 送出失敗（clone）：不把查詢送到已結束的 Worker，全部轉錯誤，重試恢復', async () => {
 		const { f, create } = fakeWorker();
-		const e = new Editor(undefined, { searchWorker: create });
+		const e = new Editor(csvSeed(), { searchWorker: create });
 		f.throwOn = 'init';
 		expect(() => e.palette.set({ text: 'UPS' })).not.toThrow();
 		await expect.poll(() => e.palette.status).toBe('error');
@@ -760,7 +761,7 @@ describe('Editor 搜尋服務（Worker 協定）', () => {
 
 	it('查詢送出失敗：不留等待中的請求；已就緒的其他區塊也標錯誤；重試恢復', async () => {
 		const { f, create } = fakeWorker();
-		const e = new Editor(undefined, { searchWorker: create });
+		const e = new Editor(csvSeed(), { searchWorker: create });
 		e.outline.set({ text: 'Switch' });
 		await ready(e.outline);
 		f.throwOn = 'query';
@@ -779,7 +780,7 @@ describe('Editor 搜尋服務（Worker 協定）', () => {
 	});
 
 	it('真的 Worker：邊只改屬性後查詢回到最新版本', async () => {
-		const e = new Editor();
+		const e = new Editor(csvSeed());
 		e.palette.set({ text: '機櫃 A-01' });
 		await ready(e.palette);
 		const link = e.graph.edges.find((x) => !x.readonly)!.id;
@@ -792,7 +793,7 @@ describe('Editor 搜尋服務（Worker 協定）', () => {
 	});
 
 	it('真的 Worker：草稿 proxy 屬性也能送出，查得到改後內容', async () => {
-		const e = new Editor();
+		const e = new Editor(csvSeed());
 		e.palette.set({ text: '機櫃 A-01' });
 		await ready(e.palette);
 		expect(e.palette.ids[0]).toBe('機櫃 A-01');
@@ -810,7 +811,7 @@ describe('編輯頁：工作區外的定位與修改', () => {
 	const edgeOf = (e: Editor) => e.graph.edges.find((x) => !x.readonly && x.from !== x.to)!;
 
 	it('定位工作區外的節點：不再無聲忽略，明確說明且不偷偷加入', () => {
-		const e = new Editor();
+		const e = new Editor(csvSeed());
 		const edge = edgeOf(e);
 		e.addToWork([edge.from]);
 		e.setPage('edit');
@@ -826,7 +827,7 @@ describe('編輯頁：工作區外的定位與修改', () => {
 	});
 
 	it('定位已不存在的節點：明確的過期選取錯誤', () => {
-		const e = new Editor();
+		const e = new Editor(csvSeed());
 		expect(e.locate('nope')).toBe(false);
 		expect(e.message).toBe('節點已不存在：nope（選取已過期，請重新選取）');
 		e.setPage('edit');
@@ -835,7 +836,7 @@ describe('編輯頁：工作區外的定位與修改', () => {
 	});
 
 	it('將兩端加入編輯頁：原子加入、保留邊選取；滿額時整批擋下不變', () => {
-		const e = new Editor();
+		const e = new Editor(csvSeed());
 		const edge = edgeOf(e);
 		e.setPage('edit');
 		e.select({ kind: 'edge', id: edge.id });
@@ -856,7 +857,7 @@ describe('編輯頁：工作區外的定位與修改', () => {
 	});
 
 	it('工作區外的節點在編輯頁不能改名或刪除；工作區內節點有外部邊仍可刪除', () => {
-		const e = new Editor();
+		const e = new Editor(csvSeed());
 		const edge = edgeOf(e);
 		e.addToWork([edge.from]);
 		e.setPage('edit');
@@ -904,7 +905,7 @@ describe('3D 宇宙座標（session runtime）', () => {
 	}
 	const setup = () => {
 		const w = layoutWorkers();
-		const e = new Editor(undefined, { layoutWorker: w.create });
+		const e = new Editor(csvSeed(), { layoutWorker: w.create });
 		return { e, w, pos: () => structuredClone([...e.universe.positions()]) };
 	};
 
@@ -1016,7 +1017,7 @@ describe('P7 全圖追查與跨視圖一致性', () => {
 	});
 
 	it('結果沿完整標準圖：系統全關、工作區很小或空都相同', () => {
-		const e = new Editor();
+		const e = new Editor(csvSeed());
 		e.findCustomers('台電市電');
 		const full = e.result!;
 		expect(full.customerIds).toHaveLength(43);
@@ -1032,7 +1033,7 @@ describe('P7 全圖追查與跨視圖一致性', () => {
 	});
 
 	it('起點即選取；選取其他節點或沿途關係不清掉追查', () => {
-		const e = new Editor();
+		const e = new Editor(csvSeed());
 		e.findCustomers(PDU);
 		expect(e.selected).toEqual({ kind: 'node', id: PDU });
 		const r = e.result!;
@@ -1049,7 +1050,7 @@ describe('P7 全圖追查與跨視圖一致性', () => {
 	});
 
 	it('單一關係：系統隱藏的端點會勾回；兩端原子加入編輯頁，追查仍在', () => {
-		const e = new Editor();
+		const e = new Editor(csvSeed());
 		e.findCustomers(PDU);
 		e.systems = [];
 		expect(e.focusEdge(FEED)).toBe(true);
@@ -1080,7 +1081,7 @@ describe('P7 全圖追查與跨視圖一致性', () => {
 	});
 
 	it('改方向／刪邊：回到全圖時依最新拓撲重算，並標示分析版本', () => {
-		const e = new Editor();
+		const e = new Editor(csvSeed());
 		e.findCustomers(PDU);
 		expect(e.result!.customers).toEqual(['客戶丙']);
 		expect(e.traceRevision).toBe(e.topologyRevision);
@@ -1135,7 +1136,7 @@ describe('P7 全圖追查與跨視圖一致性', () => {
 	});
 
 	it('刪除追查起點：結果清掉並說明；IDC 唯讀起點不能刪', () => {
-		const e = new Editor();
+		const e = new Editor(csvSeed());
 		const id = e.addNode('攝影機')!;
 		expect(e.addEdge(id, '2F A 排監視與偵測範圍', '監測')).toBe(true);
 		e.setPage('graph');
@@ -1156,7 +1157,7 @@ describe('P7 全圖追查與跨視圖一致性', () => {
 	});
 
 	it('拓撲編輯後追查立即反映（不是舊結果冒充最新）', () => {
-		const e = new Editor();
+		const e = new Editor(csvSeed());
 		e.findCustomers('台電市電');
 		const before = e.result!;
 		e.addToWork([PDU, RACK]);
@@ -1168,7 +1169,7 @@ describe('P7 全圖追查與跨視圖一致性', () => {
 	});
 
 	it('點客戶只亮通往他的路徑，再點一次回到全部；換起點、清除都重設', () => {
-		const e = new Editor();
+		const e = new Editor(csvSeed());
 		e.findCustomers('樓層 PDU 2F-A');
 		expect(e.highlight).toBe(e.result);
 		e.pickCustomer('客戶甲');
@@ -1249,7 +1250,7 @@ describe('刪除資料一律先確認（requestDelete → confirmDelete）', () 
 	});
 
 	it('唯讀（IDC）、根節點、工作區外：不武裝並說明原因', () => {
-		const e = new Editor();
+		const e = new Editor(csvSeed());
 		e.addToWork(['主機 H-02']);
 		e.setPage('edit');
 		expect(e.requestDelete('node', '主機 H-02')).toBe(false);
