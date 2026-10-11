@@ -4,6 +4,8 @@ import {
 	judge,
 	line,
 	row,
+	stabilityTrend,
+	summarizeHeapSnapshot,
 	workspaceVerdict,
 	WORKSPACE_FORMAL,
 	type JudgePlan,
@@ -323,5 +325,125 @@ describe('workspaceVerdict（2D 工作區）', () => {
 		const v = wv(three((x, k) => k === 0 && x.problems!.push('only 1 in-pane target card(s)')));
 		expect(v.every((r) => r.status === 'FAIL')).toBe(true);
 		expect(by(v, '2D pan').readable).toEqual([0.86, 0.86, 0.86]);
+	});
+});
+
+describe('stabilityTrend (same-phase, no linear growth)', () => {
+	// 10 輪週期：相位 p 的 DOM／heap 基準不同（不同卡片面板大小），加上可選的每輪成長
+	const mk = (
+		n: number,
+		heapAt: (c: number) => number,
+		offPerCycle = 0,
+		docAt: (c: number) => number = () => 0
+	) =>
+		Array.from({ length: n }, (_, i) => {
+			const c = i + 1;
+			const phase = c % 10;
+			return {
+				cycle: c,
+				heapMB: heapAt(c) + phase * 0.1,
+				docElements: 700 + phase * 30 + docAt(c),
+				offDocNodes: 990 + offPerCycle * c
+			};
+		});
+
+	it('plateau after warm-up → heap PASS, identical same-phase DOM → PASS', () => {
+		const t = stabilityTrend(mk(60, (c) => 22 - 3 * Math.exp(-c / 8)));
+		expect(t.windows).toBe(6);
+		expect(t.heap.status).toBe('PASS');
+		expect(t.dom.status).toBe('PASS');
+		expect(t.docElementsSamePhaseDelta).toEqual({ min: 0, max: 0, n: 40 });
+		expect(t.offDocSamePhaseDelta).toEqual({ min: 0, max: 0, n: 40 });
+	});
+
+	it('constant per-cycle growth (linear leak) → heap FAIL even if slope is below the old 0.1 MB/cycle gate', () => {
+		const t = stabilityTrend(mk(60, (c) => 20 + 0.02 * c));
+		expect(t.heap.status).toBe('FAIL');
+		expect(t.tailMBPerCycle).toBeCloseTo(0.02, 5);
+	});
+
+	it('fewer than 4 windows → INCONCLUSIVE, not PASS', () => {
+		const t = stabilityTrend(mk(30, () => 20));
+		expect(t.heap.status).toBe('INCONCLUSIVE');
+	});
+
+	it('in-document element growth at the same phase → FAIL even if off-document is attributed', () => {
+		const t = stabilityTrend(
+			mk(
+				40,
+				() => 20,
+				0,
+				(c) => (c > 25 ? 1 : 0)
+			),
+			10,
+			0
+		);
+		expect(t.dom.status).toBe('FAIL');
+	});
+
+	it('off-document +1/cycle: FAIL unless exactly matched by the snapshot-attributed source', () => {
+		const rows = mk(40, () => 20, 1);
+		expect(stabilityTrend(rows).dom.status).toBe('FAIL');
+		expect(stabilityTrend(rows, 10, 1).dom.status).toBe('ATTRIBUTED');
+		expect(
+			stabilityTrend(
+				mk(40, () => 20, 2),
+				10,
+				1
+			).dom.status
+		).toBe('FAIL');
+	});
+});
+
+describe('summarizeHeapSnapshot', () => {
+	it('counts named nodes, code bytes, detached and unknown-detachedness Text', () => {
+		const snap = {
+			snapshot: {
+				meta: {
+					node_fields: ['type', 'name', 'id', 'self_size', 'edge_count', 'detachedness'],
+					node_types: [['hidden', 'object', 'native', 'code'] as string[]] as [string[]]
+				}
+			},
+			strings: ['Text', 'PerformanceMark', 'x', '<div>'],
+			nodes: [
+				2,
+				0,
+				1,
+				10,
+				0,
+				0, // Text det=0
+				2,
+				0,
+				3,
+				10,
+				0,
+				1, // Text attached
+				2,
+				1,
+				5,
+				20,
+				0,
+				0, // PerformanceMark
+				3,
+				2,
+				7,
+				100,
+				0,
+				0, // code
+				2,
+				3,
+				9,
+				5,
+				0,
+				2 // detached div
+			]
+		};
+		expect(summarizeHeapSnapshot(snap, ['PerformanceMark', 'blink::UndoStep'])).toEqual({
+			totalSelfBytes: 145,
+			codeBytes: 100,
+			detached: 1,
+			textUnknown: 1,
+			counts: { PerformanceMark: 1, 'blink::UndoStep': 0 }
+		});
 	});
 });

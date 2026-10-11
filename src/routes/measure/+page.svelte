@@ -40,6 +40,9 @@
 			meta,
 			stats,
 			marks: probe.marks,
+			/** 每個 marker 名稱的累計次數；markHistory(false) 後 marks 只留冷啟動 marker（穩定性量測用） */
+			markCounts: probe.markCounts,
+			markHistory: probe.markHistory,
 			init: probe.init,
 			/** 瀏覽器實際的起始座標：決定性 phyllotaxis 種子（init 參數只供 layout 模式對照） */
 			seed: 'phyllotaxis',

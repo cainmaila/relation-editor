@@ -1,7 +1,7 @@
 // P8 正式驗收量測（由 measure-universe.ts 分派；共用其 INIT／frames／drag／wheel／search／環境記錄）。
 //   pnpm measure:universe formal    [--edges 20000,100000] [--samples 5] [--channel chrome]
 //   pnpm measure:universe workspace [--edges 100000] [--samples 3] [--channel chrome]
-//   pnpm measure:universe stability [--edges 20000] [--cycles 20] [--channel chrome]
+//   pnpm measure:universe stability [--edges 20000] [--cycles 200] [--name-input fill|assign] [--snapshots on|off] [--channel chrome]
 //   pnpm measure:universe stress    [--channel chrome]   （50k／100k、原生 DPR、小視窗、SwiftShader 對照）
 //   pnpm measure:universe selftest  [--channel chrome]   （harness 搜尋逾時的失敗與清理）
 // 所有延遲都在頁內量：起點＝真實輸入事件的 event.timeStamp（pointerup／input／keydown），
@@ -21,6 +21,8 @@ import {
 	BUDGET,
 	judge as judgeRows,
 	line,
+	stabilityTrend,
+	summarizeHeapSnapshot,
 	workspaceVerdict,
 	WORKSPACE_FORMAL,
 	type JudgePlan
@@ -381,6 +383,8 @@ type MW = {
 		meta: { hub: string; power: string };
 		stats: Record<string, number | string>;
 		marks: { name: string; t: number }[];
+		markCounts: Record<string, number>;
+		markHistory(on: boolean): void;
 		gpu(): { vendor: string; renderer: string } | null;
 		renderInfo(): Record<string, number> | null;
 		forceWorkspace(ids: string[]): number;
@@ -1564,20 +1568,79 @@ async function workspace(d: Deps) {
 }
 
 // ---------------------------------------------------------------- 穩定性
+/** 關瀏覽器失敗不吞掉：印警告，但不蓋過 try 區塊原本拋出的錯誤（finally 內呼叫） */
+async function closeWarn(b: Browser, where: string) {
+	try {
+		await b.close();
+	} catch (e) {
+		console.warn(`[${where}] browser.close() failed: ${(e as Error)?.stack ?? String(e)}`);
+	}
+}
+
+/** heap snapshot 只留摘要（保留來源歸因用）；原始檔約 50MB，不寫進產物 */
+const RETAINER_NAMES = [
+	'PerformanceMark',
+	'LargestContentfulPaint',
+	'InteractionContentfulPaint',
+	'blink::UndoStep',
+	'blink::SetCharacterDataCommand',
+	'Text'
+];
+async function heapSummary(cdp: CDPSession) {
+	const chunks: string[] = [];
+	const on = (e: { chunk: string }) => chunks.push(e.chunk);
+	cdp.on('HeapProfiler.addHeapSnapshotChunk', on);
+	try {
+		await cdp.send('HeapProfiler.collectGarbage');
+		await cdp.send('HeapProfiler.takeHeapSnapshot', { reportProgress: false });
+	} finally {
+		cdp.off('HeapProfiler.addHeapSnapshotChunk', on);
+	}
+	return summarizeHeapSnapshot(JSON.parse(chunks.join('')), RETAINER_NAMES);
+}
+
+/**
+ * 長時間穩定性：同一頁反覆「編輯頁改名 → 全圖 → 篩選開關 → 重新整理版面 → 停止」。
+ * 選取的卡片以 PERIOD 輪輪替（覆蓋不同面板）；判定只比同相位（同一張卡片、同樣面板）的量。
+ * 量測本身的成長先關掉：/measure 的 marker 歷史（只留冷啟動 marker＋計數）與 __p1.longtasks 每輪清空，
+ * 每輪仍記錄這些計數，證明量測本身有上限。
+ * --name-input assign：以原生 setter＋input 事件改名（控制組），不經瀏覽器編輯指令；
+ * 預設 fill（Playwright 真輸入，會進 Chrome 原生 undo 堆疊，見報告）。
+ */
 async function stability(d: Deps) {
 	const l: Launch = { channel: d.opt('channel', 'chrome') };
 	const url = d.opt('url', 'http://localhost:4173');
 	const timeout = d.int('timeout', d.opt('timeout', '180000'));
-	const cycles = d.int('cycles', d.opt('cycles', '20'));
+	const cycles = d.int('cycles', d.opt('cycles', '200'));
+	const nameInput = d.opt('name-input', 'fill');
+	if (nameInput !== 'fill' && nameInput !== 'assign')
+		throw new RangeError(`--name-input must be fill|assign, got ${nameInput}`);
+	const snapshots = d.opt('snapshots', 'on') === 'on';
+	const PERIOD = 10;
 	const edges = d.EDGES[0];
 	const s = await open(d, l);
 	const rows = [];
+	const snapAt = new Set(
+		[2 * PERIOD, Math.round(cycles / 2 / PERIOD) * PERIOD, cycles].filter(
+			(c) => c >= 2 * PERIOD && c <= cycles
+		)
+	);
+	const heap: {
+		cycle: number;
+		offDocNodes: number;
+		summary: Awaited<ReturnType<typeof heapSummary>>;
+	}[] = [];
 	try {
 		const { page, cdp } = s;
 		await page.goto(`${url}/measure?edges=${edges}&seed=${d.SEED}`);
 		await d.hasMark(page, 'layout:worker-done', timeout);
 		const set = await dense(page, 30, 120);
 		await ev(page, (w, ids) => w.__measure.editor.addToWork(ids), set.ids);
+		// 冷啟動 marker 已記錄；之後只計數（量測自身不隨輪數成長）
+		const cold = await ev(page, (w) => {
+			w.__measure.markHistory(false);
+			return w.__measure.marks.map((m) => m.name);
+		});
 		const base = {
 			...(await gcHeap(cdp)),
 			workers: await ev(page, (w) => ({ ...w.__p8.workers })),
@@ -1592,10 +1655,17 @@ async function stability(d: Deps) {
 			// 切換 → 編輯頁
 			await nav.getByRole('button', { name: '編輯頁' }).click();
 			await page.locator('.svelte-flow__node-graph').first().waitFor();
-			// 編輯：點卡片、改名、儲存
-			const card = page.locator('.svelte-flow__node-graph').nth(i % 10);
+			// 編輯：點卡片、改名、儲存（卡片以 PERIOD 輪替；同相位＝同一張卡片）
+			const card = page.locator('.svelte-flow__node-graph').nth(i % PERIOD);
 			await card.click();
-			await detail.getByRole('textbox', { name: '名稱', exact: true }).fill(`穩定-${i}`);
+			const box = detail.getByRole('textbox', { name: '名稱', exact: true });
+			if (nameInput === 'fill') await box.fill(`穩定-${i}`);
+			else
+				await box.evaluate((el, v) => {
+					const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+					set.call(el, v);
+					el.dispatchEvent(new Event('input', { bubbles: true }));
+				}, `穩定-${i}`);
 			await detail.getByRole('button', { name: '儲存' }).click();
 			await page
 				.locator('.svelte-flow__node-graph', { hasText: `穩定-${i}` })
@@ -1632,14 +1702,37 @@ async function stability(d: Deps) {
 					'stopped'
 			);
 			await settle(page, 300);
+			// 量測自身的大小（每輪記錄；longtasks 由 measure-universe INIT 收集，這裡用不到，記數後清空）
+			const instr = await page.evaluate(() => {
+				const w = window as unknown as {
+					__measure: { marks: unknown[]; markCounts: Record<string, number> };
+					__p1: { longtasks: unknown[] };
+				};
+				const longtasks = w.__p1.longtasks.length;
+				w.__p1.longtasks.length = 0;
+				let docNodes = 0;
+				const walk = document.createTreeWalker(document, NodeFilter.SHOW_ALL);
+				while (walk.nextNode()) docNodes++;
+				return {
+					docElements: document.querySelectorAll('*').length,
+					docNodes,
+					marks: w.__measure.marks.length,
+					perfMarks: performance.getEntriesByType('mark').length,
+					markEvents: Object.values(w.__measure.markCounts).reduce((a, b) => a + b, 0),
+					longtasksCleared: longtasks
+				};
+			});
 			const m = await gcHeap(cdp);
 			const r = {
 				cycle: i,
 				ms: Date.now() - t0,
-				heapAfterGcMB: d.r1(m.heapMB),
+				heapAfterGcMB: Math.round(m.heapMB * 1000) / 1000,
 				domNodes: m.nodes,
+				docElements: instr.docElements,
+				offDocNodes: m.nodes - instr.docNodes,
 				jsListeners: m.listeners,
 				documents: m.documents,
+				instr,
 				workers: await ev(page, (w) => ({ ...w.__p8.workers })),
 				workerStarts: await ev(page, (w) => w.__measure.editor.universe.workerStarts),
 				listeners: await ev(page, (w) => w.__p8.listeners()),
@@ -1652,13 +1745,76 @@ async function stability(d: Deps) {
 					heap: r.heapAfterGcMB,
 					nodes: r.domNodes,
 					jsl: r.jsListeners,
-					workers: r.workers,
+					marks: instr.marks,
+					perfMarks: instr.perfMarks,
+					workers: r.workers.live,
 					starts: r.workerStarts,
 					errors: r.consoleErrors
 				})
 			);
+			// 同相位 snapshot：第 2 窗結尾、中點、最後一輪（cycles 為 PERIOD 倍數時同一張卡片）
+			if (snapshots && snapAt.has(i)) {
+				heap.push({ cycle: i, offDocNodes: r.offDocNodes, summary: await heapSummary(cdp) });
+				console.log(JSON.stringify({ snapshot: i, ...heap.at(-1)!.summary }));
+			}
 		}
-		// 線性成長：最後 15 輪的最小平方斜率（MB／輪）與總增量
+		// document 外節點成長歸因：首末兩個同相位 snapshot 間，document 外節點增量＝原生編輯指令
+		// （SetCharacterDataCommand，各持有一個 Text）增量，且 detached DOM 不變
+		let explainedPerCycle: number | null = null;
+		let attribution: Record<string, unknown> | null = null;
+		const segments = heap.slice(1).map((b, k) => {
+			const a = heap[k];
+			const n = b.cycle - a.cycle;
+			const code = b.summary.codeBytes - a.summary.codeBytes;
+			const total = b.summary.totalSelfBytes - a.summary.totalSelfBytes;
+			return {
+				cycles: [a.cycle, b.cycle],
+				codeBytesPerCycle: Math.round(code / n),
+				nonCodeBytesPerCycle: Math.round((total - code) / n),
+				counts: Object.fromEntries(
+					RETAINER_NAMES.map((x) => [x, b.summary.counts[x] - a.summary.counts[x]])
+				)
+			};
+		});
+		if (heap.length >= 2) {
+			const a = heap[0];
+			const b = heap[heap.length - 1];
+			const k = b.cycle - a.cycle;
+			const dOff = b.offDocNodes - a.offDocNodes;
+			const dCmd =
+				b.summary.counts['blink::SetCharacterDataCommand'] -
+				a.summary.counts['blink::SetCharacterDataCommand'];
+			const dText = b.summary.textUnknown - a.summary.textUnknown;
+			const dDetached = b.summary.detached - a.summary.detached;
+			const match = k % PERIOD === 0 && dOff === dCmd && dText >= dCmd && dDetached === 0;
+			if (match && dOff % k === 0) explainedPerCycle = dOff / k;
+			attribution = {
+				cycles: [a.cycle, b.cycle],
+				dOffDocNodes: dOff,
+				dNativeUndoSetCharacterData: dCmd,
+				dTextUnknownDetachedness: dText,
+				dDetachedDom: dDetached,
+				explainedPerCycle,
+				segments,
+				note:
+					explainedPerCycle !== null && explainedPerCycle > 0
+						? 'off-document growth == Text held only by Chrome native editing undo stack (blink::UndoStep → SetCharacterDataCommand; Playwright fill; Chrome kMaximumUndoStackDepth = 1000); confirm with --name-input assign'
+						: dOff === 0
+							? 'no off-document growth'
+							: 'off-document growth not fully explained by native undo stack'
+			};
+		}
+		const trend = stabilityTrend(
+			rows.map((r) => ({
+				cycle: r.cycle,
+				heapMB: r.heapAfterGcMB,
+				docElements: r.docElements,
+				offDocNodes: r.offDocNodes
+			})),
+			PERIOD,
+			explainedPerCycle
+		);
+		// 舊的最後 N−5 輪最小平方斜率：只當參考，不是「沒有線性成長」的證明
 		const tail = rows.slice(5);
 		const n = tail.length;
 		const mx = tail.reduce((a, r) => a + r.cycle, 0) / n;
@@ -1669,6 +1825,10 @@ async function stability(d: Deps) {
 		const first = rows[0];
 		const lastR = rows[rows.length - 1];
 		const sameListeners = JSON.stringify(first.listeners) === JSON.stringify(lastR.listeners);
+		const instrMax = {
+			marks: Math.max(...rows.map((r) => r.instr.marks)),
+			perfMarks: Math.max(...rows.map((r) => r.instr.perfMarks))
+		};
 		const verdict = {
 			consoleErrors: { value: s.errors.length, pass: s.errors.length === 0 },
 			orphanWorkers: {
@@ -1686,27 +1846,60 @@ async function stability(d: Deps) {
 				jsListeners: [first.jsListeners, lastR.jsListeners],
 				pass: sameListeners
 			},
+			instrumentation: {
+				coldMarks: cold,
+				// history 關閉後 marks／Performance 時間軸的上限＝不同 marker 名稱數
+				maxMarks: instrMax.marks,
+				maxPerfMarks: instrMax.perfMarks,
+				markEvents: [first.instr.markEvents, lastR.instr.markEvents],
+				pass: rows.every((r) => r.instr.marks === first.instr.marks)
+			},
 			heap: {
 				baselineMB: d.r1(base.heapMB),
 				cycle1MB: first.heapAfterGcMB,
-				cycle20MB: lastR.heapAfterGcMB,
-				slopeMBPerCycle: Math.round(slope * 1000) / 1000,
-				// 非線性：最後 15 輪斜率 < 0.1 MB／輪（20 輪 < 2MB）
-				pass: slope < 0.1
+				lastCycle: lastR.cycle,
+				lastCycleMB: lastR.heapAfterGcMB,
+				status: trend.heap.status,
+				reason: trend.heap.reason,
+				windowMeanMB: trend.windowMeanMB,
+				postDeltaMB: trend.postDeltaMB,
+				tailMBPerCycle: trend.tailMBPerCycle,
+				legacyTailSlopeMBPerCycle: Math.round(slope * 1000) / 1000,
+				limits: trend.limits,
+				pass: trend.heap.status === 'PASS'
 			},
-			domNodes: { first: first.domNodes, last: lastR.domNodes }
+			domNodes: {
+				first: first.domNodes,
+				last: lastR.domNodes,
+				nameInput,
+				docElementsSamePhaseDeltaPer10: trend.docElementsSamePhaseDelta,
+				offDocSamePhaseDeltaPer10: trend.offDocSamePhaseDelta,
+				status: trend.dom.status,
+				reason: trend.dom.reason,
+				attribution,
+				pass: trend.dom.status === 'PASS' || trend.dom.status === 'ATTRIBUTED'
+			}
 		};
 		await writeFile(
-			path.join(d.OUT, `stability-${edges}.json`),
+			path.join(d.OUT, `stability-${edges}${nameInput === 'assign' ? '-assign' : ''}.json`),
 			JSON.stringify(
-				{ env: await envOf(d, l), cycles, base, verdict, rows, errors: s.errors },
+				{
+					env: await envOf(d, l),
+					cycles,
+					period: PERIOD,
+					base,
+					verdict,
+					heapSnapshots: heap,
+					rows,
+					errors: s.errors
+				},
 				null,
 				2
 			)
 		);
 		console.log(JSON.stringify(verdict, null, 1));
 	} finally {
-		await s.b.close().catch(() => {});
+		await closeWarn(s.b, 'stability');
 	}
 }
 

@@ -409,3 +409,179 @@ export function workspaceVerdict(xs: WorkspaceSample[], plan: WorkspacePlan): Ro
 /** 一行文字（log／報告用）：PASS／FAIL／SKIP 與原因 */
 export const line = (v: Row) =>
 	`${v.status} ${v.metric}: ${v.value}/${v.budget} (n=${v.n}/${v.expected})${v.problems.length ? ` — ${v.problems.slice(0, 4).join('; ')}${v.problems.length > 4 ? ` (+${v.problems.length - 4})` : ''}` : ''}`;
+
+// ---------------------------------------------------------------- 長時間穩定性（同狀態比較）
+/**
+ * docElements：document 內元素數（querySelectorAll('*')）；offDocNodes：CDP Nodes 指標減掉
+ * document 內 TreeWalker 走得到的節點數（含文字）＝ document 外仍活著的節點（UA shadow、被持有的 Text…）。
+ */
+export type StabilityRow = {
+	cycle: number;
+	heapMB: number;
+	docElements: number;
+	offDocNodes: number;
+};
+type Range = { min: number; max: number; n: number };
+export type StabilityTrend = {
+	period: number;
+	windows: number;
+	/** 每個週期窗（period 輪）的平均 heap；第 1 窗是暖機（每個輪替選取第一次出現） */
+	windowMeanMB: number[];
+	/** 暖機後相鄰窗的平均差（第 2→3 窗起）；線性洩漏＝這串差不收斂、維持同一正值 */
+	postDeltaMB: number[];
+	/** 後半 postDelta 平均換算成每輪（只是這次量到的尾端趨勢，不是上限保證） */
+	tailMBPerCycle: number;
+	heap: { status: 'PASS' | 'FAIL' | 'INCONCLUSIVE'; reason: string };
+	/** 同相位（cycle 與 cycle−period，同一張卡片／同樣面板）差；只取第 2 窗之後 */
+	docElementsSamePhaseDelta: Range;
+	offDocSamePhaseDelta: Range;
+	dom: { status: 'PASS' | 'ATTRIBUTED' | 'FAIL' | 'INCONCLUSIVE'; reason: string };
+	limits: string;
+};
+
+/** 量測解析度下限：一個窗（period 輪）平均 heap 的差 ≤ 0.05 MB 視為與 GC／JIT 雜訊無法區分 */
+export const HEAP_WINDOW_FLOOR_MB = 0.05;
+
+/**
+ * 計畫要求「沒有線性的保留 heap 成長」。單一斜率門檻證明不了這件事，所以改成同狀態比較：
+ * 輪替選取的週期 = period，只比較同相位（同一張卡片、同樣面板）的量，避免把不同面板大小當成長。
+ * heap：暖機窗之後相鄰窗平均差要收斂（後半平均 ≤ 前半平均的一半，或已低於解析度下限）→ PASS；
+ * 不收斂 → FAIL；窗數不足（< 4，即暖機後至少 3 窗、2 個差）→ INCONCLUSIVE。
+ * DOM：document 內元素同相位差必須全為 0（否則 FAIL）；document 外節點同相位差 0 → PASS，
+ * 非 0 但每輪成長量恰好等於 heap snapshot 歸因到的來源（explainedPerCycle）→ ATTRIBUTED
+ * （不算產品洩漏，但要另附控制組）；否則 FAIL。
+ */
+export function stabilityTrend(
+	rows: StabilityRow[],
+	period = 10,
+	explainedPerCycle: number | null = null
+): StabilityTrend {
+	const byCycle = new Map(rows.map((r) => [r.cycle, r]));
+	const windows = Math.floor(rows.length / period);
+	const windowMeanMB: number[] = [];
+	for (let w = 0; w < windows; w++) {
+		const xs = rows.slice(w * period, (w + 1) * period).map((r) => r.heapMB);
+		windowMeanMB.push(xs.reduce((a, b) => a + b, 0) / xs.length);
+	}
+	const postDeltaMB = windowMeanMB.slice(2).map((m, k) => m - windowMeanMB[k + 1]);
+	const half = Math.floor(postDeltaMB.length / 2);
+	const mean = (v: number[]) => (v.length ? v.reduce((a, b) => a + b, 0) / v.length : NaN);
+	const early = mean(postDeltaMB.slice(0, half));
+	const late = mean(postDeltaMB.slice(half));
+	const tailMBPerCycle = late / period;
+	const heap: StabilityTrend['heap'] =
+		windows < 4
+			? { status: 'INCONCLUSIVE', reason: `${windows} window(s) of ${period}; need ≥ 4` }
+			: late <= HEAP_WINDOW_FLOOR_MB
+				? {
+						status: 'PASS',
+						reason: `late window delta ${late.toFixed(3)} MB ≤ resolution floor ${HEAP_WINDOW_FLOOR_MB}`
+					}
+				: late <= early / 2
+					? {
+							status: 'PASS',
+							reason: `decelerating: late ${late.toFixed(3)} ≤ ½ early ${early.toFixed(3)} MB/window`
+						}
+					: {
+							status: 'FAIL',
+							reason: `not converging: late ${late.toFixed(3)} vs early ${early.toFixed(3)} MB/window`
+						};
+	const same = (f: (r: StabilityRow) => number): Range => {
+		const v: number[] = [];
+		for (const r of rows) {
+			const prev = byCycle.get(r.cycle - period);
+			if (r.cycle > 2 * period && prev) v.push(f(r) - f(prev));
+		}
+		return {
+			min: v.length ? Math.min(...v) : NaN,
+			max: v.length ? Math.max(...v) : NaN,
+			n: v.length
+		};
+	};
+	const docElementsSamePhaseDelta = same((r) => r.docElements);
+	const offDocSamePhaseDelta = same((r) => r.offDocNodes);
+	const zero = (x: Range) => x.min === 0 && x.max === 0;
+	const dom: StabilityTrend['dom'] = !docElementsSamePhaseDelta.n
+		? { status: 'INCONCLUSIVE', reason: 'no same-phase pairs after warm-up' }
+		: !zero(docElementsSamePhaseDelta)
+			? {
+					status: 'FAIL',
+					reason: `in-document elements change at the same phase (${docElementsSamePhaseDelta.min}..${docElementsSamePhaseDelta.max} per ${period} cycles)`
+				}
+			: zero(offDocSamePhaseDelta)
+				? {
+						status: 'PASS',
+						reason: 'same-phase in-document and off-document node counts identical'
+					}
+				: explainedPerCycle !== null &&
+					  offDocSamePhaseDelta.min === offDocSamePhaseDelta.max &&
+					  offDocSamePhaseDelta.max === explainedPerCycle * period
+					? {
+							status: 'ATTRIBUTED',
+							reason: `off-document +${explainedPerCycle}/cycle exactly matches heap-snapshot attributed retainer`
+						}
+					: {
+							status: 'FAIL',
+							reason: `off-document nodes +${offDocSamePhaseDelta.min}..${offDocSamePhaseDelta.max} per ${period} cycles unexplained`
+						};
+	return {
+		period,
+		windows,
+		windowMeanMB: windowMeanMB.map((x) => Math.round(x * 1000) / 1000),
+		postDeltaMB: postDeltaMB.map((x) => Math.round(x * 1000) / 1000),
+		tailMBPerCycle: Math.round(tailMBPerCycle * 10000) / 10000,
+		heap,
+		docElementsSamePhaseDelta,
+		offDocSamePhaseDelta,
+		dom,
+		limits: `${rows.length} cycles in one page: cannot exclude growth below ~${Math.max(late, HEAP_WINDOW_FLOOR_MB).toFixed(2)} MB per ${period} cycles, nor leaks that only appear past this horizon or in states not exercised`
+	};
+}
+
+// ---------------------------------------------------------------- heap snapshot 摘要（保留來源歸因）
+type HeapSnapshot = {
+	snapshot: {
+		meta: {
+			node_fields: string[];
+			node_types: [string[], ...unknown[]];
+		};
+	};
+	nodes: number[];
+	strings: string[];
+};
+export type HeapSummary = {
+	totalSelfBytes: number;
+	codeBytes: number;
+	/** V8 detachedness = 2（已從 document 拔掉的 DOM 物件） */
+	detached: number;
+	/** detachedness = 0（未知；document 外、例如被原生編輯 undo 堆疊持有的 Text） */
+	textUnknown: number;
+	counts: Record<string, number>;
+};
+
+/** 只數指定名稱的節點數（native 名稱如 PerformanceMark、blink::UndoStep），外加總 self size 與 detached */
+export function summarizeHeapSnapshot(s: HeapSnapshot, names: string[]): HeapSummary {
+	const f = s.snapshot.meta.node_fields;
+	const types = s.snapshot.meta.node_types[0];
+	const F = f.length;
+	const [it, iname, isz, idet] = ['type', 'name', 'self_size', 'detachedness'].map((k) =>
+		f.indexOf(k)
+	);
+	const want = new Set(names);
+	const counts: Record<string, number> = Object.fromEntries(names.map((n) => [n, 0]));
+	let totalSelfBytes = 0;
+	let codeBytes = 0;
+	let detached = 0;
+	let textUnknown = 0;
+	for (let k = 0; k < s.nodes.length; k += F) {
+		const name = s.strings[s.nodes[k + iname]];
+		const size = s.nodes[k + isz];
+		totalSelfBytes += size;
+		if (types[s.nodes[k + it]] === 'code') codeBytes += size;
+		const det = idet >= 0 ? s.nodes[k + idet] : -1;
+		if (det === 2) detached++;
+		if (name === 'Text' && det === 0) textUnknown++;
+		if (want.has(name)) counts[name]++;
+	}
+	return { totalSelfBytes, codeBytes, detached, textUnknown, counts };
+}
