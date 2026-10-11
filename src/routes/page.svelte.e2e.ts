@@ -784,6 +784,46 @@ test.describe('找客戶（全圖）', () => {
 		for (const n of ['主機 H-03', '機框 A-02-F1', '客戶乙']) expect(t.has(n), n).toBe(true);
 	});
 
+	test('情境 16 操作 6：點一位客戶只亮通往他的路徑（T-C6a）', async ({ page }) => {
+		await findCustomers(page, '樓層 PDU 2F-A');
+		const result = page.getByRole('region', { name: '找客戶結果' });
+		await expect(result).toContainText('21');
+		const all = new Set(await lit(page));
+		expect(all.has('機櫃 A-02')).toBe(true);
+		const chip = result.getByRole('list', { name: '客戶' }).getByRole('button', { name: '客戶甲' });
+		await chip.click();
+		await expect(chip).toHaveAttribute('aria-pressed', 'true');
+		// 客戶甲在 2F-A 底下有 A-01-F1、A-03-F1 兩個機框
+		await expect(result.getByRole('list', { name: '沿途機櫃' }).getByRole('listitem')).toHaveText([
+			'機櫃 A-01',
+			'機櫃 A-03'
+		]);
+		await expect
+			.poll(async () => new Set(await lit(page)))
+			.toEqual(
+				new Set([
+					'樓層 PDU 2F-A',
+					'機櫃 PDU A-01-A',
+					'機櫃 PDU A-01-B',
+					'機櫃 PDU A-03-A',
+					'機櫃 PDU A-03-B',
+					'機櫃 A-01',
+					'機櫃 A-03',
+					'ToR Switch A-01',
+					'ToR Switch A-03',
+					'機框 A-01-F1',
+					'機框 A-03-F1',
+					'主機 H-01',
+					'主機 H-04',
+					'客戶甲'
+				])
+			);
+		await result.getByRole('button', { name: '顯示全部客戶' }).click();
+		await expect(chip).toHaveAttribute('aria-pressed', 'false');
+		await expect(result.getByRole('list', { name: '沿途機櫃' })).toHaveCount(0);
+		await expect.poll(async () => new Set(await lit(page))).toEqual(all);
+	});
+
 	test('情境 17：標出無客戶路徑的節點', async ({ page }) => {
 		await issueCount(page, '無客戶路徑', 0);
 		// Switch B 連到大樓但沒有往下的邊

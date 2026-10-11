@@ -1,6 +1,6 @@
 <script lang="ts">
 	// 找客戶結果：客戶、沿途節點、沿途關係三份完整清單，各自每頁 50、顯示完整總數、以 ID 為 key。
-	// 點客戶＝定位（隱藏系統會勾回並選取）；點關係＝單獨亮這條邊並保留整個追查；可把兩端整批加入編輯頁（受 200／1,000 預算限制）
+	// 點客戶＝畫布只亮通往他的路徑並列出沿途機櫃（再點一次或「顯示全部客戶」回到全部）；點關係＝單獨亮這條邊並保留整個追查；可把兩端整批加入編輯頁（受 200／1,000 預算限制）
 	import type { Editor } from '#lib/editor.svelte.js';
 	import { Pager } from '#lib/pager.svelte.js';
 	import PageNav from './PageNav.svelte';
@@ -27,6 +27,10 @@
 	/** 沿途清單收起時不渲染（上萬筆也只在展開時畫當頁 50 筆） */
 	let showNodes = $state(false);
 	let showEdges = $state(false);
+	const picked = $derived(editor.highlight === result ? null : editor.traceCustomer);
+	const cabinets = $derived(
+		picked ? [...editor.highlight!.nodes].filter((id) => editor.node(id)?.type === '機櫃') : []
+	);
 	const selectedEdge = $derived(editor.selected?.kind === 'edge' ? editor.selected.id : null);
 </script>
 
@@ -58,14 +62,38 @@
 			{#each customers.slice(result.customerIds) as id (id)}
 				<li>
 					<button
-						class="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-2.5 py-0.5 text-xs text-emerald-200 hover:bg-emerald-400/20"
-						onclick={() => editor.locate(id)}>{label(id)}</button
+						aria-pressed={picked === id}
+						class={[
+							'rounded-full border px-2.5 py-0.5 text-xs hover:bg-emerald-400/20',
+							picked === id
+								? 'border-emerald-300 bg-emerald-400/30 text-white'
+								: 'border-emerald-400/30 bg-emerald-400/10 text-emerald-200'
+						]}
+						onclick={() => editor.pickCustomer(id)}>{label(id)}</button
 					>
 				</li>
 			{:else}
 				<li class="text-xs text-rose-300">走不到任何客戶</li>
 			{/each}
 		</ul>
+		{#if picked}
+			<div class="flex items-center gap-2 pt-2 text-[11px] text-slate-400">
+				<span>沿途機櫃（{cabinets.length}）</span>
+				<button class="ml-auto hover:text-slate-200" onclick={() => editor.pickCustomer(null)}
+					>顯示全部客戶</button
+				>
+			</div>
+			<ul aria-label="沿途機櫃" class="flex flex-wrap gap-1 pt-1">
+				{#each cabinets as id (id)}
+					<li>
+						<button
+							class="rounded px-1.5 py-0.5 text-xs text-slate-200 hover:bg-white/5"
+							onclick={() => editor.reveal(id)}>{nameOf(id)}</button
+						>
+					</li>
+				{/each}
+			</ul>
+		{/if}
 	</div>
 	<div class="mt-2 border-t border-white/6 px-4 py-2 text-[11px] text-slate-400">
 		<p>完整查詢：沿途 {nodes.length} 個節點、{edges.length} 條邊</p>

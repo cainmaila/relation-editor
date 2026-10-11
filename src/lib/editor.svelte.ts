@@ -12,6 +12,7 @@ import {
 	checkDeleteNode,
 	collapse,
 	findCustomers,
+	pathTo,
 	layout,
 	pin,
 	STACK_MIN,
@@ -98,6 +99,8 @@ export class Editor {
 	 * 選取其他節點／關係不清掉；只有「清除」、Esc、換起點或刪掉起點才結束
 	 */
 	trace = $state<{ source: string; topologyRevision: number } | null>(null);
+	/** 找客戶結果中點選的客戶：畫布只亮通往他的路徑；換起點、清除、刪起點都會重設 */
+	traceCustomer = $state<string | null>(null);
 	message = $state('');
 	/** 新增邊表單（拉線時帶入起點終點） */
 	draft = $state({ from: '', to: '', type: '' });
@@ -176,6 +179,12 @@ export class Editor {
 		return untrack(() =>
 			this.node(t.source) ? findCustomers(this.graph, t.source, this.index) : null
 		);
+	});
+	/** 畫布高亮：點了客戶就只留通往他的路徑（客戶已不在結果則回到整個結果） */
+	highlight = $derived.by(() => {
+		const r = this.result;
+		const c = this.traceCustomer;
+		return r && c && r.customerIds.includes(c) ? pathTo(r, c, this.index) : r;
 	});
 	/** 目前結果對應的拓撲版本（同步重算＝永遠是最新版本）；沒有結果為 null */
 	traceRevision = $derived(this.result ? this.topologyRevision : null);
@@ -661,7 +670,7 @@ export class Editor {
 		this.removeFromWork([id]);
 		this.select(null);
 		if (this.trace?.source === id) {
-			this.trace = null;
+			this.trace = this.traceCustomer = null;
 			this.message = '追查起點已刪除，找客戶結果已清除';
 		}
 		return true;
@@ -722,12 +731,19 @@ export class Editor {
 		if (this.page !== 'graph' || !this.node(id)) return;
 		this.select({ kind: 'node', id });
 		this.trace = { source: id, topologyRevision: this.topologyRevision };
+		this.traceCustomer = null;
 		this.fit([...this.result!.nodes]);
+	}
+
+	/** 找客戶結果點客戶：只亮通往他的路徑；再點一次回到全部客戶。鏡頭對準亮起的部分 */
+	pickCustomer(id: string | null) {
+		this.traceCustomer = this.traceCustomer === id ? null : id;
+		if (this.highlight) this.fit([...this.highlight.nodes]);
 	}
 
 	/** 結束追查（清除按鈕、Esc） */
 	clearTrace() {
-		this.trace = null;
+		this.trace = this.traceCustomer = null;
 	}
 
 	private fail(msg: string) {

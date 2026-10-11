@@ -1160,6 +1160,26 @@ describe('P7 全圖追查與跨視圖一致性', () => {
 		expect(e.result).not.toBe(before);
 		expect(e.traceRevision).toBe(e.topologyRevision);
 	});
+
+	it('點客戶只亮通往他的路徑，再點一次回到全部；換起點、清除都重設', () => {
+		const e = new Editor();
+		e.findCustomers('樓層 PDU 2F-A');
+		expect(e.highlight).toBe(e.result);
+		e.pickCustomer('客戶甲');
+		expect(e.traceCustomer).toBe('客戶甲');
+		expect(e.highlight!.nodes.has('機櫃 A-01')).toBe(true);
+		expect(e.highlight!.nodes.has('機櫃 A-02')).toBe(false);
+		e.pickCustomer('客戶甲');
+		expect(e.traceCustomer).toBeNull();
+		expect(e.highlight).toBe(e.result);
+		e.pickCustomer('客戶甲');
+		e.findCustomers('台電市電');
+		expect(e.traceCustomer).toBeNull();
+		e.pickCustomer('客戶甲');
+		e.clearTrace();
+		expect(e.traceCustomer).toBeNull();
+		expect(e.highlight).toBeNull();
+	});
 });
 
 describe('刪除資料一律先確認（requestDelete → confirmDelete）', () => {

@@ -157,7 +157,7 @@
 
 	$effect(() => {
 		const a = api;
-		void [editor.selected, editor.result, editor.unprocessed, editor.unreachable];
+		void [editor.selected, editor.highlight, editor.unprocessed, editor.unreachable];
 		if (a) untrack(() => a.paint());
 	});
 
@@ -309,7 +309,7 @@
 			undo.push(() => controls.removeEventListener('start', interacted));
 
 			const paint = () => {
-				const res = editor.result;
+				const res = editor.highlight;
 				const sel = editor.selected;
 				let nodes: Set<string> | null = null;
 				let edges: Set<string> | null = null;

@@ -141,22 +141,23 @@ describe('DetailPanel P7：完整清單分頁與追查', () => {
 		e.search.dispose();
 	});
 
-	it('點客戶 chip：客戶所屬系統（IDC）被隱藏也會勾回並選取，完整追查不變', async () => {
+	it('點客戶 chip：只亮通往他的路徑（按下狀態），完整追查不變；再點一次回到全部', async () => {
 		const e = new Editor(fan(3));
 		e.findCustomers('src');
-		e.systems = e.systems.filter((s) => s !== 'IDC');
-		expect(e.graphVisible.nodes.some((n) => n.id === 'cu-002')).toBe(false);
 		const before = { ...e.result!, nodes: [...e.result!.nodes], edges: [...e.result!.edges] };
 		render(DetailPanel, { editor: e });
-		await trace().getByRole('button', { name: '客戶 002' }).click();
-		expect(e.systems).toContain('IDC');
-		expect(e.graphVisible.nodes.some((n) => n.id === 'cu-002')).toBe(true);
-		expect(e.selected).toEqual({ kind: 'node', id: 'cu-002' });
+		const chip = trace().getByRole('button', { name: '客戶 002' });
+		await chip.click();
+		await expect.element(chip).toHaveAttribute('aria-pressed', 'true');
+		expect(e.traceCustomer).toBe('cu-002');
+		expect([...e.highlight!.nodes].sort()).toEqual(['cu-002', 'src']);
 		expect(e.trace?.source).toBe('src');
 		expect([...e.result!.nodes]).toEqual(before.nodes);
 		expect([...e.result!.edges]).toEqual(before.edges);
 		expect(e.result!.customerIds).toEqual(before.customerIds);
-		await expect.element(trace()).toBeInTheDocument();
+		await chip.click();
+		await expect.element(chip).toHaveAttribute('aria-pressed', 'false');
+		expect(e.highlight).toBe(e.result);
 		e.search.dispose();
 	});
 

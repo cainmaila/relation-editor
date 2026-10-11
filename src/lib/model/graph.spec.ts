@@ -4,6 +4,7 @@ import {
 	collapse,
 	findCustomers,
 	layout,
+	pathTo,
 	pin,
 	NODE_H,
 	stacks,
@@ -183,6 +184,24 @@ describe('找客戶', () => {
 		expect(cust(g, '主機 H-02')).toEqual(['客戶乙']);
 		expect(cust(g, 'Core Switch-1')).toEqual(ALL_CUSTOMERS);
 		expect(cust(g, 'ToR Switch A-02')).toEqual(['客戶乙']);
+	});
+
+	it('情境 16 操作 6：點一位客戶只留通往他的路徑', () => {
+		const g = full();
+		const idx = buildGraphIndex(g);
+		const r = findCustomers(g, '樓層 PDU 2F-A', idx);
+		expect(r.customerIds).toHaveLength(21);
+		const p = pathTo(r, '客戶甲', idx);
+		const of = (type: string) => [...p.nodes].filter((id) => idx.nodeById.get(id)!.type === type);
+		expect(of('客戶')).toEqual(['客戶甲']);
+		expect(of('機櫃').sort()).toEqual(['機櫃 A-01', '機櫃 A-03']);
+		for (const id of ['樓層 PDU 2F-A', '機櫃 PDU A-01-A', '機櫃 PDU A-01-B', '機框 A-01-F1'])
+			expect(p.nodes.has(id)).toBe(true);
+		for (const id of p.edges) {
+			const e = idx.edgeById.get(id)!;
+			expect(r.edges.has(id) && p.nodes.has(e.from) && p.nodes.has(e.to)).toBe(true);
+		}
+		expect(p.edges.size).toBeLessThan(r.edges.size);
 	});
 
 	it('情境 17：到不了客戶', () => {

@@ -79,6 +79,18 @@ export function findCustomers(
 	return { customers: found.map((n) => n.name), customerIds: found.map((n) => n.id), nodes, edges };
 }
 
+/** 找客戶結果內只到某一位客戶的路徑：在結果子圖內由客戶逆向走回 */
+export function pathTo(result: CustomerResult, customer: string, idx: GraphIndex) {
+	const nodes = walk(idx, [customer], (e, id) => (result.edges.has(e.id) ? prev(e, id) : null));
+	const edges = new Set(
+		[...result.edges].filter((id) => {
+			const e = idx.edgeById.get(id)!;
+			return nodes.has(e.from) && nodes.has(e.to);
+		})
+	);
+	return { nodes, edges };
+}
+
 /** 通用節點不受連接限制（PRD §3） */
 const GENERIC = '通用節點';
 const matches = (list: string[] | undefined, n: GNode) => {
