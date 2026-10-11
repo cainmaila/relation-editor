@@ -225,6 +225,9 @@ describe('編輯頁 working', () => {
 		expect(e.revision).toBe(2);
 		expect(e.selected).toEqual({ kind: 'node', id });
 		expect(e.naming).toBe(id);
+		// 選到別的東西就不再等著改名（右欄收著時沒機會聚焦）
+		e.select({ kind: 'node', id: from });
+		expect(e.naming).toBeNull();
 		expect(e.outgoingEdges(from).find((x) => x.to === id)).toMatchObject({ type: '包含' });
 		// 反向：新節點為起點
 		const back = e.addNodeWithEdge('攝影機', '機櫃 A-01', '監測', true)!;
