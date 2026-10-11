@@ -44,7 +44,7 @@ export function createMarkLog(now: () => number = () => performance.now(), sink?
 			const cold = marks.filter((m) => !seen.has(m.name) && !!seen.add(m.name));
 			if (cold.length === marks.length) return;
 			marks.splice(0, marks.length, ...cold);
-			out?.clearMarks();
+			for (const name of seen) out?.clearMarks(name);
 			for (const m of cold) write(m);
 		}
 	};

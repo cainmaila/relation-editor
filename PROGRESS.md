@@ -6,13 +6,17 @@
 - **Status:** fix round 2 完成（agent-tested），**待 parent QA**（P0–P7 已交付、已自本檔移除）
 - **Done:**
   - `scripts/measure-p8.ts`：formal／workspace／stability／stress／selftest，頁內事件→畫出延遲、真滑鼠點選、PASS／FAIL 判定
-  - 正式 10k／20k、10k／100k 各 5 冷樣本全數 PASS（含 25／25 真點選）；20 輪穩定性 PASS；50k／100k 壓力可操作
+  - 正式 10k／20k、10k／100k 各 5 冷樣本全數 PASS（含 25／25 真點選）；50k／100k 壓力可操作
+  - 穩定性改版（`ea9217d`）：預設 200 輪、`--name-input fill|assign`、`--snapshots on|off`；量測本身有上限（`createMarkLog` 關 history 只留冷 marker＋計數）；
+    判定只比同相位（`stabilityTrend`），document 外節點成長以 heap snapshot 歸因。200 輪 20k（`artifacts/p8/qa5`）：
+    fill → heap PASS（late 0.036 MB/窗）、DOM ATTRIBUTED（+1/輪＝Chrome 原生 undo 堆疊，上限 1000）；assign 控制組 → 全 PASS
   - fix2：workspace 量測改在可讀縮放（真滾輪、容器內 hit-test，判定檢查 zoom 0.75–1.5／卡寬／字級，zoom 0.1 一律 FAIL）；
     舊 fix1 數字只在 zoom 0.1 成立。可讀縮放下 hover／選取逐條改 1,000 條邊樣式造成 GPU 重 raster（~350ms），
     改為邊容器整層暗化＋亮起副本（`FocusEdge.svelte`）後 3 樣本：平移／拉線 p95 16.8、提交 27.8、選單 55.9 全 PASS（`artifacts/p8/fix2`）
   - fix2：節點／邊刪除在詳情、右鍵、工具列、⌫ 一律確認（`requestDelete`／`confirmDelete`，圖換版即作廢）
 - **Todo:** parent QA 與人工操作確認（全圖／工作集辨識、找到省略關係、移出≠刪除、可讀縮放下的亮起外觀）
-- **Notes:** 500 節點壓力產物仍是 fix2 之前的；3D 正式矩陣未重跑（路徑未改）
+- **Notes:** 500 節點壓力產物仍是 fix2 之前的；3D 正式矩陣未重跑（路徑未改）；
+  PR #6 審查後：heap 判定未做 `--snapshots off` 對照（snapshot 在第 100 輪可能擾動 late 第一窗）；heap 門檻 0.05 MB/窗為刻意解析度下限，未調
 
 ## 上萬節點渲染實驗（spike，不合併 main）
 

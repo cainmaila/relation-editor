@@ -1596,6 +1596,7 @@ async function heapSummary(cdp: CDPSession) {
 	} finally {
 		cdp.off('HeapProfiler.addHeapSnapshotChunk', on);
 	}
+	// shortcut: 整份 snapshot 進記憶體再 parse（20k edges 約 50MB），--edges 大很多時可能超出字串上限／OOM；要大規模再改串流解析
 	return summarizeHeapSnapshot(JSON.parse(chunks.join('')), RETAINER_NAMES);
 }
 
@@ -1617,6 +1618,9 @@ async function stability(d: Deps) {
 		throw new RangeError(`--name-input must be fill|assign, got ${nameInput}`);
 	const snapshots = d.opt('snapshots', 'on') === 'on';
 	const PERIOD = 10;
+	// 同相位比較與 snapshot 歸因都假設輪數對齊 PERIOD
+	if (cycles % PERIOD)
+		throw new RangeError(`--cycles must be a multiple of ${PERIOD}, got ${cycles}`);
 	const edges = d.EDGES[0];
 	const s = await open(d, l);
 	const rows = [];

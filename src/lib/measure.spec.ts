@@ -12,8 +12,8 @@ function fakeSink() {
 				return undefined as unknown as PerformanceMark;
 			},
 			clearMarks: (name?: string) => {
-				if (name) throw new Error('only full clear expected');
-				entries.length = 0;
+				if (!name) throw new Error('must not clear marks it does not own');
+				entries.splice(0, entries.length, ...entries.filter((e) => e.name !== name));
 			}
 		}
 	};
@@ -40,6 +40,7 @@ describe('createMarkLog', () => {
 		const { entries, sink } = fakeSink();
 		const log = createMarkLog(() => ++t, sink);
 		const ref = log.marks;
+		entries.push({ name: 'foreign', startTime: 0 });
 		for (const n of ['cold', 'tick', 'tick', 'tick']) log.record(n);
 		log.setHistory(false);
 		expect(log.history).toBe(false);
@@ -48,7 +49,9 @@ describe('createMarkLog', () => {
 			['cold', 1],
 			['tick', 2]
 		]);
+		// 別人寫的 mark 不受影響
 		expect(entries).toEqual([
+			{ name: 'foreign', startTime: 0 },
 			{ name: 'cold', startTime: 1 },
 			{ name: 'tick', startTime: 2 }
 		]);
@@ -57,7 +60,7 @@ describe('createMarkLog', () => {
 		log.record('late');
 		log.record('late');
 		expect(log.marks.map((m) => m.name)).toEqual(['cold', 'tick', 'late']);
-		expect(entries.map((e) => e.name)).toEqual(['cold', 'tick', 'late']);
+		expect(entries.map((e) => e.name)).toEqual(['foreign', 'cold', 'tick', 'late']);
 		expect(log.counts).toEqual({ cold: 1, tick: 1003, late: 2 });
 	});
 
