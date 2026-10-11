@@ -1,5 +1,6 @@
 import { describe, expect, it, test } from 'vitest';
 import { runLayout, startLayoutJob } from './layout-sim';
+import { ROOT_ID } from './model/config';
 import { idsKey, pack, seedPositions, type LayoutReply, type LayoutStart } from './universe/layout';
 
 const links: [number, number][] = [
@@ -57,6 +58,15 @@ describe('startLayoutJob（Worker 分段整理）', () => {
 			}
 		};
 	}
+
+	it('根節點固定在原點', () => {
+		const t = io();
+		const rids = ['a', ROOT_ID, 'c', 'd', 'e'];
+		startLayoutJob(req({ ids: rids, positions: pack(rids, seedPositions(rids)) }), t.io);
+		t.drain();
+		const last = t.posts.at(-1)!.reply as { positions: Float32Array };
+		expect([...last.positions.subarray(3, 6)]).toEqual([0, 0, 0]);
+	});
 
 	it('分段回報進度，達預算時 done；每段帶 generation／topologyRevision／idsKey 與新的 buffer', () => {
 		const t = io();

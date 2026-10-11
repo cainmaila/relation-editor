@@ -3,6 +3,7 @@
 // 每一層都是固定容量的 GPU buffer，相機改變只改寫有上限的內容；Points 只在拓撲改變時重配、
 // 座標改變時就地寫入。LOD 與點選的決策在 lod.ts（純計算），這裡只負責把結果寫進 buffer／DOM。
 import type * as THREE_NS from 'three';
+import { ROOT_ID } from '#lib/model/config.js';
 import type { Graph } from '#lib/model/types.js';
 import type { UniverseRuntime } from './runtime';
 import {
@@ -29,7 +30,10 @@ export const PALETTE = {
 	PATH: '#22d3ee',
 	SEL: '#ffffff',
 	WARN: '#facc15',
-	BROKEN: '#fb7185'
+	BROKEN: '#fb7185',
+	/** 根節點：空間靛色的淺色版（白色留給選取） */
+	ROOT: '#c7d2fe',
+	ROOT_RING: '#a5b4fc'
 } as const;
 
 /** 選取／找客戶的高亮輸入（ID 層級；renderer 自己轉成索引） */
@@ -75,6 +79,11 @@ const baseOpacity = (edges: number) =>
 	Math.min(0.5, Math.max(0.08, 0.5 * Math.sqrt(400 / Math.max(edges, 1))));
 const BASE_DIM_OPACITY = 0.04;
 const STARS = 1600;
+/** 根節點核心的尺寸倍率（一般 1、問題節點 1.6） */
+const ROOT_SIZE = 3;
+/** 根節點光環半徑（核心半徑的倍數）與畫面上的最小半徑（px） */
+const RING = 2.6;
+const RING_MIN_PX = 32;
 
 export function createUniverseLayers(o: UniverseLayersOptions) {
 	// 建構中途失敗（GPU 資源、標籤 DOM）：已建的全部倒序收回，不留場景物件／hook／DOM
@@ -117,6 +126,7 @@ function buildLayers(o: UniverseLayersOptions, undo: (() => void)[]) {
 	let graph: Graph = { nodes: [], edges: [] };
 	let colors: Float32Array = new Float32Array(0); // 每個節點目前顏色（含高亮）
 	let typeColor: string[] = [];
+	let root = -1;
 	let edgeIds: string[] = [];
 	let edgeIndex = new Map<string, number>();
 	let from = new Uint32Array(0);
@@ -263,6 +273,50 @@ function buildLayers(o: UniverseLayersOptions, undo: (() => void)[]) {
 	stars.renderOrder = -2;
 	add(stars);
 
+	// ---- 根節點光環（單點 Points：雙環＋外圈緩慢呼吸；畫面上有最小尺寸，全圖縮遠也看得到） ----
+	const ringMat = own(
+		new THREE.ShaderMaterial({
+			uniforms: {
+				focal: { value: 1 },
+				dpr: { value: 1 },
+				time: { value: 0 },
+				strength: { value: 0 },
+				color: { value: new THREE.Color(PALETTE.ROOT_RING) }
+			},
+			vertexShader: /* glsl */ `
+				uniform float focal;
+				uniform float dpr;
+				void main() {
+					vec4 mv = modelViewMatrix * vec4(position, 1.0);
+					if (-mv.z <= 0.0) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); gl_PointSize = 0.0; return; }
+					gl_Position = projectionMatrix * mv;
+					float px = ${(ROOT_SIZE * RING * LOD.nodeRadius).toFixed(1)} * focal / -mv.z;
+					gl_PointSize = 2.0 * max(px, ${RING_MIN_PX.toFixed(1)}) * dpr;
+				}`,
+			fragmentShader: /* glsl */ `
+				uniform float time;
+				uniform float strength;
+				uniform vec3 color;
+				void main() {
+					float d = length(gl_PointCoord - 0.5) * 2.0;
+					if (d > 1.0) discard;
+					float breath = 0.5 + 0.5 * sin(time * 1.6);
+					float inner = exp(-pow((d - 0.55) / 0.035, 2.0));
+					float outer = exp(-pow((d - (0.82 + breath * 0.08)) / 0.03, 2.0)) * (0.35 + 0.45 * (1.0 - breath));
+					float glow = exp(-d * d * 4.0) * 0.18;
+					gl_FragColor = vec4(color * (inner * 0.8 + outer + glow) * strength, 1.0);
+				}`,
+			transparent: true,
+			depthWrite: false,
+			blending: THREE.AdditiveBlending
+		})
+	);
+	const ringGeom = own(new THREE.BufferGeometry());
+	ringGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(3), 3));
+	const ring = new THREE.Points(ringGeom, ringMat);
+	ring.frustumCulled = false;
+	add(ring);
+
 	// ---- 方向箭頭（只有選取／找客戶的高亮邊；固定容量） ----
 	const cone = own(new THREE.ConeGeometry(1.8, 6, 6));
 	const arrowMat = own(new THREE.MeshBasicMaterial());
@@ -287,6 +341,16 @@ function buildLayers(o: UniverseLayersOptions, undo: (() => void)[]) {
 		// DOM 狀態快取：只在真的變了才寫 DOM；gen 落後＝名稱刷新過，要重寫字與寬度
 		return { el, node: -1, shown: false, sel: false, w: -1, gen: 0 };
 	});
+	// 根節點名稱常駐（不受 LOD 與標籤上限限制）
+	const rootLabel = document.createElement('div');
+	rootLabel.className = 'universe-root-label';
+	rootLabel.style.cssText =
+		'position:absolute;left:0;top:0;display:none;white-space:nowrap;pointer-events:none;text-align:center;' +
+		'padding:3px 10px 4px;border-radius:6px;background:rgba(5,7,15,.7);box-shadow:inset 0 0 0 1px rgba(165,180,252,.35),0 0 18px rgba(129,140,248,.25);' +
+		'color:#e0e7ff;font-size:13px;font-weight:600;letter-spacing:.04em;line-height:1.25;will-change:transform';
+	o.labelHost.appendChild(rootLabel);
+	undo.push(() => rootLabel.remove());
+	let rootText = '';
 	let labelGen = 0;
 	const widths = new Map<number, number>();
 	const widthOf = (i: number) => {
@@ -338,8 +402,17 @@ function buildLayers(o: UniverseLayersOptions, undo: (() => void)[]) {
 		(a.array as Float32Array).set(s.positions);
 		a.needsUpdate = true;
 		grid = buildGrid(s.positions);
+		writeRing();
 		writeBase();
 		dirty = true;
+	}
+
+	function writeRing() {
+		if (root < 0) return;
+		const pos = P();
+		const a = ringGeom.getAttribute('position') as THREE_NS.BufferAttribute;
+		a.setXYZ(0, pos[root * 3], pos[root * 3 + 1], pos[root * 3 + 2]);
+		a.needsUpdate = true;
 	}
 
 	/** 全圖連線的座標（座標改變時就地寫入，O(邊數)） */
@@ -367,6 +440,9 @@ function buildLayers(o: UniverseLayersOptions, undo: (() => void)[]) {
 			visible[i] = 1;
 			typeColor[i] = o.nodeColor(node.type);
 		}
+		root = index.get(ROOT_ID) ?? -1;
+		if (root >= 0 && visible[root]) typeColor[root] = PALETTE.ROOT;
+		writeRing();
 		const es = graph.edges.filter((e) => index.has(e.from) && index.has(e.to));
 		edgeIds = es.map((e) => e.id);
 		edgeIndex = new Map(edgeIds.map((id, k) => [id, k]));
@@ -421,8 +497,11 @@ function buildLayers(o: UniverseLayersOptions, undo: (() => void)[]) {
 			colors[i * 3] = c.r;
 			colors[i * 3 + 1] = c.g;
 			colors[i * 3 + 2] = c.b;
-			base[i] = visible[i] ? (issue ? 1.6 : 1) : 0;
+			base[i] = visible[i] ? (i === root ? ROOT_SIZE : issue ? 1.6 : 1) : 0;
 		}
+		// 光環：根節點被篩掉就關；聚焦時退到背景（根節點在聚焦集合內則照亮）
+		ringMat.uniforms.strength.value =
+			root < 0 || !visible[root] ? 0 : fn && !fn.has(ROOT_ID) ? 0.25 : 1;
 		(pointGeom.getAttribute('tint') as THREE_NS.BufferAttribute).needsUpdate = true;
 		writeSizes([], true);
 		baseMat.opacity = fn ? BASE_DIM_OPACITY : baseOpacity(from.length);
@@ -479,6 +558,8 @@ function buildLayers(o: UniverseLayersOptions, undo: (() => void)[]) {
 		view = currentView();
 		pointMat.uniforms.focal.value = view.focal;
 		pointMat.uniforms.dpr.value = o.pixelRatio();
+		ringMat.uniforms.focal.value = view.focal;
+		ringMat.uniforms.dpr.value = o.pixelRatio();
 		// 轉動中只重新投影既有標籤；停下（或間隔到了）才重新挑選與避碰
 		const full = !state || !moved || now - lastFull >= LOD.labelThrottleMs;
 		const f = computeFrame(
@@ -511,6 +592,7 @@ function buildLayers(o: UniverseLayersOptions, undo: (() => void)[]) {
 		writeLocal(f);
 		writeHighlight(f);
 		writeLabels(f);
+		writeRootLabel(view);
 		frames++;
 		lodMs = performance.now() - t0;
 		lodMaxMs = Math.max(lodMaxMs, lodMs);
@@ -530,7 +612,7 @@ function buildLayers(o: UniverseLayersOptions, undo: (() => void)[]) {
 	function writeDetail(f: Frame) {
 		const pos = P();
 		f.detail.forEach((i, k) => {
-			const s = base[i] > 1 ? 1.6 : 1;
+			const s = base[i];
 			m4.makeScale(s, s, s).setPosition(pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2]);
 			detailMesh.setMatrixAt(k, m4);
 			detailMesh.setColorAt(k, c.setRGB(colors[i * 3], colors[i * 3 + 1], colors[i * 3 + 2]));
@@ -579,7 +661,7 @@ function buildLayers(o: UniverseLayersOptions, undo: (() => void)[]) {
 			if (len < 14) return;
 			v3.set(dx / len, dy / len, dz / len);
 			q.setFromUnitVectors(UP, v3);
-			const back = R * (base[b] > 1 ? 1.6 : 1) + 4;
+			const back = R * base[b] + 4;
 			m4.compose(
 				new THREE.Vector3(
 					pos[b * 3] - v3.x * back,
@@ -607,8 +689,9 @@ function buildLayers(o: UniverseLayersOptions, undo: (() => void)[]) {
 
 	function writeLabels(f: Frame) {
 		const sel = focusIdx.selected;
+		const ls = f.labels.filter((l) => l.node !== root);
 		pool.forEach((slot, k) => {
-			const l = f.labels[k];
+			const l = ls[k];
 			const st = slot.el.style;
 			if (!l) {
 				if (slot.shown) st.display = 'none';
@@ -635,11 +718,37 @@ function buildLayers(o: UniverseLayersOptions, undo: (() => void)[]) {
 		});
 	}
 
+	function writeRootLabel(v: View) {
+		const st = rootLabel.style;
+		const pos = P();
+		const p =
+			root >= 0 && visible[root]
+				? project(v, pos[root * 3], pos[root * 3 + 1], pos[root * 3 + 2])
+				: null;
+		if (!p || p.x < 0 || p.y < 0 || p.x > v.width || p.y > v.height) {
+			st.display = 'none';
+			return;
+		}
+		const text = o.name(ROOT_ID);
+		if (text !== rootText) {
+			rootText = text;
+			rootLabel.dataset.id = ROOT_ID;
+			rootLabel.innerHTML =
+				'<div style="font-size:9px;font-weight:500;letter-spacing:.3em;color:#a5b4fc">ROOT</div>';
+			rootLabel.append(text);
+		}
+		const ringPx = Math.max((ROOT_SIZE * RING * R * v.focal) / p.depth, RING_MIN_PX);
+		st.display = 'block';
+		st.opacity = focus?.nodes && !focus.nodes.has(ROOT_ID) ? '.35' : '1';
+		st.transform = `translate(${p.x}px,${p.y + ringPx + 6}px) translateX(-50%)`;
+	}
+
 	// ---- 外部介面 ----
 	const off = (() => {
 		const prev = scene.onBeforeRender;
 		scene.onBeforeRender = (...args) => {
 			prev.apply(scene, args);
+			ringMat.uniforms.time.value = performance.now() / 1000;
 			update();
 		};
 		const restore = () => (scene.onBeforeRender = prev);
@@ -664,6 +773,7 @@ function buildLayers(o: UniverseLayersOptions, undo: (() => void)[]) {
 		/** 名稱改了：標籤重寫文字與寬度，不碰版面 */
 		refreshLabels() {
 			widths.clear();
+			rootText = '';
 			labelGen++;
 			labelsDirty = true;
 		},
@@ -714,7 +824,7 @@ function buildLayers(o: UniverseLayersOptions, undo: (() => void)[]) {
 		},
 		dispose() {
 			off();
-			for (const x of [points, detailMesh, localLines, hiLines, arrows, baseLines, stars])
+			for (const x of [points, detailMesh, localLines, hiLines, arrows, baseLines, stars, ring])
 				x.removeFromParent();
 			pointGeom.dispose();
 			baseGeom.dispose();
@@ -722,6 +832,7 @@ function buildLayers(o: UniverseLayersOptions, undo: (() => void)[]) {
 			arrows.dispose();
 			for (const d of disposables) d.dispose();
 			for (const s of pool) s.el.remove();
+			rootLabel.remove();
 		}
 	};
 

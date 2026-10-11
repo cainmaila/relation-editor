@@ -1,12 +1,13 @@
 // d3-force-3d 版面計算（力的設定同 three-forcegraph 預設）；Worker 與量測腳本共用同一份。
 import { forceSimulation, forceLink, forceManyBody, forceCenter } from 'd3-force-3d';
+import { ROOT_ID } from './model/config';
 import { idsKey, type LayoutReply, type LayoutStart } from './universe/layout';
 
 /** zero：全部從原點出發（P1 基線）；d3：交給 d3 的非重合起始點（P1 對照實驗用） */
 export type LayoutInit = 'zero' | 'd3';
 export type LayoutIn = { n: number; links: [number, number][]; ticks: number; init?: LayoutInit };
 export type LayoutOut = { pos: Float32Array; tickMs: Float64Array };
-type P = { id: number; x?: number; y?: number; z?: number };
+type P = { id: number; x?: number; y?: number; z?: number; fx?: number; fy?: number; fz?: number };
 
 function simulation(nodes: P[], links: [number, number][]) {
 	const sim = forceSimulation()
@@ -65,12 +66,12 @@ export function startLayoutJob(req: LayoutStart, io: JobIO) {
 	let stopped = false;
 	let tick = 0;
 	let sim: ReturnType<typeof simulation>;
-	const nodes: P[] = req.ids.map((_, id) => ({
-		id,
-		x: req.positions[id * 3],
-		y: req.positions[id * 3 + 1],
-		z: req.positions[id * 3 + 2]
-	}));
+	// 根節點固定在原點：關係網從它長出去，連不到它的節點被推到外圍
+	const nodes: P[] = req.ids.map((nid, id) =>
+		nid === ROOT_ID
+			? { id, x: 0, y: 0, z: 0, fx: 0, fy: 0, fz: 0 }
+			: { id, x: req.positions[id * 3], y: req.positions[id * 3 + 1], z: req.positions[id * 3 + 2] }
+	);
 	const fail = (e: unknown) =>
 		io.post({ ...stamp, type: 'error', message: e instanceof Error ? e.message : String(e) }, []);
 
