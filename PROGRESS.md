@@ -1,5 +1,14 @@
 # PROGRESS
 
+## 試玩回饋 10-11 第二批（分支 main-3）
+
+- **Goal:** 5 項修改，驗收 T-A7a、T-C6a、T-B2a、T-B2b、T-B12、T-E3a；計畫 `~/.claude/plans/pasted-content-id-e026-glistening-token.md`
+- **Todo（3 個 subagent 平行，同一 worktree 分檔）:**
+  - A：快速新增後名稱欄自動編輯全選（3）＋屬性即時存檔、拿掉儲存鈕（4）
+  - B：找客戶點單一客戶只亮路徑、列沿途機櫃（2）
+  - C：連入／連出點名稱跳節點（1）＋重排後鏡頭跟選取（5）
+- **Next:** 等三個 subagent 回報 → 讀 diff、跑全部檢查、Chrome 實操
+
 ## 試用回饋 10-11（PRD v0.5，分支 cainmaila/main-3-3）
 
 - **Goal:** 處理試用回饋；計畫 `~/.claude/plans/lod-lod-ticklish-duckling.md`
