@@ -297,9 +297,7 @@
 		</li>
 	{/each}
 	{#if !sub && none}
-		<li class="px-2 pt-1 pb-1.5 text-[11px] leading-snug text-rose-300">
-			這兩個節點不能直接相連，試試對調方向
-		</li>
+		<li class="px-2 pt-1 pb-1.5 text-[11px] leading-snug text-rose-300">類型不相容，可對調方向</li>
 	{/if}
 {/snippet}
 

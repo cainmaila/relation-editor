@@ -69,13 +69,8 @@
 	<form onsubmit={submit} aria-label="新增邊" class="flex flex-col gap-4 p-5">
 		<div>
 			<p class="eyebrow">新增邊</p>
-			<p class="mt-1 text-xs text-slate-400">
-				選起點、終點與邊類型；不符連接限制的類型會直接標出原因。
-			</p>
 			{#if [d.from, d.to].some((id) => id && !editor.inWork(id))}
-				<p class="mt-1 text-xs text-amber-200">
-					不在編輯頁的端點會和這條邊一起加入（受編輯頁上限限制）
-				</p>
+				<p class="mt-1 text-xs text-amber-200">編輯頁外的端點將一併加入</p>
 			{/if}
 		</div>
 		<div class="flex items-end gap-2">
@@ -141,12 +136,10 @@
 			{/each}
 		</fieldset>
 		{#if none}
-			<p class="-mt-2 text-xs text-rose-300">
-				這兩個節點不能直接相連，可試試對調方向或改連其他節點。
-			</p>
+			<p class="-mt-2 text-xs text-rose-300">類型不相容，可對調方向</p>
 		{/if}
 		<div class="flex items-center gap-2 border-t border-white/6 pt-4">
-			<span class="text-xs text-slate-500">方向預設單向，建立後可改</span>
+			<span class="text-xs text-slate-500">預設單向</span>
 			<button type="button" class="ml-auto btn-ghost" onclick={() => (editor.dialog = null)}
 				>取消</button
 			>

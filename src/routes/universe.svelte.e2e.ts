@@ -327,7 +327,7 @@ test.describe('3D 程式庫載入（P8 殘留情境）', () => {
 		await alert.getByRole('button', { name: '重試' }).click();
 		// 入口換 URL 重抓仍會靜態 import 那個已記成失敗的共用 chunk → 改成需要重新整理的說明，不再給重試
 		await expect(alert).toContainText('需要重新整理頁面', { timeout: 30_000 });
-		await expect(alert).toContainText('請自行重新整理頁面');
+		await expect(alert).toContainText('請重新整理頁面');
 		await expect(alert.getByRole('button', { name: '重試' })).toHaveCount(0);
 		await expect(alert).not.toContainText('not a constructor');
 		await expect(page.locator('main canvas')).toHaveCount(0);

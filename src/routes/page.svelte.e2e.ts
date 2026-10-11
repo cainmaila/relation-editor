@@ -685,7 +685,7 @@ test.describe('編輯（編輯頁）', () => {
 		await toEdit(page, ['偵測器 SD-02', G, '空調箱 AHU-2F-1', '2F', '攝影機 CAM-03', '機櫃 A-01']);
 		await pick(page, '偵測器 SD-02');
 		await detail(page).getByRole('button', { name: '刪除節點' }).click();
-		await expect(detail(page)).toContainText('連同 1 條邊一起刪除？');
+		await expect(detail(page)).toContainText('及 1 條邊？');
 		await detail(page).getByRole('button', { name: '確認刪除' }).click();
 		await expect(node(page, '偵測器 SD-02')).toHaveCount(0);
 		await pick(page, G);
@@ -1187,7 +1187,7 @@ test.describe('編輯器操作', () => {
 		// 鍵盤：有邊的節點列出連帶的邊數
 		await pick(page, '偵測器 SD-02');
 		await page.keyboard.press('Delete');
-		await expect(confirm()).toContainText('連同 1 條邊一起刪除？');
+		await expect(confirm()).toContainText('及 1 條邊？');
 		await expect(graphNodes(page)).toHaveCount(4);
 		await confirm().getByRole('button', { name: '取消', exact: true }).click();
 		await expect(confirm()).toHaveCount(0);
@@ -1452,7 +1452,7 @@ test.describe('全量搜尋與分頁（P3）', () => {
 		await toEdit(page, ['偵測器 SD-01']);
 		const f = await edgeForm(page, '偵測器 SD-01', '機櫃 A-03');
 		await f.getByRole('radio', { name: '監測' }).check();
-		await expect(f).toContainText('不在編輯頁的端點會和這條邊一起加入');
+		await expect(f).toContainText('編輯頁外的端點將一併加入');
 		await f.getByRole('button', { name: '新增邊' }).click();
 		await expect(detail(page)).toContainText(field('終點', '機櫃 A-03'));
 		// 工作區外的終點和邊一起加入，畫面上看得到
@@ -1509,7 +1509,7 @@ test.describe('局部工作區（P4）', () => {
 		await detail(page)
 			.getByRole('button', { name: new RegExp(`^(起點|終點)：${other}$`) })
 			.click();
-		await expect(status(page)).toHaveText(`「${other}」不在編輯頁：先將兩端加入編輯頁才能定位`);
+		await expect(status(page)).toHaveText(`「${other}」不在編輯頁`);
 		await expect(tab(page, 'edit')).toHaveText('編輯頁 1/200');
 		await detail(page).getByRole('button', { name: '將兩端加入編輯頁' }).click();
 		await expect(status(page)).toHaveText(/^已加入編輯頁：新增 1 個節點、帶入 \d+ 條邊$/);

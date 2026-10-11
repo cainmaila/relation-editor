@@ -48,7 +48,7 @@
 				<li class="flex items-center gap-1.5">
 					<Icon name="broken" class="size-3.5 text-rose-300" />{UNREACHABLE_LABEL}
 				</li>
-				<li class="col-span-2 text-slate-500">主機與機框之間的包含、承載合併成一條雙向線</li>
+				<li class="col-span-2 text-slate-500">包含／承載合併為雙向線</li>
 			</ul>
 		</section>
 	{/if}

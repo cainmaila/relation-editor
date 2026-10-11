@@ -21,7 +21,7 @@ describe('DetailPanel：工作區外的詳情', () => {
 		render(DetailPanel, { editor: e });
 		await expect.element(page.getByRole('combobox', { name: '方向' })).toBeDisabled();
 		await page.getByRole('button', { name: '終點：乙' }).click();
-		expect(e.message).toBe('「乙」不在編輯頁：先將兩端加入編輯頁才能定位');
+		expect(e.message).toBe('「乙」不在編輯頁');
 		expect(e.working).toEqual(['a']);
 		await page.getByRole('button', { name: '將兩端加入編輯頁' }).click();
 		expect(e.working).toEqual(['a', 'b']);
@@ -39,7 +39,7 @@ describe('DetailPanel：工作區外的詳情', () => {
 		e.select({ kind: 'node', id: 'b' });
 		render(DetailPanel, { editor: e });
 		await expect.element(page.getByRole('textbox', { name: '名稱', exact: true })).toBeDisabled();
-		await expect.element(page.getByText('不在編輯頁：先加入編輯頁才能修改')).toBeInTheDocument();
+		await expect.element(page.getByText('不在編輯頁・唯讀')).toBeInTheDocument();
 		await expect.element(page.getByRole('button', { name: '刪除節點' })).not.toBeInTheDocument();
 		await expect.element(page.getByRole('button', { name: '移出編輯頁' })).not.toBeInTheDocument();
 		await expect.element(page.getByRole('button', { name: '新增屬性' })).not.toBeInTheDocument();
@@ -135,7 +135,7 @@ describe('DetailPanel P7：完整清單分頁與追查', () => {
 		e.findCustomers('src');
 		render(DetailPanel, { editor: e });
 		await expect.element(trace().getByText('完整查詢：沿途 4 個節點、3 條邊')).toBeInTheDocument();
-		await expect.element(trace().getByText(/畫布高亮最多畫 2,000 條/)).toBeInTheDocument();
+		await expect.element(trace().getByText(/畫布最多高亮 2,000 條/)).toBeInTheDocument();
 		await expect.element(trace().getByText('沿途關係（3）')).toBeInTheDocument();
 		await expect.element(trace().getByText(/已亮起/)).not.toBeInTheDocument();
 		e.search.dispose();

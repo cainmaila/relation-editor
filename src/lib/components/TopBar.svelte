@@ -39,7 +39,7 @@
 		]}
 		aria-pressed={on}
 		aria-label={label}
-		title="{label}（{keys}）"
+		title={keys ? `${label}（${keys}）` : label}
 		onclick={flip}
 	>
 		<Icon name={icon} />
@@ -57,7 +57,7 @@
 		<h1 class="text-sm font-semibold text-slate-50">關係鏈編輯器</h1>
 		<span
 			class="rounded-full border border-slate-500/40 px-1.5 py-px text-[10px] text-slate-300/80"
-			title="示意資料，重新整理即還原，不會存檔">示意</span
+			title="示意資料・不存檔">示意</span
 		>
 	</div>
 
@@ -161,12 +161,12 @@
 		{:else}
 			<span
 				class="px-2 text-slate-400"
-				title="編輯頁上限：最多 {WORKSPACE_NODE_LIMIT} 個節點、{WORKSPACE_EDGE_LIMIT} 條原始關係（收疊不降低計數）"
+				title="編輯頁上限：{WORKSPACE_NODE_LIMIT} 節點、{WORKSPACE_EDGE_LIMIT} 關係"
 				>節點 {editor.working.length}/{WORKSPACE_NODE_LIMIT} · 關係 {editor.workspaceEdgeCount}/{WORKSPACE_EDGE_LIMIT}</span
 			>
 			<button
 				class="rounded-md px-2 py-1.5 font-sans text-slate-400 hover:bg-white/5 hover:text-slate-200 disabled:opacity-40"
-				title="把所有節點移出編輯頁（不刪任何資料）"
+				title="移出全部節點（資料保留）"
 				disabled={!editor.working.length}
 				onclick={() => editor.clearWorkspace()}>清空編輯頁</button
 			>
@@ -186,7 +186,7 @@
 			{@render toggle(
 				editor.stacking,
 				'收疊同類',
-				'同類型、上游相同的兄弟節點收成一疊，點開才展開',
+				'',
 				() => {
 					editor.stacking = !editor.stacking;
 					editor.expanded = [];
