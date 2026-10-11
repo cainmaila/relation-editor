@@ -23,8 +23,13 @@
 	const m = $derived(editor.menu!);
 	let el = $state<HTMLElement>();
 	let pos = $state({ x: 0, y: 0, flip: false });
-	/** 刪節點兩段式：第一次點只換成確認字樣 */
-	let armed = $state(false);
+	/** 刪除兩段式：第一次點只提出（Editor 武裝），項目換成確認字樣；選取一變就作廢 */
+	const armed = (kind: 'node' | 'edge', id: string) =>
+		editor.armDelete?.kind === kind && editor.armDelete.id === id;
+	const confirmItem = (kind: 'node' | 'edge', id: string) => () => {
+		if (!armed(kind, id)) editor.requestDelete(kind, id);
+		else done(() => editor.confirmDelete())();
+	};
 
 	const nameOf = (id: string) => editor.node(id)?.name ?? id;
 	const sysOf = (type: string) => nodeType(type).system ?? '通用';
@@ -33,8 +38,8 @@
 		f();
 	};
 
-	/** 依系統分組的可新增類型；pick 收到類型名 */
-	function typeMenu(pick: (t: string) => void): Item[] {
+	/** 依系統分組的可新增類型；item 把類型名變成選單項目 */
+	function typeMenu(item: (t: string) => Item): Item[] {
 		return [...SYSTEMS, null]
 			.map((s) => ({ s: s ?? '通用', types: CREATABLE_NODE_TYPES.filter((t) => t.system === s) }))
 			.filter((g) => g.types.length)
@@ -42,11 +47,33 @@
 				label: g.s,
 				icon: g.s,
 				color: SYSTEM_COLORS[g.s],
-				sub: g.types.map((t) => ({ label: t.name, run: () => pick(t.name) }))
+				sub: g.types.map((t) => item(t.name))
 			}));
 	}
 
-	const add = (t: string) => done(() => editor.addNode(t))();
+	/**
+	 * 拖到空白處：先選類型再選關係，選完才把新節點＋邊一次建立（不先建孤立節點）。
+	 * 只列連接規則允許的方向與邊類型
+	 */
+	function dropItem(from: string, type: string): Item {
+		const sub = [false, true].flatMap((reverse) =>
+			[...editor.newEdgeErrors(from, type, reverse)]
+				.filter(([, err]) => !err)
+				.map(([t]) => ({
+					label: reverse
+						? `${t}（${type} → ${nameOf(from)}）`
+						: `${t}（${nameOf(from)} → ${type}）`,
+					icon: t,
+					color: EDGE_COLORS[t],
+					run: done(() => editor.addNodeWithEdge(type, from, t, reverse))
+				}))
+		);
+		return sub.length
+			? { label: type, sub }
+			: { label: type, why: `${nameOf(from)} 無法與${type}相連` };
+	}
+
+	const add = (t: string): Item => ({ label: t, run: done(() => editor.addNode(t)) });
 
 	const head = $derived.by(() => {
 		if (m.kind === 'node') return nameOf(m.id);
@@ -67,12 +94,11 @@
 	const items = $derived.by((): Item[] => {
 		if (m.kind === 'node') {
 			const n = editor.node(m.id)!;
-			const s = nodeType(n.type).system;
-			const count = editor.graph.edges.filter((e) => e.from === n.id || e.to === n.id).length;
+			const all = editor.incidentEdges(n.id);
+			const hidden = all.filter((e) => !editor.inWork(e.from) || !editor.inWork(e.to)).length;
 			const block = editor.deleteBlock(n.id);
 			const k = editor.stacking ? editor.stackOf(n.id) : undefined;
 			return [
-				{ label: '找客戶', icon: 'target', keys: 'F', run: done(() => editor.findCustomers(n.id)) },
 				{
 					label: '連到…',
 					icon: 'link',
@@ -87,13 +113,17 @@
 					icon: 'focus',
 					run: done(() => {
 						editor.select({ kind: 'node', id: n.id });
-						const near = editor.visible.edges
+						const near = editor.editVisible.edges
 							.filter((e) => e.from === n.id || e.to === n.id)
 							.flatMap((e) => [e.from, e.to]);
 						editor.fit([n.id, ...near]);
 					})
 				},
-				...(s ? [{ label: `只看${s}`, icon: 'solo', run: done(() => editor.solo(s)) }] : []),
+				{
+					label: '移出編輯頁',
+					icon: 'chevron',
+					run: done(() => editor.removeFromWork([n.id]))
+				},
 				...(k
 					? [
 							{
@@ -104,15 +134,14 @@
 						]
 					: []),
 				{
-					label: armed ? `確認刪除（連同 ${count} 條邊）` : '刪除節點',
+					label: armed('node', n.id)
+						? `確認刪除（連同 ${all.length} 條邊${hidden ? `，含編輯頁外 ${hidden} 條` : ''}）`
+						: '刪除節點',
 					icon: 'trash',
 					keys: '⌫',
 					danger: true,
 					why: ro ? IDC_MESSAGE : block,
-					run: () => {
-						if (count && !armed) armed = true;
-						else done(() => editor.deleteNode(n.id))();
-					}
+					run: confirmItem('node', n.id)
 				}
 			];
 		}
@@ -123,17 +152,17 @@
 					label: e.bidirectional ? '改為單向' : '改為雙向',
 					icon: 'swap',
 					why: ro ? IDC_MESSAGE : null,
-					run: done(() => (e.bidirectional = !e.bidirectional))
+					run: done(() => editor.updateEdge(e.id, { bidirectional: !e.bidirectional }, e))
 				},
-				{ label: '前往起點', icon: 'chevron', run: done(() => editor.reveal(e.from)) },
-				{ label: '前往終點', icon: 'chevron', run: done(() => editor.reveal(e.to)) },
+				{ label: '前往起點', icon: 'chevron', run: done(() => editor.locate(e.from)) },
+				{ label: '前往終點', icon: 'chevron', run: done(() => editor.locate(e.to)) },
 				{
-					label: '刪除邊',
+					label: armed('edge', e.id) ? '確認刪除這條邊' : '刪除邊',
 					icon: 'trash',
 					keys: '⌫',
 					danger: true,
 					why: ro ? IDC_MESSAGE : null,
-					run: done(() => editor.deleteEdge(e.id))
+					run: confirmItem('edge', e.id)
 				}
 			];
 		}
@@ -159,11 +188,8 @@
 			];
 		}
 		if (m.kind === 'drop') {
-			const { from, x, y } = m;
-			return typeMenu((t) => {
-				const to = editor.addNode(t);
-				if (to) editor.menu = { kind: 'connect', from, to, x, y };
-			});
+			const { from } = m;
+			return typeMenu((t) => dropItem(from, t));
 		}
 		return [
 			{ label: '新增節點', icon: 'node-plus', keys: 'N', sub: typeMenu(add) },
@@ -184,7 +210,6 @@
 	// 開啟或換位置後：貼齊視窗邊界；右側放不下子選單就往左開
 	$effect(() => {
 		const { x, y } = m;
-		armed = false;
 		tick().then(() => {
 			if (!el) return;
 			const r = el.getBoundingClientRect();

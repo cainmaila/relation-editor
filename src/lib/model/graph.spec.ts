@@ -11,6 +11,7 @@ import {
 	unreachable,
 	validateEdge
 } from './graph';
+import { buildGraphIndex } from './graph-index';
 import { graphMock, idcMock } from './mock';
 import { nodeType, type System } from './config';
 import type { Graph } from './types';
@@ -107,6 +108,8 @@ describe('編輯', () => {
 	it('情境 10：連接限制', () => {
 		const g = full();
 		expect(validateEdge(g, '機櫃 A-01', 'UPS-1', '供電')).toBe('「供電」只能由電力設備連出');
+		// 供電終點不限（v0.5）
+		expect(validateEdge(g, '機櫃 PDU A-01-A', 'ToR Switch A-01', '供電')).toBeNull();
 		expect(validateEdge(g, '偵測器 SD-01', '客戶甲', '監測')).toBe(
 			'「監測」只能連到空間或通用節點'
 		);
@@ -236,7 +239,7 @@ it('收疊：每排機櫃 PDU、16 條排、16 台樓層 PDU 各收成一張，�
 	expect(st.size).toBe(18);
 	const key = 'stack:機櫃 PDU:樓層 PDU 2F-A';
 	expect(st.get(key)).toHaveLength(44);
-	expect(st.get('stack:列:2F')).toHaveLength(16);
+	expect(st.get('stack:排:2F')).toHaveLength(16);
 	expect(st.get('stack:樓層 PDU:UPS-1')).toHaveLength(16);
 	expect([...st.keys()].some((k) => k.startsWith('stack:機櫃:'))).toBe(false);
 	const members = [...st.values()].flat().length;
@@ -279,7 +282,7 @@ it('pin：既有節點沿用舊位置，新節點重疊時排到該欄最下方'
 		['b', { x: 0, y: 100 }]
 	]);
 	const next = new Map([
-		['a', { x: 256, y: 50 }],
+		['a', { x: 0, y: 50 }],
 		['b', { x: 0, y: 0 }],
 		['c', { x: 0, y: 0 }], // 和 a 重疊
 		['d', { x: 512, y: 0 }]
@@ -292,4 +295,154 @@ it('pin：既有節點沿用舊位置，新節點重疊時排到該欄最下方'
 			['d', { x: 512, y: 0 }]
 		])
 	);
+});
+
+it('pin：既有節點換欄（加了上游）就整個重排，上游在左', () => {
+	const prev = new Map([['a', { x: 0, y: 0 }]]);
+	const next = new Map([
+		['u', { x: 0, y: 0 }],
+		['a', { x: 256, y: 0 }]
+	]);
+	expect(pin(prev, next)).toBe(next);
+	// 只加邊（沒有新節點）：換欄也不重排
+	expect(pin(prev, new Map([['a', { x: 256, y: 0 }]]))).toEqual(prev);
+});
+
+describe('共用索引', () => {
+	it('查詢可接受預先建好的索引，結果與自行建索引相同', () => {
+		const g = full();
+		const idx = buildGraphIndex(g);
+		expect(unprocessed(g, idx)).toEqual(unprocessed(g));
+		expect(unreachable(g, idx)).toEqual(unreachable(g));
+		expect(findCustomers(g, 'UPS-1', idx)).toEqual(findCustomers(g, 'UPS-1'));
+		expect(validateEdge(g, '偵測器 SD-01', '機櫃 A-03', '監測', idx)).toBe(
+			validateEdge(g, '偵測器 SD-01', '機櫃 A-03', '監測')
+		);
+		expect(checkDeleteNode(g, '機櫃 A-01', idx)).toBe(checkDeleteNode(g, '機櫃 A-01'));
+	});
+
+	it('找客戶同時回傳客戶 ID，與名稱一一對應', () => {
+		const g = full();
+		const r = findCustomers(g, 'UPS-1');
+		expect(r.customerIds.map((id) => g.nodes.find((n) => n.id === id)!.name)).toEqual(r.customers);
+	});
+
+	it('雙向邊、有向環與相連邊刪除後的走訪', () => {
+		const node = (id: string, type = '通用節點') => ({ id, type, name: id, props: {} });
+		const edge = (id: string, from: string, to: string, bidirectional = false) => ({
+			id,
+			type: '包含',
+			from,
+			to,
+			bidirectional,
+			props: {}
+		});
+		const g: Graph = {
+			nodes: [node('TPKC 大樓', '大樓'), node('a'), node('b'), node('c', '客戶')],
+			edges: [
+				edge('r', 'TPKC 大樓', 'a'),
+				edge('ab', 'a', 'b'),
+				edge('ba', 'b', 'a'),
+				edge('cb', 'c', 'b', true)
+			]
+		};
+		// 環不會無限走；雙向邊讓 b 走得到客戶 c
+		expect(findCustomers(g, 'a').customers).toEqual(['c']);
+		expect(unreachable(g).size).toBe(0);
+		const cut: Graph = { ...g, edges: g.edges.filter((e) => e.id !== 'cb') };
+		expect(unprocessed(cut, buildGraphIndex(cut))).toEqual(new Set(['c']));
+		expect(unreachable(cut, buildGraphIndex(cut))).toEqual(new Set(['TPKC 大樓', 'a', 'b']));
+	});
+});
+
+describe('P7 全圖追查（純圖語意）', () => {
+	const node = (id: string, type = '通用節點', name = id) => ({ id, type, name, props: {} });
+	const edge = (id: string, from: string, to: string, bidirectional = false) => ({
+		id,
+		type: '包含',
+		from,
+		to,
+		bidirectional,
+		props: {}
+	});
+	const g = (nodes: Graph['nodes'], edges: Graph['edges']): Graph => ({ nodes, edges });
+
+	it('單向 A→B→客戶：順向找得到，逆向找不到；起點是客戶時不算自己', () => {
+		const x = g(
+			[node('a'), node('b'), node('c', '客戶')],
+			[edge('ab', 'a', 'b'), edge('bc', 'b', 'c')]
+		);
+		expect(findCustomers(x, 'a')).toMatchObject({ customerIds: ['c'] });
+		expect([...findCustomers(x, 'a').edges]).toEqual(['ab', 'bc']);
+		const rev = g(x.nodes, [edge('ba', 'b', 'a'), edge('bc', 'b', 'c')]);
+		expect(findCustomers(rev, 'a')).toMatchObject({ customerIds: [], edges: new Set() });
+		expect(findCustomers(x, 'c')).toMatchObject({ customerIds: [], nodes: new Set(['c']) });
+	});
+
+	it('雙向邊：兩頭都能走，且邊只記一次', () => {
+		const x = g(
+			[node('a'), node('b'), node('c', '客戶')],
+			[edge('ba', 'b', 'a', true), edge('bc', 'b', 'c')]
+		);
+		const r = findCustomers(x, 'a');
+		expect(r.customerIds).toEqual(['c']);
+		expect([...r.edges].sort()).toEqual(['ba', 'bc']);
+	});
+
+	it('循環：不會無限走；環上的每條邊都在結果裡（回到起點的單向邊除外）', () => {
+		const x = g(
+			[node('a'), node('b'), node('d'), node('c', '客戶')],
+			[edge('ab', 'a', 'b'), edge('bd', 'b', 'd'), edge('da', 'd', 'a'), edge('dc', 'd', 'c')]
+		);
+		const r = findCustomers(x, 'a');
+		expect(r.customerIds).toEqual(['c']);
+		expect([...r.nodes].sort()).toEqual(['a', 'b', 'c', 'd']);
+		expect([...r.edges].sort()).toEqual(['ab', 'bd', 'dc']);
+	});
+
+	it('孤立／無客戶：結果只有起點，沒有邊與客戶', () => {
+		const x = g([node('a'), node('b'), node('c', '客戶')], [edge('ab', 'a', 'b')]);
+		expect(findCustomers(x, 'a')).toEqual({
+			customers: [],
+			customerIds: [],
+			nodes: new Set(['a']),
+			edges: new Set()
+		});
+		expect(findCustomers(x, 'c').edges.size).toBe(0);
+	});
+
+	it('重複：平行邊各自保留 ID；同名不同 ID 的客戶分開列出', () => {
+		const x = g(
+			[node('a'), node('c1', '客戶', '客戶甲'), node('c2', '客戶', '客戶甲')],
+			[edge('a1', 'a', 'c1'), edge('a1b', 'a', 'c1'), edge('a2', 'a', 'c2')]
+		);
+		const r = findCustomers(x, 'a');
+		expect(r.customerIds).toEqual(['c1', 'c2']);
+		expect(r.customers).toEqual(['客戶甲', '客戶甲']);
+		expect([...r.edges].sort()).toEqual(['a1', 'a1b', 'a2']);
+	});
+
+	it('唯讀 IDC 資料：沿唯讀的承載／服務邊照樣追查（2,066 mock 已知答案）', () => {
+		const m = full();
+		const r = findCustomers(m, '主機 H-02');
+		expect(r.customers).toEqual(['客戶乙']);
+		expect([...r.edges].every((id) => m.edges.find((e) => e.id === id)!.readonly)).toBe(true);
+		expect(r.nodes.has('機框 A-01-F2')).toBe(true);
+	});
+
+	it('10k 代表圖：結果完整（每個客戶 ID 唯一），與預先建好的索引一致', async () => {
+		const { scaleFixture } = await import('./scale-fixture');
+		const { graph: big, meta } = scaleFixture({ edges: 20_000 });
+		const idx = buildGraphIndex(big);
+		const r = findCustomers(big, meta.power, idx);
+		expect(r).toEqual(findCustomers(big, meta.power));
+		expect(new Set(r.customerIds).size).toBe(r.customerIds.length);
+		expect(r.customerIds).toHaveLength(200);
+		// 完整路徑邊數遠超過繪製上限 2,000：結果不受畫面限制
+		expect(r.edges.size).toBeGreaterThan(2000);
+		for (const id of r.edges) {
+			const e = idx.edgeById.get(id)!;
+			expect(r.nodes.has(e.from) && r.nodes.has(e.to)).toBe(true);
+		}
+	});
 });
