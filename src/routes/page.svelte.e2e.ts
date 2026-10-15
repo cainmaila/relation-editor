@@ -1,6 +1,8 @@
 // PRD v0.4 §6 情境 1–20 驗收
 // 全圖（3D，WebGL）點不到 DOM：用大綱／詳情／頂列操作，用 window.__graphView 讀數量、選取、亮起的節點。
 // 編輯頁（Svelte Flow）一開始是空的：每個情境先從全圖把節點加入編輯頁。
+import { readFileSync } from 'node:fs';
+import { unzipSync, strFromU8 } from 'fflate';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
 const SYSTEMS = ['空間', '電力', '空調', '網路', '消防', 'CCTV', 'IDC'];
@@ -176,7 +178,7 @@ async function open(page: Page, button: string, form: string) {
 async function addNode(page: Page, type: string, name: string) {
 	const f = await open(page, '新增節點', '新增節點');
 	await f.getByLabel('類型').selectOption(type);
-	await f.getByLabel('名稱').fill(name);
+	await f.getByLabel('key').fill(name);
 	await f.getByRole('button', { name: '新增節點' }).click();
 }
 /** 新增邊對話框的端點：搜尋名稱，從候選清單點選 */
@@ -373,6 +375,24 @@ test.describe('編輯（編輯頁）', () => {
 		await issueCount(page, '未處理', 1);
 		await expect(await issueList(page, '只列未處理')).toHaveText(['攝影機 CAM-04']);
 		await expectCounts(page, TOTAL + 1, TOTAL_EDGES);
+	});
+
+	test('情境 8：key 重複擋下；情境 21：匯出 zip 內容可直接替換 static/data', async ({ page }) => {
+		await toEdit(page);
+		const exportBtn = page.getByRole('banner').getByRole('button', { name: '匯出', exact: true });
+		await expect(exportBtn).toBeDisabled();
+		await addNode(page, '攝影機', '攝影機 CAM-04');
+		await addNode(page, '攝影機', ' 攝影機 CAM-04 ');
+		await expect(status(page)).toHaveText('key 已存在：攝影機 CAM-04');
+		await page.keyboard.press('Escape');
+		await expect(exportBtn).toBeEnabled();
+		const [dl] = await Promise.all([page.waitForEvent('download'), exportBtn.click()]);
+		expect(dl.suggestedFilename()).toMatch(/^relation-editor-data-\d{8}-\d{4}\.zip$/);
+		const files = unzipSync(readFileSync((await dl.path())!));
+		expect(strFromU8(files['nodes/CCTV.csv'])).toContain('攝影機 CAM-04,');
+		expect(strFromU8(files['nodes/CCTV.csv'])).not.toContain('\r');
+		expect(Object.keys(files)).toHaveLength(19);
+		await expect(exportBtn).toBeEnabled();
 	});
 
 	test('情境 9：新增邊', async ({ page }) => {
@@ -808,6 +828,51 @@ test.describe('找客戶（全圖）', () => {
 			`完整查詢：沿途 ${TOTAL - off.length} 個節點、${TOTAL_EDGES - 6} 條邊`
 		);
 		await expect(result).not.toContainText('已亮起');
+	});
+
+	test('找客戶：沿途節點可單勾、全部勾選後加入編輯頁', async ({ page }) => {
+		await findCustomers(page, '機櫃 PDU A-02-A');
+		const r = page.getByRole('region', { name: '找客戶結果' });
+		await r.getByText(/^沿途節點（\d+）$/).click();
+		const total = Number((await r.getByText(/^沿途節點（\d+）$/).textContent())!.match(/\d+/)![0]);
+		expect(total).toBeLessThanOrEqual(50);
+		await r.getByRole('checkbox', { name: '勾選 機櫃 A-02' }).check();
+		await expect(r.getByText('已選 1')).toBeVisible();
+		await r.getByRole('button', { name: '加入編輯頁（1）', exact: true }).click();
+		await expect(r.getByRole('button', { name: '前往編輯頁' })).toBeVisible();
+		await r.getByRole('checkbox', { name: /^全部勾選/ }).check();
+		await expect(r.getByText(`已選 ${total}`)).toBeVisible();
+		await r.getByRole('button', { name: `加入編輯頁（${total}）`, exact: true }).click();
+		await r.getByRole('button', { name: '前往編輯頁' }).click();
+		await expect(
+			page.getByRole('banner').getByRole('button', { name: `編輯頁 ${total}/200` })
+		).toBeVisible();
+	});
+
+	test('找客戶：沿途關係可勾選，加入後兩端與邊都進編輯頁', async ({ page }) => {
+		await findCustomers(page, '機櫃 PDU A-02-A');
+		const r = page.getByRole('region', { name: '找客戶結果' });
+		await r.getByText(/^沿途關係（\d+）$/).click();
+		await r.getByRole('checkbox', { name: /^全部勾選/ }).check();
+		const total = Number((await r.getByText(/^已選 \d+/).textContent())!.match(/\d+/)![0]);
+		await r.getByRole('button', { name: `加入編輯頁（${total} 條邊）` }).click();
+		await expect(status(page)).toContainText(`帶入 ${total} 條邊`);
+	});
+
+	test('找客戶：一鍵把整條鏈路（節點與邊）加入並進編輯頁', async ({ page }) => {
+		await findCustomers(page, '機櫃 PDU A-02-A');
+		const r = page.getByRole('region', { name: '找客戶結果' });
+		await r.getByRole('button', { name: /^全部加入編輯頁/ }).click();
+		await expect(status(page)).toContainText('已加入編輯頁');
+		await expect(
+			page.getByRole('banner').getByRole('button', { name: /^編輯頁 [1-9]/ })
+		).toHaveAttribute('aria-pressed', 'true');
+	});
+
+	test('找客戶：鏈路超過編輯頁上限時，全部加入編輯頁停用', async ({ page }) => {
+		await findCustomers(page, '台電市電');
+		const r = page.getByRole('region', { name: '找客戶結果' });
+		await expect(r.getByRole('button', { name: /^全部加入編輯頁/ })).toBeDisabled();
 	});
 
 	test('情境 16：找到的客戶是精確的', async ({ page }) => {
@@ -1380,11 +1445,10 @@ test.describe('手測回報', () => {
 		await node(page, '機櫃 PDU A-01-B').click();
 		await expect(detail(page).getByLabel('品牌')).toHaveValue('示意二');
 
-		// 不合法欄位整筆不寫入，畫布維持原名
+		// 名稱清空＝沒填，畫布改顯示 key
 		const name = detail(page).getByLabel('名稱', { exact: true });
 		await name.fill('');
 		await name.press('Enter');
-		await expect(page.getByText('名稱不可空白')).toBeVisible();
 		await expect(node(page, '機櫃 PDU A-01-B')).toBeVisible();
 	});
 });

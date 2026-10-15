@@ -1,5 +1,12 @@
 # PROGRESS
 
+## key／名稱分離＋匯出（PRD v0.6，分支 cainmaila/main-2）
+
+**Goal:** 節點 key（必填、唯一、不可改）與名稱（選填）分離；Header 匯出 zip。計畫 `~/.claude/plans/pasted-content-id-ba76-key-bubbly-seahorse.md`
+
+- **Done（已驗證：lint、build、unit 375、e2e 98 綠；`pnpm check` 只剩 `vite.config.ts` 既有型別錯誤）:** `static/data/` 18 檔轉新格式；`csv.ts` 表頭驗證＋`toCsvFiles`（往返與現有檔逐字相同）；新增 key 空白／重複擋下；匯出鈕＋離開警告（內容比對判斷有無改動）
+- **Todo:** `vite.config.ts:21` 型別錯誤（`BASE_PATH`，非本次引入）；PRD §7 待釐清：同名節點的畫面區分、搜尋是否比對 key
+
 ## 節點資料改 CSV（分支 cainmaila/main）
 
 - **Goal:** 節點／邊由多份 CSV 在執行期 fetch 組成，部署後換檔即生效；計畫 `~/.claude/plans/temporal-nibbling-sonnet.md`

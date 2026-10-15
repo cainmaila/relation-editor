@@ -184,7 +184,11 @@ describe('命令守門：失敗時不改任何狀態', () => {
 		expect(
 			unchanged({ kind: 'updateNode', id: AHU, patch: { name: '新名', props: { ' ': 'x' } } })
 		).toBe('屬性名稱不可空白');
-		expect(unchanged({ kind: 'updateNode', id: AHU, patch: { name: '  ' } })).toBe('名稱不可空白');
+		// 名稱清空＝沒填，顯示 key
+		expect(
+			run(s0, { kind: 'updateNode', id: AHU, patch: { name: '  ' } }).state.index.nodeById.get(AHU)
+				?.name
+		).toBe(AHU);
 	});
 
 	it('新增邊仍走連接限制與 IDC 檢查；ID 重複拒絕', () => {
@@ -203,7 +207,7 @@ describe('命令守門：失敗時不改任何狀態', () => {
 		).toBe('由 IDC機櫃配置管理維護');
 		expect(
 			unchanged({ kind: 'addNode', node: { id: AHU, type: '攝影機', name: 'x', props: {} } })
-		).toBe(`節點已存在：${AHU}`);
+		).toBe(`key 已存在：${AHU}`);
 		expect(
 			unchanged({ kind: 'addNode', node: { id: 'n', type: '客戶', name: 'x', props: {} } })
 		).toBe('由 IDC機櫃配置管理維護');

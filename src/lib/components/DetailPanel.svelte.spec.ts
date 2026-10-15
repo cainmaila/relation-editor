@@ -246,7 +246,7 @@ describe('DetailPanel：屬性即時保存（T-B12）', () => {
 		expect(e.node('b')?.name).toBe('乙');
 	});
 
-	it('名稱空白寫不進去：欄位還原原名，換選取不再報錯', async () => {
+	it('名稱清空＝沒填：顯示 key，不報錯', async () => {
 		const e = new Editor(graph());
 		e.addToWork(['a', 'b']);
 		e.setPage('edit');
@@ -256,11 +256,10 @@ describe('DetailPanel：屬性即時保存（T-B12）', () => {
 		await name.fill('');
 		await name.click();
 		await page.getByRole('textbox', { name: '屬性名稱' }).click();
-		expect(e.message).toBe('名稱不可空白');
-		await expect.element(name).toHaveValue('甲');
+		expect(e.message).toBe('');
+		expect(e.node('a')?.name).toBe('a');
 		e.select({ kind: 'node', id: 'b' });
 		await expect.element(name).toHaveValue('乙');
-		expect(e.message).toBe('');
-		expect(e.node('a')?.name).toBe('甲');
+		expect(e.node('b')?.name).toBe('乙');
 	});
 });

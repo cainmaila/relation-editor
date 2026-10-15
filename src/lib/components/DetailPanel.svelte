@@ -61,9 +61,10 @@
 		const props = Object.fromEntries(d.props.map((p) => [p.key, p.value]));
 		const n = sel?.kind === 'node' ? editor.node(sel.id) : undefined;
 		const e = sel?.kind === 'edge' ? editor.edge(sel.id) : undefined;
-		// 寫不進去（例：名稱空白）就把名稱還原，免得換選取時再報一次錯
-		if (n && (d.name !== n.name || !same(props, n.props))) {
-			if (!editor.updateNode(n.id, { name: d.name, props }, n)) d.name = n.name;
+		// 名稱清空＝沒填，顯示 key；寫不進去就把名稱還原，免得換選取時再報一次錯
+		const name = d.name.trim() || n?.id;
+		if (n && (name !== n.name || !same(props, n.props))) {
+			if (!editor.updateNode(n.id, { name, props }, n)) d.name = n.name;
 		} else if (e && (d.bidirectional !== e.bidirectional || !same(props, e.props)))
 			editor.updateEdge(e.id, { bidirectional: d.bidirectional, props }, e);
 	}
@@ -241,6 +242,8 @@
 				<span class="font-mono text-slate-200">{node.type}</span>
 				<span class="ml-1 text-slate-500">系統</span>
 				<span class="text-slate-200">{sys ?? '（無）'}</span>
+				<span class="ml-1 text-slate-500">key</span>
+				<span class="font-mono text-slate-200">{node.id}</span>
 			</p>
 			<input
 				aria-label="名稱"

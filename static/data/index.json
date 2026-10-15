@@ -15,6 +15,6 @@
 	"idc/nodes/主機.csv",
 	"idc/nodes/客戶.csv",
 	"idc/edges/包含.csv",
-	"idc/edges/承載.csv",
-	"idc/edges/服務.csv"
+	"idc/edges/服務.csv",
+	"idc/edges/承載.csv"
 ]

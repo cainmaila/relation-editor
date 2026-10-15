@@ -1,4 +1,5 @@
 // 編輯器狀態：圖（mock 初始值，不存檔）、系統勾選、選取、找客戶追查。
+import { strToU8, zipSync } from 'fflate';
 import { untrack } from 'svelte';
 import {
 	EDGE_TYPES,
@@ -22,6 +23,7 @@ import {
 	validateEdge,
 	type CustomerResult
 } from './model/graph';
+import { buildGraph, toCsvFiles } from './model/csv';
 import {
 	applyCommand,
 	initialGraphState,
@@ -146,6 +148,19 @@ export class Editor {
 	 */
 	readonly universe: UniverseRuntime;
 
+	/** 目前的圖序列化成的匯出內容；拿來和載入時、上次匯出時比，就知道有沒有改動（改了又改回原樣＝沒改） */
+	snapshot = $derived(JSON.stringify(toCsvFiles(this.graph)));
+	#loaded: string;
+	#exported: string;
+	/** 相對載入時有任何改動才能匯出；匯出後仍可再匯出 */
+	get canExport() {
+		return this.snapshot !== this.#loaded;
+	}
+	/** 有還沒匯出的改動：離開頁面前要確認 */
+	get unsaved() {
+		return this.snapshot !== this.#exported;
+	}
+
 	/** searchWorker／layoutWorker 只給測試替換 */
 	constructor(
 		graph: Graph,
@@ -156,6 +171,7 @@ export class Editor {
 		this.index = s.index;
 		this.universe = new UniverseRuntime({ createWorker: opts.layoutWorker });
 		this.#syncUniverse();
+		this.#loaded = this.#exported = this.snapshot;
 		this.search = new SearchService(
 			{
 				revision: () => this.revision,
@@ -559,22 +575,25 @@ export class Editor {
 		this.universe.sync(t, this.topologyRevision);
 	}
 
-	/** 新節點草稿：沒給名稱（快速新增）時用「類型 N」；給了空白名稱或類型不可建立時回傳 null 並顯示原因 */
-	#draftNode(type: string, name?: string): GNode | null {
+	/** 新節點草稿：沒給 key（快速新增）時用「類型 N」；key 去頭尾空白，空白、重複或類型不可建立時回傳 null 並顯示原因 */
+	#draftNode(type: string, key?: string): GNode | null {
 		const err = !type
 			? '請選擇類型'
 			: nodeType(type).idc
 				? IDC_MESSAGE
-				: name !== undefined && !name.trim()
-					? '請填名稱'
-					: '';
+				: key !== undefined && !key.trim()
+					? '請填 key'
+					: key !== undefined && this.index.nodeById.has(key.trim())
+						? `key 已存在：${key.trim()}`
+						: '';
 		if (err) {
 			this.fail(err);
 			return null;
 		}
 		let n = 1;
-		while (!name && this.graph.nodes.some((x) => x.name === `${type} ${n}`)) n++;
-		return { id: uid('n'), type, name: name?.trim() || `${type} ${n}`, props: {} };
+		while (key === undefined && this.index.nodeById.has(`${type} ${n}`)) n++;
+		const id = key?.trim() || `${type} ${n}`;
+		return { id, type, name: id, props: {} };
 	}
 
 	/** 編輯器手拉的邊沒有資料來源，依 PRD 定義為推定 */
@@ -600,7 +619,7 @@ export class Editor {
 		return this.fail('節點不在編輯頁：先加入編輯頁才能修改');
 	}
 
-	/** 不給名稱時用「類型 N」（右鍵快速新增）；給了就不可空白。工作區 admission 通過才建立並加入，回傳新節點 id，失敗回傳 null */
+	/** 不給 key 時用「類型 N」（右鍵快速新增）；給了就不可空白、不可重複。工作區 admission 通過才建立並加入，回傳新節點 id，失敗回傳 null */
 	addNode(type: string, name?: string): string | null {
 		const node = this.#draftNode(type, name);
 		if (!node) return null;
@@ -723,6 +742,19 @@ export class Editor {
 	/** 一次寫入邊草稿；base＝草稿開始時的邊，已被改過就拒絕 */
 	updateEdge(id: string, patch: EdgePatch, base?: GEdge): boolean {
 		return this.#guardEdge(id) && this.execute({ kind: 'updateEdge', id, patch, base });
+	}
+
+	/** 以載入同一套規則驗證，通過才打包成 zip；不通過回傳 null 並顯示原因 */
+	exportZip(): Uint8Array | null {
+		const files = toCsvFiles(this.graph);
+		try {
+			buildGraph(files.filter(([p]) => p !== 'index.json'));
+		} catch (e) {
+			this.fail((e as Error).message);
+			return null;
+		}
+		this.#exported = this.snapshot;
+		return zipSync(Object.fromEntries(files.map(([p, t]) => [p, strToU8(t)])));
 	}
 
 	/** 全圖：選取起點並開始追查（換掉上一個追查），鏡頭對準完整結果 */

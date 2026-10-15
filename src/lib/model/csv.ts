@@ -39,6 +39,9 @@ export function parseCsv(text: string): string[][] {
 /** 系統檔的檔名：沒有系統的通用節點 */
 const GENERIC_FILE = '通用';
 
+const NODE_COLS = ['key', '名稱'];
+const EDGE_COLS = ['起點', '終點', '雙向'];
+
 const PATH = /^(idc\/)?(nodes|edges)\/(.+)\.csv$/;
 
 const props = (header: string[], row: string[], from: number): Props => {
@@ -49,7 +52,7 @@ const props = (header: string[], row: string[], from: number): Props => {
 
 /**
  * files＝[相對路徑, 內容]，路徑形如 `nodes/空間.csv`、`edges/供電.csv`、`idc/nodes/主機.csv`：
- * 邊檔與 `idc/` 的節點檔，檔名＝類型名；其餘節點檔，檔名＝系統名（或「通用」），首欄多一欄「類型」。
+ * 邊檔與 `idc/` 的節點檔，檔名＝類型名；其餘節點檔，檔名＝系統名（或「通用」），首欄多一欄「類型」。節點檔固定欄 `key,名稱`（名稱選填，空白＝顯示 key）。
  * `idc/` 底下全部唯讀。資料有誤就 throw，訊息帶檔名與列號。
  */
 export function buildGraph(files: [path: string, text: string][]): Graph {
@@ -82,6 +85,13 @@ export function buildGraph(files: [path: string, text: string][]): Graph {
 			throw new Error(`${path}：${(e as Error).message}`, { cause: e });
 		}
 		const [header, ...rows] = table;
+		if (!header) throw new Error(`${path}：缺表頭`);
+		const fixed =
+			kind === 'edges' ? EDGE_COLS : system !== undefined ? ['類型', ...NODE_COLS] : NODE_COLS;
+		if (fixed.some((c, i) => header[i] !== c))
+			throw new Error(`${path}：表頭須以「${fixed.join(',')}」開頭`);
+		const dup = header.find((c, i) => header.indexOf(c) !== i);
+		if (dup) throw new Error(`${path}：表頭欄位重複「${dup}」`);
 		rows.forEach((row, i) => {
 			const line = i + 2;
 			if (row.length > header.length) throw new Error(`${path} 第 ${line} 列：欄數超過表頭`);
@@ -90,15 +100,15 @@ export function buildGraph(files: [path: string, text: string][]): Graph {
 				const type = system !== undefined ? row[0] : file;
 				if (system !== undefined && nodeType(type)?.system !== system)
 					throw new Error(`${path} 第 ${line} 列：類型「${type}」不屬於${system ?? '通用'}`);
-				const name = row[at];
-				if (!name) throw new Error(`${path} 第 ${line} 列：名稱空白`);
-				if (names.has(name)) throw new Error(`${path} 第 ${line} 列：節點名稱重複「${name}」`);
-				names.add(name);
+				const key = row[at];
+				if (!key) throw new Error(`${path} 第 ${line} 列：key 空白`);
+				if (names.has(key)) throw new Error(`${path} 第 ${line} 列：key 重複：${key}`);
+				names.add(key);
 				nodes.push({
-					id: name,
+					id: key,
 					type,
-					name,
-					props: props(header, row, at + 1),
+					name: row[at + 1] || key,
+					props: props(header, row, at + 2),
 					...(readonly && { readonly })
 				});
 			} else {
@@ -127,4 +137,67 @@ export function buildGraph(files: [path: string, text: string][]): Graph {
 		edges.push(edge);
 	}
 	return { nodes, edges };
+}
+
+const cell = (v: string) => (/[",\r\n]/.test(v) ? `"${v.replaceAll('"', '""')}"` : v);
+const table = (header: string[], rows: string[][]) =>
+	[header, ...rows].map((r) => r.map(cell).join(',')).join('\n') + '\n';
+const withProps = (fixed: string[], items: { props: Props }[], rows: string[][]) => {
+	const keys = [...new Set(items.flatMap((x) => Object.keys(x.props)))];
+	return table(
+		[...fixed, ...keys],
+		rows.map((r, i) => [...r, ...keys.map((k) => items[i].props[k] ?? '')])
+	);
+};
+
+/**
+ * Graph → 檔案清單（含 index.json），格式與 buildGraph 吃的相同，之後可直接覆蓋 static/data。
+ * 可編輯的節點檔與邊檔一律輸出（空的留表頭）；idc/ 檔有資料才輸出。名稱等於 key 時寫空白。
+ * shortcut: 屬性欄取各檔列的聯集，某欄整欄空白就不輸出；要保留空欄時需在圖裡記錄表頭
+ */
+export function toCsvFiles(g: Graph): [path: string, text: string][] {
+	const files: [string, string][] = [];
+	const nodeRow = (n: GNode) => [n.id, n.name === n.id ? '' : n.name];
+	for (const system of [...SYSTEMS.filter((s) => s !== 'IDC'), GENERIC_FILE]) {
+		const ns = g.nodes.filter(
+			(n) => !n.readonly && (nodeType(n.type).system ?? GENERIC_FILE) === system
+		);
+		files.push([
+			`nodes/${system}.csv`,
+			withProps(
+				['類型', ...NODE_COLS],
+				ns,
+				ns.map((n) => [n.type, ...nodeRow(n)])
+			)
+		]);
+	}
+	for (const t of EDGE_TYPES.filter((t) => !t.idc)) files.push(edgeFile(g, t.name, false));
+	for (const t of NODE_TYPES.filter((t) => t.idc)) {
+		const ns = g.nodes.filter((n) => n.readonly && n.type === t.name);
+		if (ns.length)
+			files.push([`idc/nodes/${t.name}.csv`, withProps(NODE_COLS, ns, ns.map(nodeRow))]);
+	}
+	for (const t of EDGE_TYPES)
+		if (g.edges.some((e) => e.readonly && e.type === t.name)) files.push(edgeFile(g, t.name, true));
+	files.push([
+		'index.json',
+		JSON.stringify(
+			files.map(([p]) => p),
+			null,
+			'\t'
+		) + '\n'
+	]);
+	return files;
+}
+
+function edgeFile(g: Graph, type: string, idc: boolean): [string, string] {
+	const es = g.edges.filter((e) => !!e.readonly === idc && e.type === type);
+	return [
+		`${idc ? 'idc/' : ''}edges/${type}.csv`,
+		withProps(
+			[...EDGE_COLS],
+			es,
+			es.map((e) => [e.from, e.to, e.bidirectional ? '是' : ''])
+		)
+	];
 }

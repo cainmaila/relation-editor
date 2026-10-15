@@ -69,7 +69,12 @@
 </script>
 
 <svelte:head><title>TPKC 關係鏈編輯器</title></svelte:head>
-<svelte:window onkeydown={key} />
+<svelte:window
+	onkeydown={key}
+	onbeforeunload={(e) => {
+		if (editor.unsaved) e.preventDefault();
+	}}
+/>
 
 <div class="flex h-screen flex-col">
 	<TopBar {editor} />
