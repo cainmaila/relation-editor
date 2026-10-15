@@ -1,3 +1,4 @@
+import { unzipSync, strFromU8 } from 'fflate';
 import { flushSync } from 'svelte';
 import { describe, expect, it, vi } from 'vitest';
 import { Editor } from './editor.svelte';
@@ -11,12 +12,17 @@ import { idsKey } from './universe/layout';
 import type { LayoutWorkerLike } from './universe/runtime';
 
 describe('Editor.addNode', () => {
-	it('情境 8：對話框名稱空白擋下，不建立', () => {
+	it('情境 8：key 空白、重複（含 IDC 節點）擋下，不建立；前後空白去掉再比對', () => {
 		const e = new Editor(csvSeed());
 		const n = e.graph.nodes.length;
 		expect(e.addNode('攝影機', '  ')).toBeNull();
-		expect(e.message).toBe('請填名稱');
-		expect(e.graph.nodes).toHaveLength(n);
+		expect(e.message).toBe('請填 key');
+		expect(e.addNode('攝影機', ' 客戶甲 ')).toBeNull();
+		expect(e.message).toBe('key 已存在：客戶甲');
+		expect(e.addNode('攝影機', 'CAM-NEW')).toBe('CAM-NEW');
+		expect(e.addNode('攝影機', ' CAM-NEW')).toBeNull();
+		expect(e.message).toBe('key 已存在：CAM-NEW');
+		expect(e.graph.nodes).toHaveLength(n + 1);
 	});
 
 	it('沒給名稱（右鍵快速新增）時用「類型 N」且不重複', () => {
@@ -33,6 +39,36 @@ describe('Editor.addNode', () => {
 		const e = new Editor(csvSeed());
 		expect(e.addNode('客戶')).toBeNull();
 		expect(e.message).toBe('由 IDC機櫃配置管理維護');
+	});
+});
+
+describe('Editor 匯出', () => {
+	it('情境 21：沒改動不可匯出；改了可匯出且可重複；改回原樣又不可匯出', () => {
+		const e = new Editor(csvSeed());
+		expect(e.canExport).toBe(false);
+		expect(e.unsaved).toBe(false);
+		const id = e.addNode('攝影機', 'CAM-X')!;
+		expect(e.canExport).toBe(true);
+		expect(e.unsaved).toBe(true);
+		const zip = e.exportZip()!;
+		expect(e.unsaved).toBe(false);
+		expect(e.canExport).toBe(true);
+		const files = unzipSync(zip);
+		expect(strFromU8(files['nodes/CCTV.csv'])).toContain('CAM-X,');
+		expect(files['index.json']).toBeDefined();
+		e.select({ kind: 'node', id });
+		expect(e.deleteNode(id)).toBe(true);
+		expect(e.canExport).toBe(false);
+		expect(e.unsaved).toBe(true);
+	});
+
+	it('驗證不過就不產生 zip 並顯示原因', () => {
+		const e = new Editor(csvSeed());
+		e.addNode('攝影機', 'CAM-X');
+		// 繞過命令塞進非法 key 重複的圖（正常操作做不到）
+		e.graph = { ...e.graph, nodes: [...e.graph.nodes, { ...e.graph.nodes[0] }] };
+		expect(e.exportZip()).toBeNull();
+		expect(e.message).toMatch(/key 重複/);
 	});
 });
 

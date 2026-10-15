@@ -5,6 +5,7 @@
 	import { Pager } from '#lib/pager.svelte.js';
 	import PageNav from './PageNav.svelte';
 	import { LOD } from '#lib/universe/lod.js';
+	import { WORKSPACE_NODE_LIMIT } from '#lib/model/workspace.js';
 
 	let { editor }: { editor: Editor } = $props();
 
@@ -30,6 +31,32 @@
 	const picked = $derived(editor.highlight === result ? null : editor.traceCustomer);
 	const cabinets = $derived(
 		picked ? [...editor.highlight!.nodes].filter((id) => editor.node(id)?.type === '機櫃') : []
+	);
+	/** 沿途節點的勾選：跨頁保留；換起點時整個元件重建，自然清空 */
+	let checked = $state.raw<string[]>([]);
+	let added = $state(false);
+	const allChecked = $derived(nodes.length > 0 && checked.length === nodes.length);
+	const toggle = (id: string) =>
+		(checked = checked.includes(id) ? checked.filter((x) => x !== id) : [...checked, id]);
+	let checkedEdges = $state.raw<string[]>([]);
+	let addedEdges = $state(false);
+	const allEdgesChecked = $derived(edges.length > 0 && checkedEdges.length === edges.length);
+	const toggleEdge = (id: string) =>
+		(checkedEdges = checkedEdges.includes(id)
+			? checkedEdges.filter((x) => x !== id)
+			: [...checkedEdges, id]);
+	/** 勾選的邊：兩端節點一起加入，邊就會跟著帶入 */
+	const edgeEnds = () => [
+		...new Set(
+			checkedEdges.flatMap((id) => {
+				const e = editor.edge(id);
+				return e ? [e.from, e.to] : [];
+			})
+		)
+	];
+	/** 整條鏈路加入後會超過編輯頁節點上限（只算還不在編輯頁的） */
+	const tooMany = $derived(
+		editor.working.length + nodes.filter((id) => !editor.inWork(id)).length > WORKSPACE_NODE_LIMIT
 	);
 	const selectedEdge = $derived(editor.selected?.kind === 'edge' ? editor.selected.id : null);
 </script>
@@ -96,7 +123,18 @@
 		{/if}
 	</div>
 	<div class="mt-2 border-t border-white/6 px-4 py-2 text-[11px] text-slate-400">
-		<p>完整查詢：沿途 {nodes.length} 個節點、{edges.length} 條邊</p>
+		<div class="flex items-center gap-2">
+			<p>完整查詢：沿途 {nodes.length} 個節點、{edges.length} 條邊</p>
+			<button
+				class="ml-auto btn-primary px-2 py-0.5 text-[11px]"
+				disabled={tooMany}
+				title={tooMany
+					? `超過編輯頁上限 ${WORKSPACE_NODE_LIMIT} 節點：展開沿途節點勾選需要的`
+					: '整條鏈路的節點與邊一起帶入；要挑選就展開下方清單勾選'}
+				onclick={() => editor.addToWorkspace(nodes) && editor.setPage('edit')}
+				>全部加入編輯頁（{nodes.length}）</button
+			>
+		</div>
 		<p class="pt-0.5 text-slate-500">
 			畫布最多高亮 {LOD.maxHighlightEdges.toLocaleString('en-US')} 條，隱藏系統不繪製；清單為完整結果
 		</p>
@@ -105,12 +143,51 @@
 		<summary class="cursor-pointer text-[11px] text-slate-400">沿途節點（{nodes.length}）</summary>
 		{#if showNodes}
 			<div class="pt-1.5">
+				<div class="flex flex-wrap items-center gap-2 pb-1 text-[11px] text-slate-300">
+					<label class="flex items-center gap-1.5">
+						<input
+							type="checkbox"
+							class="size-3.5 shrink-0 rounded border-white/20 bg-transparent text-sky-400 focus:ring-sky-400 focus:ring-offset-0"
+							checked={allChecked}
+							indeterminate={checked.length > 0 && !allChecked}
+							onchange={() => (checked = allChecked ? [] : nodes)}
+						/>
+						全部勾選（{nodes.length}）
+					</label>
+					{#if checked.length}
+						<span>已選 <b class="font-mono text-slate-50">{checked.length}</b></span>
+						<button class="text-slate-400 hover:text-slate-100" onclick={() => (checked = [])}
+							>清除</button
+						>
+						<span class="ml-auto flex items-center gap-2">
+							{#if added}
+								<button
+									class="text-sky-300 hover:text-sky-200"
+									onclick={() => editor.setPage('edit')}>前往編輯頁</button
+								>
+							{/if}
+							<button
+								class="btn-primary px-2 py-0.5 text-[11px]"
+								onclick={() =>
+									(added = editor.addToWorkspace(checked.filter((id) => result.nodes.has(id))))}
+								>加入編輯頁（{checked.length}）</button
+							>
+						</span>
+					{/if}
+				</div>
 				<PageNav pager={nodePager} label="沿途節點分頁" />
 				<ul aria-label="沿途節點" class="flex flex-col gap-0.5">
 					{#each nodePager.slice(nodes) as id (id)}
-						<li>
+						<li class="flex items-center">
+							<input
+								type="checkbox"
+								class="mr-1.5 size-3.5 shrink-0 rounded border-white/20 bg-transparent text-sky-400 focus:ring-sky-400 focus:ring-offset-0"
+								aria-label="勾選 {nameOf(id)}"
+								checked={checked.includes(id)}
+								onchange={() => toggle(id)}
+							/>
 							<button
-								class="w-full truncate rounded px-1.5 py-0.5 text-left text-slate-200 hover:bg-white/5"
+								class="min-w-0 flex-1 truncate rounded px-1.5 py-0.5 text-left text-slate-200 hover:bg-white/5"
 								onclick={() => editor.reveal(id)}>{nameOf(id)}</button
 							>
 						</li>
@@ -123,12 +200,50 @@
 		<summary class="cursor-pointer text-[11px] text-slate-400">沿途關係（{edges.length}）</summary>
 		{#if showEdges}
 			<div class="pt-1.5">
+				<div class="flex flex-wrap items-center gap-2 pb-1 text-[11px] text-slate-300">
+					<label class="flex items-center gap-1.5">
+						<input
+							type="checkbox"
+							class="size-3.5 shrink-0 rounded border-white/20 bg-transparent text-sky-400 focus:ring-sky-400 focus:ring-offset-0"
+							checked={allEdgesChecked}
+							indeterminate={checkedEdges.length > 0 && !allEdgesChecked}
+							onchange={() => (checkedEdges = allEdgesChecked ? [] : edges)}
+						/>
+						全部勾選（{edges.length}）
+					</label>
+					{#if checkedEdges.length}
+						<span>已選 <b class="font-mono text-slate-50">{checkedEdges.length}</b></span>
+						<button class="text-slate-400 hover:text-slate-100" onclick={() => (checkedEdges = [])}
+							>清除</button
+						>
+						<span class="ml-auto flex items-center gap-2">
+							{#if addedEdges}
+								<button
+									class="text-sky-300 hover:text-sky-200"
+									onclick={() => editor.setPage('edit')}>前往編輯頁</button
+								>
+							{/if}
+							<button
+								class="btn-primary px-2 py-0.5 text-[11px]"
+								onclick={() => (addedEdges = editor.addToWorkspace(edgeEnds()))}
+								>加入編輯頁（{checkedEdges.length} 條邊）</button
+							>
+						</span>
+					{/if}
+				</div>
 				<PageNav pager={edgePager} unit="條" label="沿途關係分頁" />
 				<ul aria-label="沿途關係" class="flex flex-col gap-0.5">
 					{#each edgePager.slice(edges) as id (id)}
 						{@const e = editor.edge(id)}
 						{#if e}
 							<li class="flex items-center gap-1">
+								<input
+									type="checkbox"
+									class="size-3.5 shrink-0 rounded border-white/20 bg-transparent text-sky-400 focus:ring-sky-400 focus:ring-offset-0"
+									aria-label="勾選關係 {nameOf(e.from)} 到 {nameOf(e.to)}"
+									checked={checkedEdges.includes(id)}
+									onchange={() => toggleEdge(id)}
+								/>
 								<button
 									aria-current={selectedEdge === id ? 'true' : undefined}
 									class={[

@@ -69,12 +69,13 @@ function plan(s: GraphState, cmd: GraphCommand): CommandResult<Plan> {
 	const none = { upsertNodes: [], removeNodeIds: [], upsertEdges: [], removeEdgeIds: [] };
 	switch (cmd.kind) {
 		case 'addNode': {
-			const n = cmd.node;
-			if (index.nodeById.has(n.id)) return fail(`節點已存在：${n.id}`);
+			// key＝id；名稱沒填就顯示 key
+			const n = { ...cmd.node, name: cmd.node.name.trim() || cmd.node.id };
+			if (!n.id) return fail('key 不可空白');
+			if (index.nodeById.has(n.id)) return fail(`key 已存在：${n.id}`);
 			const t = NODE_TYPES.find((x) => x.name === n.type);
 			if (!t) return fail(`未知的節點類型：${n.type}`);
 			if (t.idc) return fail(IDC_MESSAGE);
-			if (!n.name.trim()) return fail('名稱不可空白');
 			const err = checkProps(n.props);
 			if (err) return fail(err);
 			return {
@@ -141,12 +142,11 @@ function plan(s: GraphState, cmd: GraphCommand): CommandResult<Plan> {
 			if (cmd.base && cmd.base !== cur) return fail(stale(cur.name));
 			if (cur.readonly) return fail(IDC_MESSAGE);
 			const { name, props } = cmd.patch;
-			if (name !== undefined && !name.trim()) return fail('名稱不可空白');
 			const err = checkProps(props);
 			if (err) return fail(err);
 			const next: GNode = {
 				...cur,
-				...(name !== undefined && { name: name.trim() }),
+				...(name !== undefined && { name: name.trim() || cur.id }),
 				...(props && { props: { ...props } })
 			};
 			return {

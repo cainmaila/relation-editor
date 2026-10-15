@@ -17,6 +17,18 @@
 		editor.graph.nodes.filter((n) => nodeType(n.type).system === s).length;
 	const all = $derived(editor.systems.length === SYSTEMS.length);
 	const graph = $derived(editor.page === 'graph');
+	const pad = (n: number) => String(n).padStart(2, '0');
+	/** 匯出編輯結果：relation-editor-data-YYYYMMDD-HHmm.zip（本地時間） */
+	function exportData() {
+		const zip = editor.exportZip();
+		if (!zip) return;
+		const d = new Date();
+		const a = document.createElement('a');
+		a.href = URL.createObjectURL(new Blob([zip as BlobPart], { type: 'application/zip' }));
+		a.download = `relation-editor-data-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}.zip`;
+		a.click();
+		URL.revokeObjectURL(a.href);
+	}
 	const focusMode = $derived(!editor.panels.left && !editor.panels.right);
 </script>
 
@@ -179,6 +191,15 @@
 			{@render iconBtn('新增節點', 'N 或右鍵畫布', 'node-plus', () => (editor.dialog = 'node'))}
 			{@render iconBtn('新增邊', 'E 或拖曳卡片', 'edge-plus', () => (editor.dialog = 'edge'))}
 		{/if}
+	</div>
+
+	<div class="flex items-center gap-0.5 border-l border-white/8 pl-3">
+		<button
+			class="rounded-md px-2.5 py-1.5 text-xs text-slate-300 transition-colors hover:bg-white/8 hover:text-slate-50 disabled:pointer-events-none disabled:opacity-40"
+			title={editor.canExport ? '匯出 CSV 打包檔（zip）' : '沒有改動'}
+			disabled={!editor.canExport}
+			onclick={exportData}>匯出</button
+		>
 	</div>
 
 	{#if !graph}

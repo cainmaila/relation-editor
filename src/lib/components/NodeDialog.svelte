@@ -42,7 +42,7 @@
 			</select>
 		</label>
 		<label class="flex flex-col gap-1.5 text-xs text-slate-400">
-			名稱
+			key
 			<input bind:value={name} class="field" placeholder="例：攝影機 CAM-04" />
 		</label>
 		<div class="flex items-center gap-2 border-t border-white/6 pt-4">
