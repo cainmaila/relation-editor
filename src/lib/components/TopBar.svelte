@@ -3,6 +3,10 @@
 	import { SYSTEMS, UNREACHABLE_LABEL, nodeType } from '#lib/model/config.js';
 	import { WORKSPACE_EDGE_LIMIT, WORKSPACE_NODE_LIMIT } from '#lib/model/workspace.js';
 	import { SYSTEM_COLORS } from './Canvas.svelte';
+	import { confirmDiscard } from '#lib/model/confirm.js';
+	import { dataDir, openFolder } from '#lib/model/load.js';
+	import { saveEditor } from '#lib/model/save.js';
+	import { isTauri } from '@tauri-apps/api/core';
 	import Icon from './Icon.svelte';
 
 	let { editor }: { editor: Editor } = $props();
@@ -17,18 +21,12 @@
 		editor.graph.nodes.filter((n) => nodeType(n.type).system === s).length;
 	const all = $derived(editor.systems.length === SYSTEMS.length);
 	const graph = $derived(editor.page === 'graph');
-	const pad = (n: number) => String(n).padStart(2, '0');
-	/** 匯出編輯結果：relation-editor-data-YYYYMMDD-HHmm.zip（本地時間） */
-	function exportData() {
-		const zip = editor.exportZip();
-		if (!zip) return;
-		const d = new Date();
-		const a = document.createElement('a');
-		a.href = URL.createObjectURL(new Blob([zip as BlobPart], { type: 'application/zip' }));
-		a.download = `relation-editor-data-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}.zip`;
-		a.click();
-		URL.revokeObjectURL(a.href);
+	async function open() {
+		if (editor.unsaved && !(await confirmDiscard())) return;
+		await openFolder();
 	}
+	// 資料夾只在載入時決定（換資料夾會整頁重載）
+	const dir = dataDir();
 	const focusMode = $derived(!editor.panels.left && !editor.panels.right);
 </script>
 
@@ -67,10 +65,17 @@
 			>TP</span
 		>
 		<h1 class="text-sm font-semibold text-slate-50">關係鏈編輯器</h1>
-		<span
-			class="rounded-full border border-slate-500/40 px-1.5 py-px text-[10px] text-slate-300/80"
-			title="示意資料・不存檔">示意</span
-		>
+		{#if dir}
+			<span
+				class="rounded-full border border-slate-500/40 px-1.5 py-px text-[10px] text-slate-300/80"
+				title={dir}>{dir.split(/[/\\]/).pop()}</span
+			>
+		{:else}
+			<span
+				class="rounded-full border border-slate-500/40 px-1.5 py-px text-[10px] text-slate-300/80"
+				title="內建範例資料；按「儲存」選資料夾才會寫入檔案">示意</span
+			>
+		{/if}
 	</div>
 
 	<div
@@ -194,11 +199,18 @@
 	</div>
 
 	<div class="flex items-center gap-0.5 border-l border-white/8 pl-3">
+		{#if isTauri()}
+			<button
+				class="rounded-md px-2.5 py-1.5 text-xs text-slate-300 transition-colors hover:bg-white/8 hover:text-slate-50"
+				title="選一個資料夾開啟（結構同 static/data）"
+				onclick={open}>開啟…</button
+			>
+		{/if}
 		<button
 			class="rounded-md px-2.5 py-1.5 text-xs text-slate-300 transition-colors hover:bg-white/8 hover:text-slate-50 disabled:pointer-events-none disabled:opacity-40"
-			title={editor.canExport ? '匯出 CSV 打包檔（zip）' : '沒有改動'}
-			disabled={!editor.canExport}
-			onclick={exportData}>匯出</button
+			title={editor.unsaved ? '存成資料夾內的 CSV（⌘S）' : '沒有改動'}
+			disabled={!editor.unsaved}
+			onclick={() => saveEditor(editor)}>儲存</button
 		>
 	</div>
 

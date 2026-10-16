@@ -12,6 +12,9 @@
 	import Pane from '#lib/components/Pane.svelte';
 	import SearchPalette from '#lib/components/SearchPalette.svelte';
 	import TopBar from '#lib/components/TopBar.svelte';
+	import { confirmDiscard } from '#lib/model/confirm.js';
+	import { saveEditor } from '#lib/model/save.js';
+	import { isTauri } from '@tauri-apps/api/core';
 
 	// probe 只有量測入口（/measure）會傳
 	let { editor, probe }: { editor: Editor; probe?: GraphProbe } = $props();
@@ -27,10 +30,31 @@
 		return () => clearTimeout(t);
 	});
 
+	// Tauri 的 webview 不跳 beforeunload 確認；改攔視窗關閉
+	$effect(() => {
+		if (!isTauri()) return;
+		let off = () => {};
+		let stopped = false;
+		(async () => {
+			const { getCurrentWindow } = await import('@tauri-apps/api/window');
+			const un = await getCurrentWindow().onCloseRequested(async (e) => {
+				if (editor.unsaved && !(await confirmDiscard())) e.preventDefault();
+			});
+			// effect 在註冊完成前就被清掉：立刻解除，不留殘餘監聽
+			if (stopped) un();
+			else off = un;
+		})();
+		return () => {
+			stopped = true;
+			off();
+		};
+	});
+
 	function key(e: KeyboardEvent) {
 		const mod = e.metaKey || e.ctrlKey;
 		const k = e.key.toLowerCase();
-		if (mod && k === 'k') editor.dialog = editor.dialog === 'search' ? null : 'search';
+		if (mod && k === 's') saveEditor(editor);
+		else if (mod && k === 'k') editor.dialog = editor.dialog === 'search' ? null : 'search';
 		else if (mod && k === 'b') editor.panels.left = !editor.panels.left;
 		else if (mod && k === 'i') editor.panels.right = !editor.panels.right;
 		else if (mod && k === '.') {
@@ -72,7 +96,7 @@
 <svelte:window
 	onkeydown={key}
 	onbeforeunload={(e) => {
-		if (editor.unsaved) e.preventDefault();
+		if (!isTauri() && editor.unsaved) e.preventDefault();
 	}}
 />
 
