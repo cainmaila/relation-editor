@@ -8,6 +8,7 @@
 	import { saveEditor } from '#lib/model/save.js';
 	import { isTauri } from '@tauri-apps/api/core';
 	import Icon from './Icon.svelte';
+	import logo from '#lib/assets/logo.png';
 
 	let { editor }: { editor: Editor } = $props();
 
@@ -60,10 +61,7 @@
 	class="relative z-20 flex h-12 shrink-0 items-center gap-3 border-b border-white/8 bg-ink-900/90 px-3 whitespace-nowrap backdrop-blur"
 >
 	<div class="flex items-center gap-2.5 pr-1">
-		<span
-			class="grid size-7 place-items-center rounded-md bg-linear-to-br from-sky-400 to-indigo-500 font-mono text-[11px] font-bold text-ink-950"
-			>TP</span
-		>
+		<img src={logo} alt="" class="size-7" />
 		<h1 class="text-sm font-semibold text-slate-50">關係鏈編輯器</h1>
 		{#if dir}
 			<span
