@@ -1,8 +1,6 @@
 // PRD v0.4 §6 情境 1–20 驗收
 // 全圖（3D，WebGL）點不到 DOM：用大綱／詳情／頂列操作，用 window.__graphView 讀數量、選取、亮起的節點。
 // 編輯頁（Svelte Flow）一開始是空的：每個情境先從全圖把節點加入編輯頁。
-import { readFileSync } from 'node:fs';
-import { unzipSync, strFromU8 } from 'fflate';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
 const SYSTEMS = ['空間', '電力', '空調', '網路', '消防', 'CCTV', 'IDC'];
@@ -377,22 +375,19 @@ test.describe('編輯（編輯頁）', () => {
 		await expectCounts(page, TOTAL + 1, TOTAL_EDGES);
 	});
 
-	test('情境 8：key 重複擋下；情境 21：匯出 zip 內容可直接替換 static/data', async ({ page }) => {
+	test('情境 8：key 重複擋下；情境 21：瀏覽器下無法存檔，保持未存狀態', async ({ page }) => {
 		await toEdit(page);
-		const exportBtn = page.getByRole('banner').getByRole('button', { name: '匯出', exact: true });
-		await expect(exportBtn).toBeDisabled();
+		const saveBtn = page.getByRole('banner').getByRole('button', { name: '儲存', exact: true });
+		await expect(saveBtn).toBeDisabled();
 		await addNode(page, '攝影機', '攝影機 CAM-04');
 		await addNode(page, '攝影機', ' 攝影機 CAM-04 ');
 		await expect(status(page)).toHaveText('key 已存在：攝影機 CAM-04');
 		await page.keyboard.press('Escape');
-		await expect(exportBtn).toBeEnabled();
-		const [dl] = await Promise.all([page.waitForEvent('download'), exportBtn.click()]);
-		expect(dl.suggestedFilename()).toMatch(/^relation-editor-data-\d{8}-\d{4}\.zip$/);
-		const files = unzipSync(readFileSync((await dl.path())!));
-		expect(strFromU8(files['nodes/CCTV.csv'])).toContain('攝影機 CAM-04,');
-		expect(strFromU8(files['nodes/CCTV.csv'])).not.toContain('\r');
-		expect(Object.keys(files)).toHaveLength(19);
-		await expect(exportBtn).toBeEnabled();
+		await expect(saveBtn).toBeEnabled();
+		// 只有桌面 app 能寫本機資料夾；瀏覽器下要說明失敗、不能誤標為已存
+		await saveBtn.click();
+		await expect(status(page)).toContainText('儲存失敗');
+		await expect(saveBtn).toBeEnabled();
 	});
 
 	test('情境 9：新增邊', async ({ page }) => {
@@ -781,7 +776,7 @@ test.describe('編輯（編輯頁）', () => {
 		await expect(detail(page)).toContainText(field('終點', '主機 H-05'));
 	});
 
-	test('情境 14：不存檔', async ({ page }) => {
+	test('情境 14：瀏覽器下不存檔（重新整理還原）', async ({ page }) => {
 		await toEdit(page, ['機櫃 A-01']);
 		await addNode(page, '攝影機', '攝影機 CAM-04');
 		await expect(graphNodes(page)).toHaveCount(2);

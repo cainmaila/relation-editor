@@ -25,3 +25,17 @@ Checks: `pnpm check`, `pnpm lint`, `pnpm test:unit --run`, `pnpm build`.
 - Minimum code for the request. No speculative features, abstractions, config, or impossible-case error handling.
 - Touch only what's needed; match existing style. Unrelated dead code: mention, don't delete. Remove only orphans you created.
 - Define a verifiable success check before starting (test, build, or run); loop until it passes.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in GitHub Issues (`cainmaila/relation-editor`, via `gh` CLI). See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default five-label vocabulary (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: root `CONTEXT.md` + `docs/adr/`. See `docs/agents/domain.md`.
