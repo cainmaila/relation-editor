@@ -163,7 +163,7 @@
 
 ## 關係鏈資料技能 `tpkc-relation-data`（分支 main）
 
-- **Goal:** 專案內 skill，讓 agent 懂關係鏈用意與資料結構，吃任意形式資料、多輪迭代，輸出 CSV 到 `data-staging/`，並自我累積記憶。`static/data` 與來源唯讀。
-- **Done（已驗證）:** `.claude/skills/tpkc-relation-data/`（SKILL.md＋`memory/` mapping／decisions／lessons）；`scripts/validate-data.test.ts`（`DATA_DIR=<dir>`，沒設就略過；現有 `static/data` 過：2,066 節點、4,020 邊；壞資料會擋：缺端點、連接限制）
-- **Todo:** 使用者餵第一份真實資料，跑一輪流程，看 SKILL.md 哪裡不順再改；`buildGraph` 遇第一個錯就 throw，多錯誤要逐輪修
+- **Goal:** 專案內 skill，讓 agent 懂關係鏈用意與資料結構，吃任意形式資料、多輪迭代，產出可載入的新版本到 `data-staging/`（app 選資料夾生效），並自我累積記憶。`static/data`、來源唯讀；不編輯 `idc/`。
+- **Done（已驗證）:** `.claude/skills/tpkc-relation-data/`（SKILL.md＋`memory/` mapping／decisions／lessons）；多 agent workflow（協調者＋`roles/` 抽取／對應／審查／寫入，中間產物 `data-staging/_work/`）；`scripts/validate-data.test.ts`（`DATA_DIR=<dir>`，沒設就略過；現有 `static/data` 過：2,066 節點、4,020 邊；壞資料會擋：缺端點、連接限制）
+- **Todo:** 使用者餵第一份真實資料（2026-10-19 已用口述試跑一輪：抽取→對應→審查→問使用者→驗證跑通；因全是既有資料，寫入員與第二次審查 diff 未實測）；`buildGraph` 遇第一個錯就 throw，多錯誤要逐輪修
 - **Notes:** `data-staging/` 在 repo 根，不在 `static/`，避免被部署；目前空目錄（git 不追蹤空目錄，首次寫入時才會出現）
