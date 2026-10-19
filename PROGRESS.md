@@ -1,5 +1,13 @@
 # PROGRESS
 
+## 改成 Tauri 桌面 app（macOS，分支 main-3）
+
+**Goal:** 不再部署雲端；讀寫本機資料夾 CSV（儲存取代匯出 zip）。計畫 `~/.claude/plans/tauri-fuzzy-hinton.md`
+
+- **Done（已驗證：check／lint 綠、unit 406、e2e 102、`pnpm tauri build` 產出 .app／.dmg）:** `src-tauri/` 骨架（dialog＋fs＋persisted-scope，fs 範圍只限使用者選過的資料夾，不設 `**`）；刪 deploy.yml、adapter 去掉 BASE_PATH（`vite.config.ts` 型別錯誤一併消失）；`load.ts` 資料夾讀寫；Editor `exportFiles`／`markSaved`；TopBar「開啟…」「儲存」＋⌘S；關窗攔截；移除 fflate；README
+- **Todo（沒驗證到）:** 桌面 app 實操——存到資料夾、關掉重開讀回、未存關窗確認、壞資料夾回退內建範例（對話框需人操作）；persisted-scope 重啟後是否真的還原資料夾權限
+- **Notes:** 未簽章，第一次開會跳 Gatekeeper；`src-tauri/icons` 是 `tauri init` 預設圖示
+
 ## key／名稱分離＋匯出（PRD v0.6，分支 cainmaila/main-2）
 
 **Goal:** 節點 key（必填、唯一、不可改）與名稱（選填）分離；Header 匯出 zip。計畫 `~/.claude/plans/pasted-content-id-ba76-key-bubbly-seahorse.md`

@@ -16,9 +16,8 @@ export default defineConfig({
 					filename.split(/[/\\]/).includes('node_modules') ? undefined : true
 			},
 
-			// GitHub Pages：純 SPA，未知路徑回 404.html 由前端接手；專案頁子路徑由 BASE_PATH 帶入（例 /relation-editor）
-			adapter: adapter({ fallback: '404.html', strict: false }),
-			paths: { base: process.env.BASE_PATH ?? '' }
+			// Tauri 桌面 app：純 SPA，只產出預先渲染的 index.html（未知路徑 Tauri 自己回 index.html）
+			adapter: adapter({ strict: false })
 		})
 	],
 	test: {

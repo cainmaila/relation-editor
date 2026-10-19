@@ -1,5 +1,4 @@
 // 編輯器狀態：圖（mock 初始值，不存檔）、系統勾選、選取、找客戶追查。
-import { strToU8, zipSync } from 'fflate';
 import { untrack } from 'svelte';
 import {
 	EDGE_TYPES,
@@ -148,17 +147,12 @@ export class Editor {
 	 */
 	readonly universe: UniverseRuntime;
 
-	/** 目前的圖序列化成的匯出內容；拿來和載入時、上次匯出時比，就知道有沒有改動（改了又改回原樣＝沒改） */
+	/** 目前的圖序列化成的檔案內容；拿來和載入時、上次存檔時比，就知道有沒有改動（改了又改回原樣＝沒改） */
 	snapshot = $derived(JSON.stringify(toCsvFiles(this.graph)));
-	#loaded: string;
-	#exported: string;
-	/** 相對載入時有任何改動才能匯出；匯出後仍可再匯出 */
-	get canExport() {
-		return this.snapshot !== this.#loaded;
-	}
-	/** 有還沒匯出的改動：離開頁面前要確認 */
+	#saved: string;
+	/** 有還沒存檔的改動：儲存鈕可按，關閉前要確認 */
 	get unsaved() {
-		return this.snapshot !== this.#exported;
+		return this.snapshot !== this.#saved;
 	}
 
 	/** searchWorker／layoutWorker 只給測試替換 */
@@ -171,7 +165,7 @@ export class Editor {
 		this.index = s.index;
 		this.universe = new UniverseRuntime({ createWorker: opts.layoutWorker });
 		this.#syncUniverse();
-		this.#loaded = this.#exported = this.snapshot;
+		this.#saved = this.snapshot;
 		this.search = new SearchService(
 			{
 				revision: () => this.revision,
@@ -744,8 +738,8 @@ export class Editor {
 		return this.#guardEdge(id) && this.execute({ kind: 'updateEdge', id, patch, base });
 	}
 
-	/** 以載入同一套規則驗證，通過才打包成 zip；不通過回傳 null 並顯示原因 */
-	exportZip(): Uint8Array | null {
+	/** 以載入同一套規則驗證，通過才回傳要寫出的檔案；不通過回傳 null 並顯示原因。寫入成功後要呼叫 markSaved */
+	exportFiles(): [path: string, text: string][] | null {
 		const files = toCsvFiles(this.graph);
 		try {
 			buildGraph(files.filter(([p]) => p !== 'index.json'));
@@ -753,8 +747,12 @@ export class Editor {
 			this.fail((e as Error).message);
 			return null;
 		}
-		this.#exported = this.snapshot;
-		return zipSync(Object.fromEntries(files.map(([p, t]) => [p, strToU8(t)])));
+		return files;
+	}
+
+	/** 檔案寫入成功後呼叫：把寫出的那份內容（exportFiles 當下的 snapshot）記為已存 */
+	markSaved(snapshot: string) {
+		this.#saved = snapshot;
 	}
 
 	/** 全圖：選取起點並開始追查（換掉上一個追查），鏡頭對準完整結果 */

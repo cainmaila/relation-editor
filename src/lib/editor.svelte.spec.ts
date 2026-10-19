@@ -1,4 +1,3 @@
-import { unzipSync, strFromU8 } from 'fflate';
 import { flushSync } from 'svelte';
 import { describe, expect, it, vi } from 'vitest';
 import { Editor } from './editor.svelte';
@@ -42,32 +41,36 @@ describe('Editor.addNode', () => {
 	});
 });
 
-describe('Editor 匯出', () => {
-	it('情境 21：沒改動不可匯出；改了可匯出且可重複；改回原樣又不可匯出', () => {
+describe('Editor 儲存', () => {
+	it('情境 21：沒改動不需存；改了需存；markSaved 後不需存；改回原樣也不需存', () => {
 		const e = new Editor(csvSeed());
-		expect(e.canExport).toBe(false);
 		expect(e.unsaved).toBe(false);
 		const id = e.addNode('攝影機', 'CAM-X')!;
-		expect(e.canExport).toBe(true);
 		expect(e.unsaved).toBe(true);
-		const zip = e.exportZip()!;
+		const snapshot = e.snapshot;
+		const files = e.exportFiles()!;
+		// 寫檔成功前不算已存
+		expect(e.unsaved).toBe(true);
+		expect(files.find(([p]) => p === 'nodes/CCTV.csv')![1]).toContain('CAM-X,');
+		expect(files.some(([p]) => p === 'index.json')).toBe(true);
+		// 存檔期間又改了：只有寫出的那份算已存，新的改動仍未存
+		const id2 = e.addNode('攝影機', 'CAM-Y')!;
+		e.markSaved(snapshot);
+		expect(e.unsaved).toBe(true);
+		e.select({ kind: 'node', id: id2 });
+		expect(e.deleteNode(id2)).toBe(true);
 		expect(e.unsaved).toBe(false);
-		expect(e.canExport).toBe(true);
-		const files = unzipSync(zip);
-		expect(strFromU8(files['nodes/CCTV.csv'])).toContain('CAM-X,');
-		expect(files['index.json']).toBeDefined();
 		e.select({ kind: 'node', id });
 		expect(e.deleteNode(id)).toBe(true);
-		expect(e.canExport).toBe(false);
 		expect(e.unsaved).toBe(true);
 	});
 
-	it('驗證不過就不產生 zip 並顯示原因', () => {
+	it('驗證不過就不產生檔案並顯示原因', () => {
 		const e = new Editor(csvSeed());
 		e.addNode('攝影機', 'CAM-X');
 		// 繞過命令塞進非法 key 重複的圖（正常操作做不到）
 		e.graph = { ...e.graph, nodes: [...e.graph.nodes, { ...e.graph.nodes[0] }] };
-		expect(e.exportZip()).toBeNull();
+		expect(e.exportFiles()).toBeNull();
 		expect(e.message).toMatch(/key 重複/);
 	});
 });
