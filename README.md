@@ -62,4 +62,31 @@
 - 不支援多人協作。
 - 50k 節點／100k 邊可操作，但不是正式支援規模。
 
+## 從原始碼執行（第一次 clone）
+
+先裝好：Xcode Command Line Tools（`xcode-select --install`）、Node.js（24 可用）、Rust 1.90 以上（[rustup](https://rustup.rs)）。pnpm 用 Node 內建的 corepack 啟用即可。
+
+```sh
+git clone git@github.com:cainmaila/relation-editor.git
+cd relation-editor
+corepack enable   # 啟用 pnpm（版本由專案指定）
+pnpm install
+```
+
+### 1. 開發驗證
+
+```sh
+pnpm tauri dev    # 開桌面 app，改程式碼會即時更新；第一次要編譯 Rust，需數分鐘
+```
+
+只看畫面、不需存檔時可用 `pnpm dev`，在瀏覽器開 http://localhost:5173（瀏覽器模式不能存檔，重新整理就還原）。
+
+### 2. 打包
+
+```sh
+pnpm tauri build
+```
+
+產出在 `src-tauri/target/release/bundle/`：`macos/` 裡是 `.app`，`dmg/` 裡是 `.dmg`。沒有簽章，開啟方式見上方「安裝與開啟」。
+
 開發者請看 `docs/agents/development.md`。
