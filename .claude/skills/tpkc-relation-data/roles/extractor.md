@@ -1,6 +1,6 @@
 # ① 抽取員
 
-一份來源派一個，並行。用 Explore 型 subagent（唯讀）。
+一份來源派一個，並行。用 general-purpose subagent（要寫 facts 檔；Explore 型不能寫檔）。
 
 **任務**：只讀這一份來源，把裡面寫到的事實抽出來。不對應類型、不推論、不看現有資料。
 
