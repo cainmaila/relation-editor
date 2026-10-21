@@ -1,5 +1,29 @@
 # PROGRESS
 
+## 抽出 EditLayout module（架構重構，尚未動工）
+
+**Goal:** 把編輯頁的疊卡＋排版＋位置釘住從 `Editor`（`editor.svelte.ts` 約 350–440 行）抽成獨立的深 module，讓規則集中、可不建 `Editor` 單獨測。術語見 `CONTEXT.md`。
+
+- **Done（只有設計，沒改程式碼）:** `CONTEXT.md` 已建（標準圖、工作區、疊卡、例外節點、EditLayout）；以下 8 項設計已與使用者逐題確認
+- **設計決定:**
+  1. `layout.keepOut(edit)`：module 自己拍疊卡成員快照、執行、比對，新進疊卡的節點記為例外節點（`loose`）；`Editor.execute()` 原本的 `#keepOut` 改呼叫它，行為不變
+  2. `stacking / expanded / loose / relayout` 全搬進 `EditLayout`；`TopBar` 改呼叫 `toggleStacking()`（關閉時一併清空 `expanded`），`Canvas`／`ContextMenu` 改讀 module（目前碰這些欄位的只有 `TopBar:218-223`、`Canvas:58,222-239,353`、`ContextMenu:102,132`）
+  3. `canvasViewport` 留在 `Editor`（純畫面記憶，沒有規則）
+  4. 建構時傳讀取函式（工作區子圖、`topologyRevision`、`graph.edges.length`、節點是否存在），不用 `update()` 推資料
+  5. module 不做畫面動作；`Editor` 保留 `expand / fold / rearrange` 薄包裝：先改 module 狀態，再自己 `fit(...)`／`select(null)`
+  6. `stacks / collapse / layout / pin / STACK_MIN / NODE_W / NODE_H / ViewEdge` 從 `model/graph.ts` 搬到新檔 `model/edit-layout.ts`；`graph.spec.ts` 的 6 個測試（layout 2、收疊 2、pin 2）跟著搬；`Canvas.svelte:40` 的匯入路徑要改
+  7. `editor.svelte.spec.ts` 的規則類測試（約 86、96、336 行：不收起、留在外面、不搬動、改名不重排）搬到 `EditLayout` 自己的 spec，只給小圖＋假讀取函式；接線類（317 切頁選取、356 建邊重排）留在 Editor 測試
+  8. module 名 `EditLayout`（編輯頁排版）
+- **Todo:**
+  - 先寫 `EditLayout` spec（規則類，含 keepOut），再搬程式碼，再改 `Editor`／`TopBar`／`Canvas`／`ContextMenu`
+  - 注意：`editPositions` 在 `$derived` 內記 `#lastPos` 是刻意的非響應副作用，搬過去要保留並留註解；`editLayout` 用 `untrack` 只隨拓撲／工作區／收疊形狀變，改名不重排，這條不能破
+- **Next:** 下次開工時派 subagent 實作；驗證＝`pnpm check`、`pnpm lint`、`pnpm test:unit --run`、`pnpm build`，以及 e2e 的編輯頁疊卡情境（`page.svelte.e2e.ts`）
+- **Notes / 後續候選（本次不做）:**
+  - 候選 2：`execute()` 的 5 欄位換版改成 `GraphStore`（subscribe）；做完後 `keepOut` 可改成 subscriber，`EditLayout` interface 不用變
+  - 候選 3：`Editor` 暫態 UI 狀態（menu／dialog／draft／armDelete／hover）拆分，證據不足，等 1、2 做完再看
+  - `src/lib/layout-sim.ts` 可併入 `universe/`；未讀 `renderer.ts`／`lod.ts`／`GraphView.svelte`，3D 側尚未檢視
+  - `CONTEXT.md` 尚未 commit（工作樹另有 `package.json`／`pnpm-lock.yaml` 的既有未提交改動，非本任務）
+
 ## 改成 Tauri 桌面 app（macOS，分支 main-3）
 
 **Goal:** 不再部署雲端；讀寫本機資料夾 CSV（儲存取代匯出 zip）。計畫 `~/.claude/plans/tauri-fuzzy-hinton.md`
